@@ -24,7 +24,6 @@
 #include "src/base/small-vector.h"
 #include "src/base/template-utils.h"
 #include "src/base/vector.h"
-#include "src/builtins/builtins.h"
 #include "src/codegen/machine-type.h"
 #include "src/compiler/backend/instruction.h"
 #include "src/compiler/compilation-dependencies.h"
@@ -410,8 +409,8 @@ class MachineOptimizationReducer : public Next {
         CONSTANT_F32_CASE(kSqrt, std::sqrt(f32_k))
         CONSTANT_F32_CASE(kExp, base::ieee754::exp(f32_k))
         CONSTANT_F32_CASE(kExpm1, base::ieee754::expm1(f32_k))
-        CONSTANT_F32_CASE(kSin, SIN_IMPL(f32_k))
-        CONSTANT_F32_CASE(kCos, COS_IMPL(f32_k))
+        CONSTANT_F32_CASE(kSin, base::ieee754::sin(f32_k))
+        CONSTANT_F32_CASE(kCos, base::ieee754::cos(f32_k))
         CONSTANT_F32_CASE(kSinh, base::ieee754::sinh(f32_k))
         CONSTANT_F32_CASE(kCosh, base::ieee754::cosh(f32_k))
         CONSTANT_F32_CASE(kAcos, base::ieee754::acos(f32_k))
@@ -452,8 +451,8 @@ class MachineOptimizationReducer : public Next {
         CONSTANT_F64_CASE(kSqrt, std::sqrt(f64_k))
         CONSTANT_F64_CASE(kExp, base::ieee754::exp(f64_k))
         CONSTANT_F64_CASE(kExpm1, base::ieee754::expm1(f64_k))
-        CONSTANT_F64_CASE(kSin, SIN_IMPL(f64_k))
-        CONSTANT_F64_CASE(kCos, COS_IMPL(f64_k))
+        CONSTANT_F64_CASE(kSin, base::ieee754::sin(f64_k))
+        CONSTANT_F64_CASE(kCos, base::ieee754::cos(f64_k))
         CONSTANT_F64_CASE(kSinh, base::ieee754::sinh(f64_k))
         CONSTANT_F64_CASE(kCosh, base::ieee754::cosh(f64_k))
         CONSTANT_F64_CASE(kAcos, base::ieee754::acos(f64_k))

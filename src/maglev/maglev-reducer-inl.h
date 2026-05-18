@@ -3569,39 +3569,25 @@ MaybeReduceResult MaglevReducer<BaseT>::TryFoldFloat64Max(ValueNode* lhs,
   return GetFloat64Constant(rhs_scalar);
 }
 
-#ifdef V8_USE_LIBM_TRIG_FUNCTIONS
-#define IF_LIBM(Macro, ...) Macro(__VA_ARGS__)
-#define IF_NOT_LIBM(Macro, ...)
-#else
-#define IF_LIBM(Macro, ...)
-#define IF_NOT_LIBM(Macro, ...) Macro(__VA_ARGS__)
-#endif  // V8_USE_LIBM_TRIG_FUNCTIONS
-
-#define IEEE_754_FUNCTION_MAPPER(V)                                       \
-  V(Acos, base::ieee754::acos)                                            \
-  V(Acosh, base::ieee754::acosh)                                          \
-  V(Asin, base::ieee754::asin)                                            \
-  V(Asinh, base::ieee754::asinh)                                          \
-  V(Atan, base::ieee754::atan)                                            \
-  V(Atanh, base::ieee754::atanh)                                          \
-  V(Cbrt, base::ieee754::cbrt)                                            \
-  IF_LIBM(V, Cos,                                                         \
-          (v8_flags.use_libm_trig_functions ? base::ieee754::libm_cos     \
-                                            : base::ieee754::fdlibm_cos)) \
-  IF_NOT_LIBM(V, Cos, base::ieee754::cos)                                 \
-  V(Cosh, base::ieee754::cosh)                                            \
-  V(Exp, base::ieee754::exp)                                              \
-  V(Expm1, base::ieee754::expm1)                                          \
-  V(Log, base::ieee754::log)                                              \
-  V(Log1p, base::ieee754::log1p)                                          \
-  V(Log10, base::ieee754::log10)                                          \
-  V(Log2, base::ieee754::log2)                                            \
-  IF_LIBM(V, Sin,                                                         \
-          (v8_flags.use_libm_trig_functions ? base::ieee754::libm_sin     \
-                                            : base::ieee754::fdlibm_sin)) \
-  IF_NOT_LIBM(V, Sin, base::ieee754::sin)                                 \
-  V(Sinh, base::ieee754::sinh)                                            \
-  V(Tan, base::ieee754::tan)                                              \
+#define IEEE_754_FUNCTION_MAPPER(V) \
+  V(Acos, base::ieee754::acos)      \
+  V(Acosh, base::ieee754::acosh)    \
+  V(Asin, base::ieee754::asin)      \
+  V(Asinh, base::ieee754::asinh)    \
+  V(Atan, base::ieee754::atan)      \
+  V(Atanh, base::ieee754::atanh)    \
+  V(Cbrt, base::ieee754::cbrt)      \
+  V(Cos, base::ieee754::cos)        \
+  V(Cosh, base::ieee754::cosh)      \
+  V(Exp, base::ieee754::exp)        \
+  V(Expm1, base::ieee754::expm1)    \
+  V(Log, base::ieee754::log)        \
+  V(Log1p, base::ieee754::log1p)    \
+  V(Log10, base::ieee754::log10)    \
+  V(Log2, base::ieee754::log2)      \
+  V(Sin, base::ieee754::sin)        \
+  V(Sinh, base::ieee754::sinh)      \
+  V(Tan, base::ieee754::tan)        \
   V(Tanh, base::ieee754::tanh)
 
 template <typename BaseT>
