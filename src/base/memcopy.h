@@ -7,6 +7,7 @@
 
 #include <stdlib.h>
 
+#include <algorithm>
 #include <atomic>
 
 #include "include/v8config.h"
@@ -241,9 +242,7 @@ template <typename T, typename U>
 constexpr void Memset(T* destination, U value, size_t count)
   requires std::is_trivially_assignable_v<T&, U>
 {
-  for (size_t i = 0; i < count; i++) {
-    destination[i] = value;
-  }
+  std::fill_n(destination, count, value);
 }
 
 // Fills `destination` with `count` `value`s.
