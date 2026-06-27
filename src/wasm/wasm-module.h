@@ -1130,8 +1130,8 @@ DirectHandle<JSObject> GetTypeForTable(Isolate* isolate, ValueType type,
                                        uint32_t min_size,
                                        std::optional<uint64_t> max_size,
                                        AddressType address_type);
-DirectHandle<JSArray> GetImports(Isolate* isolate,
-                                 DirectHandle<WasmModuleObject> module);
+V8_EXPORT_PRIVATE DirectHandle<JSArray> GetImports(
+    Isolate* isolate, DirectHandle<WasmModuleObject> module);
 DirectHandle<JSArray> GetExports(Isolate* isolate,
                                  DirectHandle<WasmModuleObject> module);
 DirectHandle<JSArray> GetCustomSections(Isolate* isolate,
