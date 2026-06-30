@@ -1849,6 +1849,8 @@ DEFINE_BOOL(turbolev, false,
 
 DEFINE_DEVELOPER_FLAG(print_turbolev_frontend,
                       "print Turbolev frontend (Maglev graphs)")
+DEFINE_STRING(turbolev_phase_filter, "*",
+              "filter for turbolev phases (comma-separated list of phase names)")
 
 DEFINE_DEVELOPER_FLAG(print_turbolev_inline_functions,
                       "print Turbolev inline functions")
