@@ -240,7 +240,9 @@ class TurboshaftInstructionSelectorTest : public TestWithNativeContextAndZone {
     Stream Build(CpuFeatureSet features,
                  StreamBuilderMode mode = kTargetInstructions,
                  InstructionSelector::SourcePositionMode source_position_mode =
-                     InstructionSelector::kAllSourcePositions);
+                     InstructionSelector::kAllSourcePositions,
+                 InstructionSelector::EnableScheduling enable_scheduling =
+                     InstructionSelector::kDisableScheduling);
 
     const FrameStateFunctionInfo* GetFrameStateFunctionInfo(
         uint16_t parameter_count, int local_count);
@@ -342,6 +344,26 @@ class TurboshaftInstructionSelectorTest : public TestWithNativeContextAndZone {
       DCHECK_EQ(Get(result).outputs_rep().size(), 1);
       DCHECK_EQ(Get(result).outputs_rep()[0], v_traits<T>::rep);
       return V<T>::Cast(result);
+    }
+
+    V<Float32> Float32Binop(OpIndex left, OpIndex right,
+                            FloatBinopOp::Kind kind) {
+      switch (kind) {
+        default:
+          UNREACHABLE();
+        case FloatBinopOp::Kind::kAdd:
+          return Float32Add(left, right);
+        case FloatBinopOp::Kind::kMul:
+          return Float32Mul(left, right);
+        case FloatBinopOp::Kind::kMin:
+          return Float32Min(left, right);
+        case FloatBinopOp::Kind::kMax:
+          return Float32Max(left, right);
+        case FloatBinopOp::Kind::kSub:
+          return Float32Sub(left, right);
+        case FloatBinopOp::Kind::kDiv:
+          return Float32Div(left, right);
+      }
     }
 
     // Some helpers to have the same interface as the Turbofan instruction

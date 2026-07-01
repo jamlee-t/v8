@@ -53,7 +53,7 @@ class ResourceAllocation {
   constexpr static int kNumResources =
       static_cast<int>(ArchInstResource::kNumResources);
 
-  ResourceAllocation(std::array<TableEntry, kNumResources> resources) {
+  explicit ResourceAllocation(std::array<TableEntry, kNumResources> resources) {
 #ifdef DEBUG
     // Check all the entries in the array are for unique resources.
     std::unordered_set<ArchInstResource> resource_set;
@@ -147,10 +147,22 @@ class InstructionScheduler final : public ZoneObject {
     // predecessor of 'node' (i.e. it must be scheduled before 'node').
     void AddDataSuccessor(ScheduleGraphNode* node);
 
+    // Mark the current instruction as dependent upon the instruction
+    // represented by 'node'. The instruction at 'node' will be registered as an
+    // unscheduled successor of the current instruction.
+    void AddPredecessor(ScheduleGraphNode* node);
+
+    // Mark the current instruction as data-dependent upon the instruction
+    // represented by 'node'. The instruction at 'node' will be registered as an
+    // unscheduled successor of the current instruction.
+    void AddDataPredecessor(ScheduleGraphNode* node);
+
     // Check if all the predecessors of this instruction have been scheduled.
     bool HasUnscheduledPredecessor() {
       return unscheduled_predecessors_count_ != 0;
     }
+    // Check if all the successors of this instruction have been scheduled.
+    bool HasUnscheduledSuccessor() { return unscheduled_successor_count_ != 0; }
 
     // Record that we have scheduled one of the predecessors of this node.
     void DropUnscheduledPredecessor() {
@@ -158,17 +170,39 @@ class InstructionScheduler final : public ZoneObject {
       unscheduled_predecessors_count_--;
     }
 
+    // Record that we have scheduled one of the successors of this node.
+    void DropUnscheduledSuccessor() {
+      DCHECK_LT(0, unscheduled_successor_count_);
+      unscheduled_successor_count_--;
+    }
+
+    int unscheduled_predecessors_count() const {
+      return unscheduled_predecessors_count_;
+    }
+    int unscheduled_successor_count() const {
+      return unscheduled_successor_count_;
+    }
+
     Instruction* instruction() { return instr_; }
     SuccessorList& successors() { return successors_; }
     SuccessorList& data_successors() { return data_successors_; }
     const SuccessorList& data_successors() const { return data_successors_; }
-    int unscheduled_predecessors_count() const {
-      return unscheduled_predecessors_count_;
+    SuccessorList& predecessors() { return predecessors_; }
+    SuccessorList& data_predecessors() { return data_predecessors_; }
+    const SuccessorList& data_predecessors() const {
+      return data_predecessors_;
     }
     int latency() const { return latency_; }
 
-    int total_latency() const { return total_latency_; }
-    void set_total_latency(int latency) { total_latency_ = latency; }
+    int total_forward_latency() const { return total_forward_latency_; }
+    void set_total_forward_latency(int latency) {
+      total_forward_latency_ = latency;
+    }
+
+    int total_backward_latency() const { return total_backward_latency_; }
+    void set_total_backward_latency(int latency) {
+      total_backward_latency_ = latency;
+    }
 
     int start_cycle() const { return start_cycle_; }
     void set_start_cycle(int start_cycle) { start_cycle_ = start_cycle; }
@@ -179,9 +213,14 @@ class InstructionScheduler final : public ZoneObject {
     Instruction* instr_;
     SuccessorList successors_;
     SuccessorList data_successors_;
+    SuccessorList predecessors_;
+    SuccessorList data_predecessors_;
 
     // Number of unscheduled predecessors for this node.
     int unscheduled_predecessors_count_;
+
+    // Number of unscheduled successors for this node.
+    int unscheduled_successor_count_;
 
     // Estimate of the instruction latency (the number of cycles it takes for
     // instruction to complete).
@@ -189,7 +228,11 @@ class InstructionScheduler final : public ZoneObject {
 
     // The sum of all the latencies on the path from this node to the end of
     // the graph (i.e. a node with no successor).
-    int total_latency_;
+    int total_forward_latency_;
+
+    // The sum of all the latencies on the path from this node to the start of
+    // the graph (i.e. a node with no predecessor).
+    int total_backward_latency_;
 
     // The scheduler keeps a nominal cycle count to keep track of when the
     // result of an instruction is available. This field is updated by the
@@ -218,28 +261,7 @@ class InstructionScheduler final : public ZoneObject {
     bool IsWaitingEmpty() const { return waiting_.empty(); }
     ScheduleGraphNode* PopBestCandidate(int cycle);
 
-    // Use this heuristic when total latencies are the same.
-    inline size_t GetTieBreakLatency(const ScheduleGraphNode* node) const {
-      // The main heuristic looks at total latency, so start with only the
-      // latency of the node for the tie-breaker.
-      int latency = node->latency();
-      // Accumulate the total latency of all the successors that are just
-      // waiting for node to be scheduled.
-      for (ScheduleGraphNode* successor : node->data_successors()) {
-        if (successor->unscheduled_predecessors_count() == 1) {
-          latency += successor->total_latency();
-        }
-      }
-      return latency;
-    }
-
-   private:
-    inline int GetTotalLatency(const ScheduleGraphNode* node) const {
-      return node->total_latency();
-    }
-
-    ResourceAllocation& resource_table() { return resource_table_; }
-
+   protected:
     struct ReadyQueuePayload {
       ScheduleGraphNode* node;
       ArchInstResource resource;
@@ -255,15 +277,79 @@ class InstructionScheduler final : public ZoneObject {
       resource_table().MarkIssue(ArchInstResource::kFetch);
     }
 
+    virtual int GetTotalLatency(const ScheduleGraphNode* node) const = 0;
+    // Use this heuristic when total latencies are the same.
+    virtual size_t GetTieBreakLatency(const ScheduleGraphNode* node) const = 0;
+    ResourceAllocation& resource_table() { return resource_table_; }
+
+   private:
     SmallZoneVector<ScheduleGraphNode*, 8> ready_;
     SmallZoneVector<ScheduleGraphNode*, 16> waiting_;
     ResourceAllocation resource_table_;
     std::optional<base::RandomNumberGenerator> random_number_generator_;
   };
 
+  // Schedule from the beginning of the scheduling region to the end.
+  class ForwardSchedulingQueue final : public SchedulingQueue {
+   public:
+    explicit ForwardSchedulingQueue(ResourceAllocation resource_table,
+                                    Zone* zone)
+        : SchedulingQueue(resource_table, zone) {}
+
+   private:
+    int GetTotalLatency(const ScheduleGraphNode* node) const override {
+      return node->total_forward_latency();
+    }
+
+    size_t GetTieBreakLatency(const ScheduleGraphNode* node) const override {
+      // The main heuristic looks at total latency, so start with only the
+      // latency of the node for the tie-breaker.
+      int latency = node->latency();
+      // Accumulate the total latency of all the successors that are just
+      // waiting for node to be scheduled.
+      for (ScheduleGraphNode* successor : node->data_successors()) {
+        if (successor->unscheduled_predecessors_count() == 1) {
+          latency += successor->total_forward_latency();
+        }
+      }
+      return latency;
+    }
+  };
+
+  // Schedule from the end of the scheduling region to the beginning.
+  class BackwardSchedulingQueue final : public SchedulingQueue {
+   public:
+    explicit BackwardSchedulingQueue(ResourceAllocation resource_table,
+                                     Zone* zone)
+        : SchedulingQueue(resource_table, zone) {}
+
+   private:
+    int GetTotalLatency(const ScheduleGraphNode* node) const override {
+      return node->total_backward_latency();
+    }
+
+    size_t GetTieBreakLatency(const ScheduleGraphNode* node) const override {
+      // The main heuristic looks at total latency, so start with only the
+      // latency of the node for the tie-breaker.
+      int latency = node->latency();
+      // Accumulate the total latency of all the predecessors that are just
+      // waiting for node to be scheduled.
+      for (ScheduleGraphNode* predecessor : node->data_predecessors()) {
+        if (predecessor->unscheduled_successor_count() == 1) {
+          latency += predecessor->total_backward_latency();
+        }
+      }
+      return latency;
+    }
+  };
+
   // Perform scheduling for the current block specifying the queue type to
   // use to determine the next best candidate.
   void Schedule();
+  // Perform forward scheduling for the current block.
+  int ScheduleForward();
+  // Perform backwardscheduling for the current block.
+  int ScheduleBackward();
 
   // Return the scheduling properties of the given instruction.
   V8_EXPORT_PRIVATE int GetInstructionFlags(const Instruction* instr) const;
@@ -304,6 +390,9 @@ class InstructionScheduler final : public ZoneObject {
            CanTrap(instr) || HasSideEffect(flags) || IsLoadOperation(flags);
   }
 
+  // Live-in register markers are nop instructions which are emitted at the
+  // beginning of a basic block so that the register allocator will find a
+  // defining instruction for live-in values. They must not be moved.
   // Identify nops used as a definition point for live-in registers at
   // function entry.
   bool IsFixedRegisterParameter(const Instruction* instr) const {
@@ -324,10 +413,17 @@ class InstructionScheduler final : public ZoneObject {
   Zone* zone() { return zone_; }
   InstructionSequence* sequence() { return sequence_; }
 
+  using TempInstrList = SmallZoneVector<Instruction*, 8>;
+  TempInstrList& forward_sequence() { return forward_sequence_; }
+  TempInstrList& backward_sequence() { return backward_sequence_; }
+
   Zone* zone_;
   InstructionSequence* sequence_;
+  TempInstrList forward_sequence_;
+  TempInstrList backward_sequence_;
   ZoneVector<ScheduleGraphNode*> graph_;
-  SchedulingQueue ready_list_;
+  ForwardSchedulingQueue forward_ready_list_;
+  BackwardSchedulingQueue backward_ready_list_;
 
   friend class InstructionSchedulerTester;
 

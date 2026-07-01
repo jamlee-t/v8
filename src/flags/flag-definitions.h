@@ -1720,7 +1720,7 @@ DEFINE_BOOL(turbo_stress_instruction_scheduling, false,
 DEFINE_BOOL(trace_turbo_instruction_scheduling, false,
             "trace TurboShaft's instruction scheduler")
 DEFINE_IMPLICATION(turbo_stress_instruction_scheduling,
-                   turbo_instruction_scheduling)
+                   experimental_turbo_instruction_scheduling)
 DEFINE_BOOL(turbo_store_elimination, true,
             "enable store-store elimination in TurboFan")
 DEFINE_DEVELOPER_FLAG(trace_store_elimination, "trace store elimination")
