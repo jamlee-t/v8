@@ -1136,11 +1136,6 @@ void DescriptorArray::DescriptorArrayPrint(std::ostream& os) {
   }
   os << "\n - nof slack descriptors: " << number_of_slack_descriptors();
   os << "\n - nof descriptors: " << number_of_descriptors();
-  const auto raw = raw_gc_state(kRelaxedLoad);
-  os << "\n - raw gc state: mc epoch "
-     << DescriptorArrayMarkingState::Epoch::decode(raw) << ", marked "
-     << DescriptorArrayMarkingState::Marked::decode(raw) << ", delta "
-     << DescriptorArrayMarkingState::Delta::decode(raw);
   os << "\n - fast iterable state: ";
   switch (fast_iterable()) {
     case FastIterableState::kJsonFast:

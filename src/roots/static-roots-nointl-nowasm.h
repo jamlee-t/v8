@@ -102,7 +102,7 @@ struct StaticReadOnlyRoot {
   static constexpr Tagged_t kEmptyWeakArrayList = kEmptyWeakFixedArray + 8;
   static constexpr Tagged_t kEmptyEnumCache = kEmptyWeakArrayList + 12;
   static constexpr Tagged_t kEmptyDescriptorArray = kEmptyEnumCache + 12;
-  static constexpr Tagged_t kScopeInfoMap = kEmptyDescriptorArray + 20;
+  static constexpr Tagged_t kScopeInfoMap = kEmptyDescriptorArray + 16;
   static constexpr Tagged_t kModuleInfoMap = kScopeInfoMap + 40;
   static constexpr Tagged_t kClosureFeedbackCellArrayMap = kModuleInfoMap + 40;
   static constexpr Tagged_t kFeedbackVectorMap =
@@ -147,7 +147,7 @@ struct StaticReadOnlyRoot {
   static constexpr Tagged_t kPreparseDataMap = kInterceptorInfoMap + 40;
   static constexpr Tagged_t kSharedFunctionInfoMap = kPreparseDataMap + 40;
   static constexpr Tagged_t kCodeMap = kSharedFunctionInfoMap + 40;
-  static constexpr Tagged_t kHashSeed = kCodeMap + 44;
+  static constexpr Tagged_t kHashSeed = kCodeMap + 40;
   static constexpr Tagged_t kprototype_string = kHashSeed + 36;
   static constexpr Tagged_t kname_string = kprototype_string + 24;
   static constexpr Tagged_t klength_string = kname_string + 16;
@@ -1061,13 +1061,13 @@ struct StaticReadOnlyRoot {
   static constexpr Tagged_t kExternalMap = 0x180039;
   static constexpr Tagged_t kCppHeapExternalMap = 0x180061;
   static constexpr Tagged_t kJSSharedArrayMap = 0x180089;
-  static constexpr Tagged_t kJSAtomicsMutexMap = 0x1800d1;
-  static constexpr Tagged_t kJSAtomicsConditionMap = 0x1800f9;
-  static constexpr Tagged_t kNoOpNamedInterceptorInfo = 0x180121;
-  static constexpr Tagged_t kNoOpIndexedInterceptorInfo = 0x18016d;
+  static constexpr Tagged_t kJSAtomicsMutexMap = 0x1800cd;
+  static constexpr Tagged_t kJSAtomicsConditionMap = 0x1800f5;
+  static constexpr Tagged_t kNoOpNamedInterceptorInfo = 0x18011d;
+  static constexpr Tagged_t kNoOpIndexedInterceptorInfo = 0x180169;
 
   static constexpr Tagged_t kFirstAllocatedRoot = 0x11;
-  static constexpr Tagged_t kLastAllocatedRoot = 0x18016d;
+  static constexpr Tagged_t kLastAllocatedRoot = 0x180169;
 };
 
 static constexpr std::array<Tagged_t, 881> StaticReadOnlyRootsPointerTable = {

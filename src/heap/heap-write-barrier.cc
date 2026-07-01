@@ -138,12 +138,6 @@ void WriteBarrier::MarkingSlow(Tagged<JSArrayBuffer> host,
   marking_barrier->Write(host, extension);
 }
 
-void WriteBarrier::MarkingSlow(Tagged<DescriptorArray> descriptor_array,
-                               int number_of_own_descriptors) {
-  MarkingBarrier* marking_barrier = CurrentMarkingBarrier(descriptor_array);
-  marking_barrier->Write(descriptor_array, number_of_own_descriptors);
-}
-
 void WriteBarrier::MarkingSlow(Tagged<HeapObject> host,
                                ExternalPointerSlot slot) {
 #ifdef V8_COMPRESS_POINTERS

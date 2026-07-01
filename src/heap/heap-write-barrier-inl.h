@@ -424,14 +424,6 @@ void WriteBarrier::ForArrayBufferExtension(Tagged<JSArrayBuffer> host,
   MarkingSlow(host, extension);
 }
 
-void WriteBarrier::ForDescriptorArray(Tagged<DescriptorArray> descriptor_array,
-                                      int number_of_own_descriptors) {
-  if (V8_LIKELY(!IsMarking(descriptor_array))) {
-    return;
-  }
-  MarkingSlow(descriptor_array, number_of_own_descriptors);
-}
-
 void WriteBarrier::Marking(Tagged<HeapObject> host, ExternalPointerSlot slot) {
   if (V8_LIKELY(!IsMarking(host))) {
     return;

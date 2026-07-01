@@ -586,8 +586,7 @@ bool Heap::CreateEarlyReadOnlyMapsAndObjects() {
     obj->set_map_after_allocation(isolate(), roots.descriptor_array_map(),
                                   SKIP_WRITE_BARRIER);
     Tagged<DescriptorArray> array = Cast<DescriptorArray>(obj);
-    array->Initialize(roots.empty_enum_cache(), roots.undefined_value(), 0, 0,
-                      DescriptorArrayMarkingState::kInitialGCState);
+    array->Initialize(roots.empty_enum_cache(), roots.undefined_value(), 0, 0);
     array->set_fast_iterable(DescriptorArray::FastIterableState::kJsonFast);
   }
   set_empty_descriptor_array(Cast<DescriptorArray>(obj));

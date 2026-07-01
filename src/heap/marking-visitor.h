@@ -80,9 +80,6 @@ class MarkingVisitorBase : public ConcurrentHeapVisitor<ConcreteVisitor> {
   {
   }
 
-  V8_INLINE size_t VisitDescriptorArrayStrongly(Tagged<Map> map,
-                                                Tagged<DescriptorArray> object,
-                                                MaybeObjectSize);
   V8_INLINE size_t VisitDescriptorArray(Tagged<Map> map,
                                         Tagged<DescriptorArray> object,
                                         MaybeObjectSize);
@@ -212,8 +209,6 @@ class MarkingVisitorBase : public ConcurrentHeapVisitor<ConcreteVisitor> {
 
   template <typename TSlot>
   V8_INLINE void VisitStrongPointerImpl(Tagged<HeapObject> host, TSlot slot);
-
-  V8_INLINE void VisitDescriptorsForMap(Tagged<Map> map);
 
   V8_INLINE size_t
   VisitFixedArrayWithProgressTracker(Tagged<Map> map, Tagged<FixedArray> object,

@@ -139,65 +139,6 @@ void MarkingBarrier::Write(Tagged<JSArrayBuffer> host,
   }
 }
 
-void MarkingBarrier::Write(Tagged<DescriptorArray> descriptor_array,
-                           int number_of_own_descriptors) {
-  DCHECK(IsCurrentMarkingBarrier(descriptor_array));
-  DCHECK(HeapLayout::InReadOnlySpace(descriptor_array->map()));
-  DCHECK(MemoryChunk::FromHeapObject(descriptor_array)->IsMarking());
-
-  // Only major GC uses custom liveness, and only when DescriptorArrays can be
-  // trimmed.
-  if (!v8_flags.trim_descriptor_arrays_in_gc ||
-      !v8_flags.trim_descriptor_arrays_in_gc_with_stack || is_minor() ||
-      IsStrongDescriptorArray(descriptor_array)) {
-    MarkValueLocal(descriptor_array);
-    return;
-  }
-
-  unsigned gc_epoch;
-  MarkingWorklists::Local* worklist;
-  if (V8_UNLIKELY(uses_shared_heap_) &&
-      HeapLayout::InWritableSharedSpace(descriptor_array) &&
-      !is_shared_space_isolate_) {
-    gc_epoch = isolate()
-                   ->shared_space_isolate()
-                   ->heap()
-                   ->mark_compact_collector()
-                   ->epoch();
-    DCHECK(shared_heap_worklists_.has_value());
-    worklist = &*shared_heap_worklists_;
-  } else {
-#ifdef DEBUG
-    if (const auto target_worklist =
-            MarkingHelper::ShouldMarkObject(heap_, descriptor_array)) {
-      DCHECK_EQ(target_worklist.value(),
-                MarkingHelper::WorklistTarget::kRegular);
-    } else {
-      DCHECK(TrustedHeapLayout::InBlackAllocatedPage(descriptor_array));
-    }
-#endif  // DEBUG
-    gc_epoch = major_collector_->epoch();
-    worklist = current_worklists_.get();
-  }
-
-  if (v8_flags.black_allocated_pages) {
-    // Make sure to only mark the descriptor array for non black allocated
-    // pages. The atomic pause will fix it afterwards.
-    if (MarkingHelper::ShouldMarkObject(heap_, descriptor_array)) {
-      marking_state_.TryMark(descriptor_array);
-    }
-  } else {
-    marking_state_.TryMark(descriptor_array);
-  }
-
-  // `TryUpdateIndicesToMark()` acts as a barrier that publishes the slots'
-  // values corresponding to `number_of_own_descriptors`.
-  if (DescriptorArrayMarkingState::TryUpdateIndicesToMark(
-          gc_epoch, descriptor_array, number_of_own_descriptors)) {
-    worklist->Push(descriptor_array);
-  }
-}
-
 void MarkingBarrier::RecordRelocSlot(Tagged<InstructionStream> host,
                                      RelocInfo* rinfo,
                                      Tagged<HeapObject> target) {

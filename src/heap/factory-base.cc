@@ -1274,22 +1274,9 @@ Handle<DescriptorArray> FactoryBase<Impl>::NewDescriptorArray(
       size, allocation, read_only_roots().descriptor_array_map());
   Tagged<DescriptorArray> array = Cast<DescriptorArray>(obj);
 
-  auto raw_gc_state = DescriptorArrayMarkingState::kInitialGCState;
-  if (allocation != AllocationType::kYoung &&
-      allocation != AllocationType::kReadOnly) {
-    auto* local_heap = allocation == AllocationType::kSharedOld
-                           ? isolate()->shared_space_isolate()->heap()
-                           : isolate()->heap();
-    Heap* heap = local_heap->AsHeap();
-    if (heap->incremental_marking()->IsMajorMarking()) {
-      // Black allocation: We must create a full marked state.
-      raw_gc_state = DescriptorArrayMarkingState::GetFullyMarkedState(
-          heap->mark_compact_collector()->epoch(), number_of_descriptors);
-    }
-  }
   array->Initialize(read_only_roots().empty_enum_cache(),
                     read_only_roots().undefined_value(), number_of_descriptors,
-                    slack, raw_gc_state);
+                    slack);
   return handle(array, isolate());
 }
 

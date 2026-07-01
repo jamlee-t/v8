@@ -6153,7 +6153,6 @@ void Heap::WeakenDescriptorArrays(
     DCHECK(IsStrongDescriptorArray(array));
     array->set_map_safe_transition_no_write_barrier(isolate(),
                                                     descriptor_array_map);
-    DCHECK_EQ(array->raw_gc_state(kRelaxedLoad), 0);
   }
 }
 

@@ -97,8 +97,6 @@ class V8_EXPORT_PRIVATE WriteBarrier final {
   static inline void ForRelocInfo(Tagged<InstructionStream> host,
                                   RelocInfo* rinfo, Tagged<HeapObject> value,
                                   WriteBarrierMode mode = UPDATE_WRITE_BARRIER);
-  static inline void ForDescriptorArray(Tagged<DescriptorArray>,
-                                        int number_of_own_descriptors);
   static inline void ForArrayBufferExtension(Tagged<JSArrayBuffer> host,
                                              ArrayBufferExtension* extension);
   static inline void ForExternalPointer(
@@ -213,8 +211,6 @@ class V8_EXPORT_PRIVATE WriteBarrier final {
   static void MarkingSlow(Tagged<InstructionStream> host, RelocInfo*,
                           Tagged<HeapObject> value);
   static void MarkingSlow(Tagged<JSArrayBuffer> host, ArrayBufferExtension*);
-  static void MarkingSlow(Tagged<DescriptorArray>,
-                          int number_of_own_descriptors);
   static void MarkingSlow(Tagged<HeapObject> host, ExternalPointerSlot slot);
   static void MarkingSlow(Tagged<HeapObject> host, IndirectPointerSlot slot);
   static void MarkingSlow(Tagged<TrustedObject> host, ProtectedPointerSlot slot,
