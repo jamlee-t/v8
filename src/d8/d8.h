@@ -36,6 +36,31 @@
 
 namespace v8 {
 
+template <int N>
+inline Local<Value> ThrowError(Isolate* isolate, const char (&message)[N]) {
+  if (isolate->IsExecutionTerminating()) return v8::Undefined(isolate);
+  return isolate->ThrowError(message);
+}
+
+inline Local<Value> ThrowError(Isolate* isolate, std::string_view message) {
+  if (isolate->IsExecutionTerminating()) return v8::Undefined(isolate);
+  Local<String> exception =
+      String::NewFromUtf8(
+          isolate, std::string(message.substr(0, String::kMaxLength)).c_str())
+          .ToLocalChecked();
+  return isolate->ThrowError(exception);
+}
+
+inline Local<Value> ThrowError(Isolate* isolate, Local<String> message) {
+  if (isolate->IsExecutionTerminating()) return v8::Undefined(isolate);
+  return isolate->ThrowError(message);
+}
+
+inline Local<Value> ThrowException(Isolate* isolate, Local<Value> exception) {
+  if (isolate->IsExecutionTerminating()) return v8::Undefined(isolate);
+  return isolate->ThrowException(exception);
+}
+
 class BackingStore;
 class CompiledWasmModule;
 class D8Console;

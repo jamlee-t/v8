@@ -416,25 +416,7 @@ class MultiMappedAllocator : public ArrayBufferAllocatorBase {
 v8::Platform* g_default_platform;
 std::unique_ptr<v8::Platform> g_platform;
 
-template <int N>
-void ThrowError(Isolate* isolate, const char (&message)[N]) {
-  if (isolate->IsExecutionTerminating()) return;
-  isolate->ThrowError(message);
-}
 
-void ThrowError(Isolate* isolate, std::string_view message) {
-  if (isolate->IsExecutionTerminating()) return;
-  Local<String> exception =
-      String::NewFromUtf8(
-          isolate, std::string(message.substr(0, String::kMaxLength)).c_str())
-          .ToLocalChecked();
-  isolate->ThrowError(exception);
-}
-
-void ThrowException(Isolate* isolate, Local<Value> exception) {
-  if (isolate->IsExecutionTerminating()) return;
-  isolate->ThrowException(exception);
-}
 
 static MaybeLocal<Value> TryGetValue(v8::Isolate* isolate,
                                      Local<Context> context,
@@ -2150,7 +2132,7 @@ bool Shell::ExecuteModule(Isolate* isolate, const char* file_name) {
       // TODO(cbruni): Clean this up after we create a new API for the case
       // where TLA is enabled.
       if (!try_catch.HasCaught()) {
-        isolate->ThrowException(result_promise->Result());
+        ThrowException(isolate, result_promise->Result());
       } else {
         DCHECK_EQ(try_catch.Exception(), result_promise->Result());
       }
@@ -4690,16 +4672,16 @@ void Shell::ChangeDirectoryCallback(
   DCHECK(i::ValidateCallbackInfo(info));
   Isolate* isolate = info.GetIsolate();
   if (info.Length() != 1) {
-    isolate->ThrowError("chdir() takes one argument");
+    ThrowError(isolate, "chdir() takes one argument");
     return;
   }
   String::Utf8Value directory(isolate, info[0]);
   if (*directory == nullptr) {
-    isolate->ThrowError("os.chdir(): String conversion of argument failed.");
+    ThrowError(isolate, "os.chdir(): String conversion of argument failed.");
     return;
   }
   if (!Shell::ChangeWorkingDirectory(*directory, /*print_error=*/false)) {
-    isolate->ThrowError("os.chdir(): Failed to change directory");
+    ThrowError(isolate, "os.chdir(): Failed to change directory");
     return;
   }
 }
@@ -7408,7 +7390,7 @@ class Serializer : public ValueSerializer::Delegate {
  protected:
   // Implements ValueSerializer::Delegate.
   void ThrowDataCloneError(Local<String> message) override {
-    isolate_->ThrowException(Exception::Error(message));
+    ThrowException(isolate_, Exception::Error(message));
   }
 
   Maybe<uint32_t> GetSharedArrayBufferId(
@@ -7473,8 +7455,8 @@ class Serializer : public ValueSerializer::Delegate {
         Local<Value> element;
         if (transfer_array->Get(context, i).ToLocal(&element)) {
           if (!element->IsArrayBuffer()) {
-            isolate_->ThrowError(
-                "Transfer array elements must be an ArrayBuffer");
+            ThrowError(isolate_,
+                       "Transfer array elements must be an ArrayBuffer");
             return Nothing<bool>();
           }
 
@@ -7482,7 +7464,8 @@ class Serializer : public ValueSerializer::Delegate {
 
           if (std::find(array_buffers_.begin(), array_buffers_.end(),
                         array_buffer) != array_buffers_.end()) {
-            isolate_->ThrowError(
+            ThrowError(
+                isolate_,
                 "ArrayBuffer occurs in the transfer array more than once");
             return Nothing<bool>();
           }
@@ -7498,7 +7481,7 @@ class Serializer : public ValueSerializer::Delegate {
     } else if (transfer->IsUndefined()) {
       return Just(true);
     } else {
-      isolate_->ThrowError("Transfer list must be an Array or undefined");
+      ThrowError(isolate_, "Transfer list must be an Array or undefined");
       return Nothing<bool>();
     }
   }
@@ -7508,7 +7491,8 @@ class Serializer : public ValueSerializer::Delegate {
       Local<ArrayBuffer> array_buffer =
           Local<ArrayBuffer>::New(isolate_, global_array_buffer);
       if (!array_buffer->IsDetachable()) {
-        isolate_->ThrowError(
+        ThrowError(
+            isolate_,
             "ArrayBuffer is not detachable and could not be transferred");
         return Nothing<bool>();
       }
