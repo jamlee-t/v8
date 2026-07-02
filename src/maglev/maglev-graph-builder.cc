@@ -12732,10 +12732,21 @@ MaybeReduceResult MaglevGraphBuilder::TryReduceConstructArrayConstructor(
     if (maybe_length.has_value()) {
       DCHECK_GE(*maybe_length, 0);
       DCHECK_LT(*maybe_length, JSArray::kInitialMaxFastElementArray);
-      return BuildAndAllocateJSArray(
-          initial_map, GetSmiConstant(*maybe_length),
-          BuildElementsArray(elements_kind, *maybe_length),
-          slack_tracking_prediction, allocation_type);
+      static constexpr int kElementLoopUnrollLimit = 16;
+      if (*maybe_length <= kElementLoopUnrollLimit) {
+        return BuildAndAllocateJSArray(
+            initial_map, GetSmiConstant(*maybe_length),
+            BuildElementsArray(elements_kind, *maybe_length),
+            slack_tracking_prediction, allocation_type);
+      } else {
+        ValueNode* elements;
+        GET_VALUE_OR_ABORT(elements, AddNewNode<AllocateElementsArray>(
+                                         {GetInt32Constant(*maybe_length)},
+                                         elements_kind, allocation_type));
+        return BuildAndAllocateJSArray(
+            initial_map, GetSmiConstant(*maybe_length), elements,
+            slack_tracking_prediction, allocation_type);
+      }
     }
 
     // We don't know anything about the length, so we rely on the allocation
