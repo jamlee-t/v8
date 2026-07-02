@@ -3944,6 +3944,10 @@ bool ChoiceNode::MaybeEmitFixedLengthConsumeScan(Compiler* compiler,
   if (body->elements()->length() != 1) return false;
   TextElement el = body->elements()->at(0);
   if (el.text_type() != TextElement::CLASS_RANGES) return false;
+  // The class must be the whole iteration. The check above only inspects the
+  // first node, so a body that keeps consuming past it (e.g. /(?:.z)+/) has a
+  // text_length above one and cannot be fused into a single-unit scan.
+  if (text_length != 1) return false;
   ClassRanges* cr = el.class_ranges();
 
   // The loop ends on the first char the body does not match, so the exit set is
@@ -3975,11 +3979,6 @@ bool ChoiceNode::MaybeEmitFixedLengthConsumeScan(Compiler* compiler,
     return false;
   }
   if (count == 0) return false;  // Body matches everything: never stops.
-
-  // The body is a single character class, so the loop consumes exactly one code
-  // unit per iteration; the scan and the caller's step-back both stride by one.
-  DCHECK_EQ(text_length, 1);
-  USE(text_length);
 
   // The scan reads the current position and steps forward one code unit; only
   // that position must be in bounds.

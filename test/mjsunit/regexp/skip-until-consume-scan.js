@@ -58,3 +58,11 @@ check(/[^a]*a/, '', null);
 check(/[^x]*x/, 'ΩΩx', [0, 'ΩΩx']);    // stop at 'x' past two-byte chars.
 check(/[^Ω]*Ω/, 'abΩ', [0, 'abΩ']);  // two-byte stop char.
 check(/[^a]*a/iu, 'XX\u{1f0a1}A', [0, 'XX\u{1f0a1}A']);  // /u + surrogate.
+
+// The single-class check only inspects the first node of the iteration, so a
+// body that keeps consuming past it -- here '.' then 'z' -- has text_length > 1
+// and must not be fused. Regression for a crash / miscompile on such bodies.
+check(/(?:.z)+/, 'azbz', [0, 'azbz']);
+check(/(?:.z)+/, 'xz yz zz', [0, 'xz']);
+check(/(?:.z)+/v, 'azbzcz', [0, 'azbzcz']);
+check(/(?:.z)+/v, '', null);
