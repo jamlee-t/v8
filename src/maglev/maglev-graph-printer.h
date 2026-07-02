@@ -61,7 +61,12 @@ class MaglevPrintingVisitor {
     // backedge, which leads to DCHECK failures when trying to print regalloc
     // data for the removed backedge when displaying phi gap moves. We thus use
     // the avoid printing regalloc data for dead phis' inputs after this phase.
-    return is_maglev_ && phase_ == MaglevPhase::kAnyUseMarking;
+    if (!is_maglev_) {
+      // Turbolev never has Maglev regalloc, so no issues there.
+      return true;
+    }
+    // The regalloc data can be incomplete only after AnyUseMarking.
+    return phase_ != MaglevPhase::kAnyUseMarking;
   }
 
   std::ostream& os_;
