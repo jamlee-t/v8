@@ -8967,6 +8967,7 @@ void CodeGenerator::AssembleSwap(InstructionOperand* source,
         // Use the XOR trick to swap without a temporary. The xorps may read
         // from unaligned address, causing a slowdown, but swaps
         // between slots should be rare.
+        CpuFeatureScope avx_scope(masm(), AVX);
         __ vmovups(kScratchSimd256Reg, src);
         __ vxorps(kScratchSimd256Reg, kScratchSimd256Reg,
                   dst);  // scratch contains src ^ dst.
