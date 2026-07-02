@@ -748,14 +748,20 @@ class ChoiceNode : public Node {
   V8_WARN_UNUSED_RESULT std::optional<EmitResult>
   EmitSkipUntilOneOfMaskedSearch(Compiler* compiler, Trace* trace, Node* body,
                                  ActionNode* wrapper);
-  // Sibling of EmitOptimizedUnanchoredSearch for the SkipUntilBitInTable
-  // peephole pattern. `body` comes from MatchLazyStarLoopBody. If it is a
-  // TextNode whose first element is a non-negated character class, emits the
-  // scan as a straight-line prelude; the caller unconditionally falls through
-  // to EmitChoices afterwards (which emits the body at the candidate position),
-  // so there is no need to report back whether the prelude fired.
-  void EmitSkipUntilBitInTableSearch(Compiler* compiler, Trace* trace,
-                                     Node* body);
+  // Sibling of EmitOptimizedUnanchoredSearch: accelerates the implicit
+  // unanchored search to the first position where `body` (from
+  // MatchLazyStarLoopBody) can match, via the cheapest applicable SkipUntil*
+  // scan (Char / CharAnd / CharOrChar / BitInTable). Emits a straight-line
+  // prelude; the caller unconditionally falls through to EmitChoices afterwards
+  // (which emits the body at the candidate position), so there is no need to
+  // report back whether the prelude fired.
+  void EmitSkipUntilSearchPrelude(Compiler* compiler, Trace* trace, Node* body);
+  // For a greedy one-byte character-class body, emit a single SkipUntilChar /
+  // SkipUntilCharOrChar / SkipUntilCharAnd scan over its exit set in place of
+  // the per-iteration body + back-edge (landing on |exit|), and return true.
+  // The caller keeps the surrounding loop frame. False if not fusible.
+  bool MaybeEmitFixedLengthConsumeScan(Compiler* compiler, Label* exit,
+                                       int text_length);
   // Returns nullptr on failure.
   // TODO(jgruber): Consider wrapping the return value in EmitResult.
   V8_WARN_UNUSED_RESULT Trace* EmitFixedLengthLoop(

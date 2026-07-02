@@ -124,6 +124,15 @@ class RegExpMacroAssembler {
   // array, and if the found byte is non-zero, we jump to the on_bit_set label.
   virtual void CheckBitInTable(Handle<ByteArray> table, Label* on_bit_set) = 0;
 
+  // Scan helpers. Each loads the character at |cp_offset| and advances the
+  // position by |advance_by| until its stop condition holds (a single char, one
+  // of two chars, a bit-table test, ...). Position on exit, which SIMD
+  // overrides must preserve:
+  //  - on_match:    stop condition held; position unadvanced, so the matching
+  //                 char is at |cp_offset| (not consumed).
+  //  - on_no_match: bounds check failed first; position left where the load at
+  //                 |cp_offset| went out of bounds, for the caller to step
+  //                 back.
   virtual void SkipUntilBitInTable(int cp_offset, Handle<ByteArray> table,
                                    Handle<ByteArray> nibble_table,
                                    int advance_by, int bounds_check_offset,
