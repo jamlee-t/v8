@@ -65,6 +65,9 @@ console: Error location: Error
     at doPause (test.js:45:34)
     at testSetTimeout (test.js:77:3)
     at async js_func (test.js:25:12)
+    at wrappedWasm (wasm://wasm/2a184bf2:wasm-function[1]:0x47)
+    at threeTimes (wasm://wasm/2a184bf2:wasm-function[2]:0x4e)
+    at async wrapperFunc (test.js:38:12)
 
 Debugger paused on debugger statement
 doPause (test.js:45:2)
@@ -80,6 +83,9 @@ console: Error location: Error
     at doPause (test.js:45:34)
     at testSetTimeout (test.js:77:3)
     at async js_func (test.js:25:12)
+    at wrappedWasm (wasm://wasm/2a184bf2:wasm-function[1]:0x47)
+    at threeTimes (wasm://wasm/2a184bf2:wasm-function[2]:0x52)
+    at async wrapperFunc (test.js:38:12)
 
 Debugger paused on debugger statement
 doPause (test.js:45:2)
@@ -96,6 +102,9 @@ console: Error location: Error
     at doPause (test.js:45:34)
     at testSetTimeout (test.js:77:3)
     at async js_func (test.js:25:12)
+    at wrappedWasm (wasm://wasm/2a184bf2:wasm-function[1]:0x47)
+    at threeTimes (wasm://wasm/2a184bf2:wasm-function[2]:0x56)
+    at async wrapperFunc (test.js:38:12)
 
 Debugger paused on debugger statement
 doPause (test.js:45:2)
@@ -145,6 +154,14 @@ console: Error location: Error
     at doPause (test.js:45:34)
     at innerPause (test.js:86:5)
     at async js_func (test.js:25:12)
+    at wrappedWasm (wasm://wasm/2a184bf2:wasm-function[1]:0x47)
+    at threeTimes (wasm://wasm/2a184bf2:wasm-function[2]:0x4e)
+    at async wrapperFunc (test.js:38:12)
+    at async testDoubleNested (test.js:92:5)
+    at async js_func (test.js:25:12)
+    at wrappedWasm (wasm://wasm/2a184bf2:wasm-function[1]:0x47)
+    at threeTimes (wasm://wasm/2a184bf2:wasm-function[2]:0x4e)
+    at async wrapperFunc (test.js:38:12)
 
 Debugger paused on debugger statement
 doPause (test.js:45:2)
@@ -208,6 +225,14 @@ console: Error location: Error
     at doPause (test.js:45:34)
     at innerPause (test.js:86:5)
     at async js_func (test.js:25:12)
+    at wrappedWasm (wasm://wasm/2a184bf2:wasm-function[1]:0x47)
+    at threeTimes (wasm://wasm/2a184bf2:wasm-function[2]:0x4e)
+    at async wrapperFunc (test.js:38:12)
+    at async testDoubleNested (test.js:92:5)
+    at async js_func (test.js:25:12)
+    at wrappedWasm (wasm://wasm/2a184bf2:wasm-function[1]:0x47)
+    at threeTimes (wasm://wasm/2a184bf2:wasm-function[2]:0x52)
+    at async wrapperFunc (test.js:38:12)
 
 Debugger paused on debugger statement
 doPause (test.js:45:2)
@@ -273,6 +298,14 @@ console: Error location: Error
     at doPause (test.js:45:34)
     at innerPause (test.js:86:5)
     at async js_func (test.js:25:12)
+    at wrappedWasm (wasm://wasm/2a184bf2:wasm-function[1]:0x47)
+    at threeTimes (wasm://wasm/2a184bf2:wasm-function[2]:0x4e)
+    at async wrapperFunc (test.js:38:12)
+    at async testDoubleNested (test.js:92:5)
+    at async js_func (test.js:25:12)
+    at wrappedWasm (wasm://wasm/2a184bf2:wasm-function[1]:0x47)
+    at threeTimes (wasm://wasm/2a184bf2:wasm-function[2]:0x56)
+    at async wrapperFunc (test.js:38:12)
 
 Debugger paused on debugger statement
 doPause (test.js:45:2)

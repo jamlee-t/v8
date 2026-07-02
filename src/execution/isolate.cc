@@ -1394,6 +1394,32 @@ void CaptureAsyncStackTrace(Isolate* isolate, DirectHandle<JSPromise> promise,
         DCHECK(IsUndefined(promise_or_undefined));
         return;
       }
+#if V8_ENABLE_WEBASSEMBLY
+    } else if (DirectHandle<WasmSuspenderObject> suspender;
+               TryGetWasmSuspender(isolate, reaction->fulfill_handler())
+                   .ToHandle(&suspender)) {
+      DCHECK_NOT_NULL(suspender->stack());
+      for (StackFrameIterator it(isolate, suspender->stack()); !it.done();
+           it.Advance()) {
+        StackFrame* frame = it.frame();
+        if (frame->is_wasm()) {
+          FrameSummaries summaries = CommonFrame::cast(frame)->Summarize();
+          for (auto& summary : base::Reversed(summaries.frames)) {
+            if (!summary.native_context()->HasSameSecurityTokenAs(
+                    isolate->raw_native_context())) {
+              continue;
+            }
+            if (!builder->Visit(summary)) return;
+          }
+        }
+      }
+      Tagged<Object> promise_obj = suspender->promise();
+      if (IsJSPromise(promise_obj)) {
+        promise = direct_handle(Cast<JSPromise>(promise_obj), isolate);
+      } else {
+        return;
+      }
+#endif  // V8_ENABLE_WEBASSEMBLY
     } else {
       // We have some generic promise chain here, so try to
       // continue with the chained promise on the reaction
