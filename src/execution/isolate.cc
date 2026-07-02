@@ -2913,7 +2913,7 @@ Tagged<Object> Isolate::UnwindAndFindHandler() {
           reinterpret_cast<uintptr_t>(iter.wasm_stack()->jslimit());
       stack_guard()->SetStackLimitForStackSwitching(limit);
       iter.wasm_stack()->clear_stack_switch_info();
-#if V8_TARGET_OS_WIN
+#if V8_OS_WIN
       base::Stack::SetCurrentThreadStackBounds(iter.wasm_stack()->limit(),
                                                iter.wasm_stack()->base());
 #endif
@@ -4495,6 +4495,14 @@ void Isolate::IterateRegistersAndStackOfSimulator(
 bool Isolate::IsOnCentralStack(Address addr) {
   auto stack = SimulatorStack::GetCentralStackView(this);
   Address stack_top = reinterpret_cast<Address>(stack.begin());
+#if !USE_SIMULATOR
+  // Try to use the stack limit reported by the system instead of V8's own
+  // conservative limit to avoid false positives.
+  Address real_stack_top = base::Stack::GetReservedStackLimit();
+  if (real_stack_top) {
+    stack_top = real_stack_top;
+  }
+#endif
   Address stack_base = reinterpret_cast<Address>(stack.end());
   return stack_top < addr && addr <= stack_base;
 }

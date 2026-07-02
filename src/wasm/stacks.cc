@@ -37,7 +37,7 @@ Address StackMemory::limit() const {
 void* StackMemory::jslimit() const {
   return (active_segment_ ? active_segment_->limit_ : limit_) +
          (owned_ ? StackMemory::JSGrowableStackLimitMarginKB() * KB
-                 : StackMemory::JSCentralStackLimitMarginKB() * KB);
+                 : V8_STACK_LIMIT_MARGIN_KB * KB);
 }
 
 StackMemory::StackMemory() : owned_(true) {
@@ -175,7 +175,7 @@ bool StackMemory::Grow(Address current_fp, size_t min_size) {
            active_segment_->size_, active_segment_->limit_,
            active_segment_->limit_ + active_segment_->size_);
   }
-#if V8_TARGET_OS_WIN
+#if V8_OS_WIN
   base::Stack::SetCurrentThreadStackBounds(
       reinterpret_cast<uintptr_t>(active_segment_->limit_),
       active_segment_->base());
@@ -195,7 +195,7 @@ Address StackMemory::Shrink() {
            active_segment_->limit_,
            active_segment_->limit_ + active_segment_->size_);
   }
-#if V8_TARGET_OS_WIN
+#if V8_OS_WIN
   base::Stack::SetCurrentThreadStackBounds(
       reinterpret_cast<uintptr_t>(active_segment_->limit_),
       active_segment_->base());
