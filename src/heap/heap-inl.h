@@ -322,10 +322,7 @@ bool Heap::IsPendingAllocationInternal(Tagged<HeapObject> object) {
     case CODE_LO_SPACE:
     case TRUSTED_LO_SPACE:
     case NEW_LO_SPACE: {
-      LargeObjectSpace* large_space =
-          static_cast<LargeObjectSpace*>(base_space);
-      base::MutexGuard guard(large_space->pending_allocation_mutex());
-      return addr == large_space->pending_object();
+      return addr == allocator()->pending_large_object();
     }
 
     case SHARED_SPACE:

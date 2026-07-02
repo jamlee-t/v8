@@ -77,6 +77,20 @@ OldLargeObjectSpace* HeapAllocator::shared_trusted_lo_space() const {
   return shared_trusted_lo_space_;
 }
 
+Address HeapAllocator::new_space_pending_large_object() const {
+  return new_space_pending_large_object_.load(std::memory_order_acquire);
+}
+
+Address HeapAllocator::pending_large_object() const {
+  return pending_large_object_.load(std::memory_order_acquire);
+}
+
+void HeapAllocator::ResetPendingLargeObject() {
+  pending_large_object_.store(kNullAddress, std::memory_order_release);
+  new_space_pending_large_object_.store(kNullAddress,
+                                        std::memory_order_release);
+}
+
 bool HeapAllocator::CanAllocateInReadOnlySpace() const {
   return read_only_space()->writable();
 }

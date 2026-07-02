@@ -4671,7 +4671,6 @@ void MarkCompactCollector::EvacuatePrologue() {
   // Large new space.
   if (NewLargeObjectSpace* new_lo_space = heap_->new_lo_space()) {
     new_lo_space->Flip();
-    new_lo_space->ResetPendingObject();
   }
 
   // Old space.

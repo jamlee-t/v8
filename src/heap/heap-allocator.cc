@@ -124,8 +124,21 @@ AllocationResult HeapAllocator::AllocateRawLargeInternal(
   if (!allocation_result.IsFailure()) {
     int allocated_size = ALIGN_TO_ALLOCATION_ALIGNMENT(size_in_bytes);
     heap_->AddTotalAllocatedBytes(allocated_size);
+    UpdatePendingLargeObject(allocation_result.ToObject(), allocation);
   }
   return allocation_result;
+}
+
+void HeapAllocator::UpdatePendingLargeObject(Tagged<HeapObject> object,
+                                             AllocationType allocation) {
+  Address addr = object.address();
+  pending_large_object_.store(addr, std::memory_order_release);
+  if (allocation == AllocationType::kYoung) {
+    new_space_pending_large_object_.store(addr, std::memory_order_release);
+  } else {
+    new_space_pending_large_object_.store(kNullAddress,
+                                          std::memory_order_release);
+  }
 }
 
 namespace {
@@ -350,6 +363,7 @@ void HeapAllocator::FreeLinearAllocationAreas() {
   if (shared_trusted_space_allocator_) {
     shared_trusted_space_allocator_->FreeLinearAllocationArea();
   }
+  ResetPendingLargeObject();
 }
 
 void HeapAllocator::PublishPendingAllocations() {
@@ -361,10 +375,7 @@ void HeapAllocator::PublishPendingAllocations() {
   trusted_space_allocator_->MoveOriginalTopForward();
   code_space_allocator_->MoveOriginalTopForward();
 
-  lo_space()->ResetPendingObject();
-  if (new_lo_space()) new_lo_space()->ResetPendingObject();
-  code_lo_space()->ResetPendingObject();
-  trusted_lo_space()->ResetPendingObject();
+  ResetPendingLargeObject();
 }
 
 void HeapAllocator::AddAllocationObserver(

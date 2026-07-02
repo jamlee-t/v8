@@ -5,6 +5,7 @@
 #ifndef V8_HEAP_HEAP_ALLOCATOR_H_
 #define V8_HEAP_HEAP_ALLOCATOR_H_
 
+#include <atomic>
 #include <optional>
 #include <type_traits>
 
@@ -164,6 +165,10 @@ class V8_EXPORT_PRIVATE HeapAllocator final {
 
   Address last_young_allocation() { return *last_young_allocation_pointer_; }
 
+  V8_INLINE Address new_space_pending_large_object() const;
+  V8_INLINE Address pending_large_object() const;
+  V8_INLINE void ResetPendingLargeObject();
+
  private:
   V8_INLINE PagedSpace* code_space() const;
   V8_INLINE CodeLargeObjectSpace* code_lo_space() const;
@@ -180,6 +185,9 @@ class V8_EXPORT_PRIVATE HeapAllocator final {
   V8_WARN_UNUSED_RESULT AllocationResult AllocateRawLargeInternal(
       int size_in_bytes, AllocationType allocation, AllocationOrigin origin,
       AllocationAlignment alignment, AllocationHint hint);
+
+  void UpdatePendingLargeObject(Tagged<HeapObject> object,
+                                AllocationType allocation);
 
   bool RetryCustomAllocateLight(CustomAllocationFunction allocate,
                                 AllocationType allocation,
@@ -208,6 +216,9 @@ class V8_EXPORT_PRIVATE HeapAllocator final {
 #ifdef DEBUG
   void IncrementObjectCounters();
 #endif  // DEBUG
+
+  std::atomic<Address> new_space_pending_large_object_{kNullAddress};
+  std::atomic<Address> pending_large_object_{kNullAddress};
 
   LocalHeap* local_heap_;
   Heap* const heap_;
