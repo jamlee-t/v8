@@ -2804,6 +2804,8 @@ DEFINE_BOOL(stress_compaction_random, false,
 DEFINE_IMPLICATION(stress_compaction, gc_global)
 DEFINE_NEG_IMPLICATION(stress_compaction, resize_large_object)
 DEFINE_VALUE_IMPLICATION(stress_compaction, max_semi_space_size, (size_t)1)
+DEFINE_BOOL(stress_descriptor_array_trimming, false,
+            "Stress descriptor array trimming on every stackless GC.")
 DEFINE_BOOL(flush_baseline_code, false,
             "flush of baseline code when it has not been executed recently")
 DEFINE_BOOL(flush_bytecode, true,

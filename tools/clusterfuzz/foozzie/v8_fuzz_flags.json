@@ -60,5 +60,6 @@
   [0.5, "--private-field-bytecodes"],
   [0.1, "--scavenger-chaos-mode"],
   [0.1, "--stress-branch-hinting"],
-  [0.2, "--wasm-random-rescheduling"]
+  [0.2, "--wasm-random-rescheduling"],
+  [0.1, "--stress-descriptor-array-trimming"]
 ]
