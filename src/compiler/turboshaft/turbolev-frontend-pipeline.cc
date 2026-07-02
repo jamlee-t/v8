@@ -254,9 +254,11 @@ struct PostOptimizerPhase {
     maglev::GraphMultiProcessor<maglev::MaglevGraphOptimizer&,
                                 maglev::ReachableExceptionHandlerTracker&,
                                 maglev::RecomputeKnownNodeAspectsProcessor&,
-                                maglev::RecomputePhiUseHintsProcessor>
+                                maglev::RecomputePhiUseHintsProcessor,
+                                maglev::BoundsCheckEliminationProcessor>
         optimization_pass(optimizer, exception_handler_tracker, kna_processor,
-                          maglev::RecomputePhiUseHintsProcessor{graph->zone()});
+                          maglev::RecomputePhiUseHintsProcessor{graph->zone()},
+                          maglev::BoundsCheckEliminationProcessor{graph});
     optimization_pass.ProcessGraph(graph);
 
     // Remove unreachable blocks if we have any.
