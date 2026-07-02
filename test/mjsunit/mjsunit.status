@@ -690,7 +690,7 @@
   # --wasm-inlining
   'regress/wasm/regress-crbug-1510626': [SKIP],
 
-  # --experimental-wasm-typed-funcref
+  # --wasm-typed-funcref
   'regress/wasm/regress-1364036': [SKIP],
   'regress/wasm/regress-1446221': [SKIP],
   'regress/wasm/regress-1449208': [SKIP],
@@ -700,7 +700,7 @@
   'wasm/reference-tables': [SKIP],
   'wasm/test-wasm-module-builder': [SKIP],
 
-  # --experimental-wasm-type-reflection
+  # --wasm-type-reflection
   'regress/wasm/regress-crbug-1002388': [SKIP],
   'regress/wasm/regress-14695': [SKIP],
   'regress/wasm/regress-329130358': [SKIP],
@@ -719,7 +719,7 @@
   'wasm/type-reflection*': [SKIP],
   'wasm/wasm-to-js-tierup': [SKIP],
 
-  # --experimental-wasm-memory-control
+  # --wasm-memory-control
   'wasm/memory-control': [SKIP],
   'regress/wasm/regress-493307331': [SKIP],
 
@@ -739,22 +739,22 @@
   'wasm/mixed-eh-invalid': [SKIP],
   'wasm/wasm-inlining-catch-unreachable': [SKIP],
 
-  #--experimental-wasm-ref-cast-nop
+  #--wasm-ref-cast-nop
   'wasm/gc-experiments': [SKIP],
 
-  # --experimental-wasm-extended-const
+  # --wasm-extended-const
   'wasm/extended-constants': [SKIP],
 
-  # --experimental-wasm-stack-switching
+  # --wasm-stack-switching
   'regress/wasm/regress-483269968': [SKIP],
   'regress/wasm/regress-v8-14471': [SKIP],
   'wasm/jspi*': [SKIP],
   'wasm/growable-stacks': [SKIP],
 
-  # --experimental-wasm-growable-stacks
+  # --wasm-growable-stacks
   'regress/wasm/regress-513250424': [SKIP],
 
-  # --experimental-wasm-wasmfx
+  # --wasm-wasmfx
   'regress/wasm/regress-455832038': [SKIP],
   'regress/wasm/regress-473272199': [SKIP],
   'regress/wasm/regress-488089242': [SKIP],
@@ -775,10 +775,10 @@
   'wasm/stack-switching*': [SKIP],
   'wasm/wasmfx*': [SKIP],
 
-  # --experimental-wasm-growable-stacks
+  # --wasm-growable-stacks
   'regress/wasm/regress-421055121': [SKIP],
 
-  # --experimental-wasm-stringref
+  # --wasm-stringref
   'regress/wasm/regress-324475066': [SKIP],
   'regress/wasm/regress-324690505': [SKIP],
   'regress/wasm/regress-330580823': [SKIP],
@@ -856,7 +856,7 @@
   'regress/wasm/regress-326894018': [SKIP],
   'regress/wasm/regress-327643791': [SKIP],
 
-  # --experimental-wasm-shared
+  # --wasm-shared
   'regress/wasm/regress-454276076': [SKIP],
   'regress/wasm/regress-475896261': [SKIP],
   'regress/wasm/regress-490877756': [SKIP],
@@ -876,7 +876,7 @@
   'wasm/shared-everything/*': [SKIP],
   'wasm/subtyping-invalid': [SKIP],
 
-  # --experimental-wasm-jspi
+  # --wasm-jspi
   'regress/wasm/regress-336358915': [SKIP],
   'regress/wasm/regress-336852356': [SKIP],
   'regress/wasm/regress-342522151': [SKIP],
@@ -894,7 +894,7 @@
   'regress/wasm/regress-408254017': [SKIP],
   'regress/wasm/regress-crbug-408253898': [SKIP],
 
-  # --experimental-wasm-fp16
+  # --wasm-fp16
   'regress/wasm/regress-499027764': [SKIP],
   'regress/wasm/regress-504612573': [SKIP],
   'wasm/fp16-load-mul': [SKIP],
@@ -902,7 +902,7 @@
   'wasm/fp16-store': [SKIP],
   'wasm/simd-fp16': [SKIP],
 
-  # --experimental-wasm-rab-integration
+  # --wasm-rab-integration
   'regress/wasm/regress-451144692': [SKIP],
   'regress/wasm/regress-476461881': [SKIP],
   'regress/wasm/regress-482759504': [SKIP],
@@ -922,7 +922,7 @@
   'wasm/shared-memory-resizable-buffer-array*': [SKIP],
   'wasm/shared-memory-resizable-buffer-errors': [SKIP],
 
-  # --experimental-wasm-custom-descriptors
+  # --wasm-custom-descriptors
   'regress/wasm/regress-433984397': [SKIP],
   'regress/wasm/regress-435301441': [SKIP],
   'regress/wasm/regress-435315689': [SKIP],
@@ -939,10 +939,10 @@
   'wasm/custom-descriptors*': [SKIP],
   'wasm/exact-types': [SKIP],
 
-  # --experimental-wasm-compact-imports
+  # --wasm-compact-imports
   'wasm/compact-imports': [SKIP],
 
-  # --experimental-wasm-wide-arithmetic
+  # --wasm-wide-arithmetic
   'regress/wasm/regress-515525741': [SKIP],
   'regress/wasm/regress-516102112-1': [SKIP],
   'regress/wasm/regress-simd-520944504': [SKIP],
@@ -1053,7 +1053,7 @@
   'turbolev/regress-475583927': [SKIP],
   'turbolev/regress-477658238': [SKIP],
 
-  # --experimental-wasm-js-interop
+  # --wasm-js-interop
   'regress/wasm/regress-470127856': [SKIP],
   'regress/wasm/regress-471380636': [SKIP],
   'regress/wasm/regress-474491347': [SKIP],
@@ -1063,7 +1063,7 @@
   'regress/wasm/regress-498818401': [SKIP],
   'regress/wasm/regress-500113958': [SKIP],
 
-  # --experimental-wasm-acquire-release
+  # --wasm-acquire-release
   'regress/wasm/regress-516102113': [SKIP],
   'regress/wasm/regress-518131466': [SKIP],
   'wasm/acq-rel-*': [SKIP],

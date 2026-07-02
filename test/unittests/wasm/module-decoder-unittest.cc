@@ -4115,8 +4115,7 @@ TEST_F(WasmModuleVerifyTest, InvalidSharedType) {
 
   ModuleResult result = DecodeModule(base::ArrayVector(data));
 
-  EXPECT_NOT_OK(
-      result, "invalid heap type 0x65, enable with --experimental-wasm-shared");
+  EXPECT_NOT_OK(result, "invalid heap type 0x65, enable with --wasm-shared");
 }
 
 TEST_F(WasmModuleVerifyTest, InvalidSharedGlobal) {

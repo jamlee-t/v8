@@ -532,9 +532,7 @@ class ModuleDecoderImpl : public Decoder {
         if (enabled_features_.has_stringref()) {
           DecodeStringRefSection();
         } else {
-          errorf(pc(),
-                 "unexpected section <%s> (enable with "
-                 "--experimental-wasm-stringref)",
+          errorf(pc(), "unexpected section <%s> (enable with --wasm-stringref)",
                  SectionName(section_code));
         }
         break;
@@ -603,8 +601,7 @@ class ModuleDecoderImpl : public Decoder {
       case kWasmContTypeCode: {
         if (V8_UNLIKELY(!enabled_features_.has_wasmfx())) {
           error(pc() - 1,
-                "core stack switching not enabled (enable with "
-                "--experimental-wasm-wasmfx)");
+                "core stack switching not enabled (enable with --wasm-wasmfx)");
           return {};
         }
 
@@ -632,8 +629,7 @@ class ModuleDecoderImpl : public Decoder {
     uint8_t kind = read_u8<Decoder::FullValidationTag>(pc(), "type kind");
     if (kind == kWasmDescriptorCode) {
       if (V8_UNLIKELY(!enabled_features_.has_custom_descriptors())) {
-        error(pc(),
-              "descriptor types need --experimental-wasm-custom-descriptors");
+        error(pc(), "descriptor types need --wasm-custom-descriptors");
         return {};
       }
       detected_features_->add_custom_descriptors();
@@ -664,8 +660,7 @@ class ModuleDecoderImpl : public Decoder {
     uint8_t kind = read_u8<Decoder::FullValidationTag>(pc(), "type kind");
     if (kind == kWasmDescribesCode) {
       if (V8_UNLIKELY(!enabled_features_.has_custom_descriptors())) {
-        error(pc(),
-              "descriptor types need --experimental-wasm-custom-descriptors");
+        error(pc(), "descriptor types need --wasm-custom-descriptors");
         return {};
       }
       detected_features_->add_custom_descriptors();
@@ -694,8 +689,7 @@ class ModuleDecoderImpl : public Decoder {
     uint8_t kind = read_u8<Decoder::FullValidationTag>(pc(), "type kind");
     if (kind == kSharedFlagCode) {
       if (V8_UNLIKELY(!enabled_features_.has_shared())) {
-        errorf(pc() - 1,
-               "unknown type form: %d, enable with --experimental-wasm-shared",
+        errorf(pc() - 1, "unknown type form: %d, enable with --wasm-shared",
                kind);
         return {};
       }
@@ -989,10 +983,10 @@ class ModuleDecoderImpl : public Decoder {
         // ===== Imported function ===========================================
         if (V8_UNLIKELY(kind == kExternalExactFunction &&
                         !enabled_features_.has_custom_descriptors())) {
-          errorf(pc_ - 1,
-                 "Invalid import kind %d, enable with "
-                 "--experimental-wasm-custom-descriptors",
-                 kind);
+          errorf(
+              pc_ - 1,
+              "Invalid import kind %d, enable with --wasm-custom-descriptors",
+              kind);
           break;
         }
 
@@ -1175,8 +1169,7 @@ class ModuleDecoderImpl : public Decoder {
       if (kind == kCompactImportByModule && field_name.length() == 0) {
         if (V8_UNLIKELY(!enabled_features_.has_compact_imports())) {
           errorf(pc_ - 1,
-                 "Invalid import kind %d, enable with "
-                 "--experimental-wasm-compact-imports",
+                 "Invalid import kind %d, enable with --wasm-compact-imports",
                  kind);
           break;
         }
@@ -1195,8 +1188,7 @@ class ModuleDecoderImpl : public Decoder {
                  field_name.length() == 0) {
         if (V8_UNLIKELY(!enabled_features_.has_compact_imports())) {
           errorf(pc_ - 1,
-                 "Invalid import kind %d, enable with "
-                 "--experimental-wasm-compact-imports",
+                 "Invalid import kind %d, enable with --wasm-compact-imports",
                  kind);
           break;
         }

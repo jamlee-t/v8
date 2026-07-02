@@ -363,7 +363,7 @@ INCOMPATIBLE_FLAGS_PER_BUILD_VARIABLE = {
         "--shared-strings",
         "--shared-heap",
         "--harmony-struct",
-        "--experimental-wasm-shared",
+        "--wasm-shared",
     ],
     "!slow_dchecks": ["--enable-slow-asserts"],
     "!gdbjit": ["--gdbjit", "--gdbjit_full", "--gdbjit_dump"],

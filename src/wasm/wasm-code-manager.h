@@ -1138,7 +1138,7 @@ class V8_EXPORT_PRIVATE NativeModule final {
   std::atomic<size_t> liftoff_bailout_count_{0};
 
   // Whether the next instantiation should trigger repeated output of PGO data
-  // (if --experimental-wasm-pgo-to-file is enabled).
+  // (if --wasm-pgo-to-file is enabled).
   std::atomic<bool> should_pgo_data_be_written_{true};
 
   // A lock-free quick-access flag to indicate whether code for this

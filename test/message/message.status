@@ -96,7 +96,7 @@
 
   # --trace-wasm-memory
   'wasm-trace-memory64': [SKIP],
-  'wasm-trace-memory': [SKIP], # also --experimental-wasm-memory64
+  'wasm-trace-memory': [SKIP], # also --wasm-memory64
 
   # Different error message
   'fail/wasm-async-instantiate-fail': [SKIP],

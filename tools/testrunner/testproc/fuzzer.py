@@ -83,7 +83,7 @@ EXTRA_FLAGS = [
     (0.1, '--precise-object-pinning'),
     (0.25, '--wasm-staging'),
     (0.1, '--ephemeron-fixpoint-iterations=0'),
-    (0.25, '--experimental-wasm-revectorize'),
+    (0.25, '--wasm-revectorize'),
     (0.1, '--no-memory-pool'),
     (0.1, '--wasm-assert-types'),
     (0.1, '--wasm-random-rescheduling'),

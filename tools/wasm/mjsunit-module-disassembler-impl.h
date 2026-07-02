@@ -1240,7 +1240,7 @@ class MjsunitModuleDis {
     int year = 1900 + current_localtime.tm_year;
 
     // TODO(jkummerow): It would be neat to dynamically detect additional
-    // necessary --experimental-wasm-foo feature flags and add them.
+    // necessary --wasm-foo feature flags and add them.
     // That requires decoding/validating functions before getting here though.
     out_ << "// Copyright " << year
          << " the V8 project authors. All rights reserved.\n"

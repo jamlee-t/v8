@@ -61,14 +61,13 @@ V8_INLINE bool ValidateAssumeTrue(bool condition, const char* message) {
 #define VALIDATE(condition) (!ValidationTag::validate || V8_LIKELY(condition))
 #endif
 
-#define CHECK_PROTOTYPE_OPCODE(feat)                                         \
-  DCHECK(this->module_->origin == kWasmOrigin);                              \
-  if (!VALIDATE(this->enabled_.has_##feat())) {                              \
-    this->DecodeError(                                                       \
-        "Invalid opcode 0x%02x (enable with --experimental-wasm-" #feat ")", \
-        opcode);                                                             \
-    return 0;                                                                \
-  }                                                                          \
+#define CHECK_PROTOTYPE_OPCODE(feat)                                          \
+  DCHECK(this->module_->origin == kWasmOrigin);                               \
+  if (!VALIDATE(this->enabled_.has_##feat())) {                               \
+    this->DecodeError("Invalid opcode 0x%02x (enable with --wasm-" #feat ")", \
+                      opcode);                                                \
+    return 0;                                                                 \
+  }                                                                           \
   this->detected_->add_##feat()
 
 inline constexpr LoadType GetLoadType(WasmOpcode opcode) {
@@ -232,8 +231,7 @@ std::pair<HeapType, uint32_t> read_heap_type(Decoder* decoder,
     if (code == kSharedFlagCode) {
       if (!VALIDATE(enabled.has_shared())) {
         DecodeError<ValidationTag>(
-            decoder, pc,
-            "invalid heap type 0x%hhx, enable with --experimental-wasm-shared",
+            decoder, pc, "invalid heap type 0x%hhx, enable with --wasm-shared",
             kSharedFlagCode);
         return {kWasmBottom, length};
       }
@@ -289,8 +287,7 @@ std::pair<HeapType, uint32_t> read_heap_type(Decoder* decoder,
         if (!VALIDATE(enabled.has_stringref())) {
           DecodeError<ValidationTag>(
               decoder, pc,
-              "invalid heap type '%s', enable with "
-              "--experimental-wasm-stringref",
+              "invalid heap type '%s', enable with --wasm-stringref",
               HeapType::from_code(code, is_shared).name().c_str());
           return {kWasmBottom, 0};
         }
@@ -305,9 +302,7 @@ std::pair<HeapType, uint32_t> read_heap_type(Decoder* decoder,
       case kContRefCode:
         if (!VALIDATE(enabled.has_wasmfx())) {
           DecodeError<ValidationTag>(
-              decoder, pc,
-              "invalid heap type '%s', enable with "
-              "--experimental-wasm-wasmfx",
+              decoder, pc, "invalid heap type '%s', enable with --wasm-wasmfx",
               HeapType::from_code(code, is_shared).name().c_str());
           return {kWasmBottom, 0};
         }
@@ -324,9 +319,7 @@ std::pair<HeapType, uint32_t> read_heap_type(Decoder* decoder,
       case kNoWaitqueueCode: {
         if (!VALIDATE(enabled.has_shared())) {
           DecodeError<ValidationTag>(
-              decoder, pc,
-              "invalid heap type '%s', enable with "
-              "--experimental-wasm-shared",
+              decoder, pc, "invalid heap type '%s', enable with --wasm-shared",
               HeapType::from_code(code, is_shared).name().c_str());
           return {kWasmBottom, 0};
         }
@@ -336,7 +329,7 @@ std::pair<HeapType, uint32_t> read_heap_type(Decoder* decoder,
         if (!VALIDATE(enabled.has_custom_descriptors())) {
           DecodeError<ValidationTag>(decoder, pc,
                                      "invalid heap type 'exact', enable with "
-                                     "--experimental-wasm-custom-descriptors");
+                                     "--wasm-custom-descriptors");
           return {kWasmBottom, 0};
         }
         auto [nested_index, index_length] =
@@ -415,8 +408,7 @@ std::pair<ValueType, uint32_t> read_value_type(Decoder* decoder,
       if (!VALIDATE(enabled.has_stringref())) {
         DecodeError<ValidationTag>(
             decoder, pc,
-            "invalid value type '%sref', enable with "
-            "--experimental-wasm-stringref",
+            "invalid value type '%sref', enable with --wasm-stringref",
             HeapType::from_code(code, SharedFlag{false}).name().c_str());
         return {kWasmBottom, 0};
       }
@@ -432,8 +424,7 @@ std::pair<ValueType, uint32_t> read_value_type(Decoder* decoder,
       if (!VALIDATE(enabled.has_shared())) {
         DecodeError<ValidationTag>(
             decoder, pc,
-            "invalid value type '%sref', enable with "
-            "--experimental-wasm-shared",
+            "invalid value type '%sref', enable with --wasm-shared",
             HeapType::from_code(code, SharedFlag{false}).name().c_str());
         return {kWasmBottom, 0};
       }
@@ -443,8 +434,7 @@ std::pair<ValueType, uint32_t> read_value_type(Decoder* decoder,
     case kNoContCode:
       if (!VALIDATE(enabled.has_wasmfx())) {
         DecodeError<ValidationTag>(
-            decoder, pc,
-            "invalid value type '%s', enable with --experimental-wasm-wasmfx",
+            decoder, pc, "invalid value type '%s', enable with --wasm-wasmfx",
             HeapType::from_code(code, SharedFlag{false}).name().c_str());
         return {kWasmBottom, 0};
       }
@@ -1150,10 +1140,9 @@ struct MemoryAccessImmediate {
 
     if (alignment & 0x20) {
       if (!acquire_release_enabled) {
-        DecodeError<ValidationTag>(
-            decoder, pc,
-            "invalid memory ordering: acquire-release requires "
-            "--experimental-wasm-acquire-release flag");
+        DecodeError<ValidationTag>(decoder, pc,
+                                   "invalid memory ordering: acquire-release "
+                                   "requires --wasm-acquire-release flag");
       } else if (kind == kNonAtomic) {
         DecodeError<ValidationTag>(
             decoder, pc,
@@ -5661,9 +5650,7 @@ class WasmFullDecoder : public WasmDecoder<ValidationTag, decoding_mode> {
       case kExprF16x8ExtractLane: {
         if (!this->enabled_.has_fp16()) {
           this->DecodeError(
-              "invalid simd opcode: 0x%x, "
-              "enable with --experimental-wasm-fp16",
-              opcode);
+              "invalid simd opcode: 0x%x, enable with --wasm-fp16", opcode);
           return 0;
         }
         [[fallthrough]];
@@ -5683,9 +5670,7 @@ class WasmFullDecoder : public WasmDecoder<ValidationTag, decoding_mode> {
       case kExprF16x8ReplaceLane: {
         if (!this->enabled_.has_fp16()) {
           this->DecodeError(
-              "invalid simd opcode: 0x%x, "
-              "enable with --experimental-wasm-fp16",
-              opcode);
+              "invalid simd opcode: 0x%x, enable with --wasm-fp16", opcode);
           return 0;
         }
         [[fallthrough]];
@@ -5809,9 +5794,7 @@ class WasmFullDecoder : public WasmDecoder<ValidationTag, decoding_mode> {
       case kExprF16x8Qfms: {
         if (!this->enabled_.has_fp16()) {
           this->DecodeError(
-              "invalid simd opcode: 0x%x, "
-              "enable with --experimental-wasm-fp16",
-              opcode);
+              "invalid simd opcode: 0x%x, enable with --wasm-fp16", opcode);
           return 0;
         }
         [[fallthrough]];
@@ -6583,8 +6566,7 @@ class WasmFullDecoder : public WasmDecoder<ValidationTag, decoding_mode> {
         // Temporary non-standard instruction, for performance experiments.
         if (!VALIDATE(v8_flags.wasm_ref_cast_nop)) {
           this->DecodeError(
-              "Invalid opcode 0xfb4c (enable with "
-              "--experimental-wasm-ref-cast-nop)");
+              "Invalid opcode 0xfb4c (enable with --wasm-ref-cast-nop)");
           return 0;
         }
         HeapTypeImmediate imm(this->enabled_, this->detected_, this,
@@ -7267,10 +7249,9 @@ class WasmFullDecoder : public WasmDecoder<ValidationTag, decoding_mode> {
         if (!VALIDATE(this->ok())) return 0;
         if (memory_order.order == AtomicMemoryOrder::kAcqRel) {
           if (!VALIDATE(this->enabled_.has_acquire_release())) {
-            this->DecodeError(
-                this->pc_ + opcode_length,
-                "invalid memory ordering: acquire-release requires "
-                "--experimental-wasm-acquire-release flag");
+            this->DecodeError(this->pc_ + opcode_length,
+                              "invalid memory ordering: acquire-release "
+                              "requires --wasm-acquire-release flag");
             return 0;
           }
         }
@@ -7876,9 +7857,7 @@ class WasmFullDecoder : public WasmDecoder<ValidationTag, decoding_mode> {
       case kExprF32LoadMemF16: {
         if (!this->enabled_.has_fp16()) {
           this->DecodeError(
-              "invalid numeric opcode: 0x%x, "
-              "enable with --experimental-wasm-fp16",
-              opcode);
+              "invalid numeric opcode: 0x%x, enable with --wasm-fp16", opcode);
           return 0;
         }
         return DecodeLoadMem(LoadType::kF32LoadF16, 2);
@@ -7886,9 +7865,7 @@ class WasmFullDecoder : public WasmDecoder<ValidationTag, decoding_mode> {
       case kExprF32StoreMemF16: {
         if (!this->enabled_.has_fp16()) {
           this->DecodeError(
-              "invalid numeric opcode: 0x%x, "
-              "enable with --experimental-wasm-fp16",
-              opcode);
+              "invalid numeric opcode: 0x%x, enable with --wasm-fp16", opcode);
           return 0;
         }
         return DecodeStoreMem(StoreType::kF32StoreF16, 2);

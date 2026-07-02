@@ -4891,7 +4891,7 @@ TEST_F(FunctionBodyDecoderTest, AtomicMemoryOrderAcqRelFeatureGated) {
   const uint8_t order = static_cast<uint8_t>(AtomicMemoryOrder::kAcqRel);
   const char* error_msg =
       "invalid memory ordering: acquire-release requires "
-      "--experimental-wasm-acquire-release flag";
+      "--wasm-acquire-release flag";
   {
     const uint8_t code[] = {
       WASM_LOCAL_GET(0),
@@ -5081,7 +5081,7 @@ TEST_F(FunctionBodyDecoderTest, AtomicRMWMemoryOrderAcqRelFeatureGated) {
   const uint8_t kMemAccess = kAlignment | 0x20;
   const char* error_msg =
       "invalid memory ordering: acquire-release requires "
-      "--experimental-wasm-acquire-release flag";
+      "--wasm-acquire-release flag";
 
   uint8_t order = (static_cast<uint8_t>(AtomicMemoryOrder::kAcqRel) << 4) |
                   static_cast<uint8_t>(AtomicMemoryOrder::kAcqRel);
@@ -6687,23 +6687,19 @@ TEST_F(FunctionBodyDecoderTest, WasmNoWasmFx) {
                 {WASM_I32V(42), WASM_REF_FUNC(func_index),
                  WASM_CONT_NEW(ToByte(cont_index)),
                  WASM_RESUME(ToByte(cont_index), 0), WASM_DROP},
-                kAppendEnd,
-                "Invalid opcode 0xe0 (enable with --experimental-wasm-wasmfx)");
+                kAppendEnd, "Invalid opcode 0xe0 (enable with --wasm-wasmfx)");
 
   ExpectFailure(sigs.v_v(), {WASM_RESUME(ToByte(cont_index), 0), WASM_DROP},
-                kAppendEnd,
-                "Invalid opcode 0xe3 (enable with --experimental-wasm-wasmfx)");
+                kAppendEnd, "Invalid opcode 0xe3 (enable with --wasm-wasmfx)");
 
   ExpectFailure(sigs.v_v(),
                 {WASM_RESUME_THROW_REF(ToByte(cont_index), 0), WASM_DROP},
-                kAppendEnd,
-                "Invalid opcode 0xe5 (enable with --experimental-wasm-wasmfx)");
+                kAppendEnd, "Invalid opcode 0xe5 (enable with --wasm-wasmfx)");
 
   ExpectFailure(
       sigs.v_v(),
       {WASM_SWITCH(ToByte(cont_index), tag_i_i), WASM_DROP, WASM_DROP},
-      kAppendEnd,
-      "Invalid opcode 0xe6 (enable with --experimental-wasm-wasmfx)");
+      kAppendEnd, "Invalid opcode 0xe6 (enable with --wasm-wasmfx)");
 }
 
 /*******************************************************************************
