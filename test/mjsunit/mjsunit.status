@@ -42,6 +42,7 @@
   'sandbox/wasm-jspi': [SKIP],
   'compiler/fast-api-helpers': [SKIP],
   'typedarray-helpers': [SKIP],
+  'huge-typedarrays-helpers': [SKIP],
 
   # All tests in the bug directory are expected to fail.
   'bugs/*': [FAIL],
@@ -235,7 +236,7 @@
 
   # Tests that need to run sequentially (e.g. due to memory consumption).
   'd8/d8-worker-shutdown*': [PASS, HEAVY],
-  'huge-typedarrays': [PASS, HEAVY],
+  'huge-typedarrays-*': [PASS, HEAVY],
   'json2': [PASS, SLOW, HEAVY],
   'regress/regress-678917': [PASS, HEAVY],
   'regress/regress-779407': [PASS, HEAVY],
@@ -1739,7 +1740,7 @@
   'tzoffset-seoul-noi18n': [SKIP],
 
   # Suspect to stress other tests when run in background.
-  'huge-typedarrays': [PASS, HEAVY, NO_VARIANTS],
+  'huge-typedarrays-*': [PASS, HEAVY, NO_VARIANTS],
 
   # TODO(thibaudm): investigate timeout.
   'regress/wasm/regress-392928805': [SKIP],
@@ -2053,7 +2054,7 @@
   'd8/regress-506689382': [SKIP],
 
   # Intentionally non-deterministic using shared arraybuffers between workers.
-  'huge-typedarrays': [SKIP],
+  'huge-typedarrays-*': [SKIP],
   'wasm/atomic-wait-multi-memory': [SKIP],
   'wasm/atomics-stress': [SKIP],
   'wasm/atomics64-stress': [SKIP],
@@ -2188,7 +2189,7 @@
   # computation errors due to unsafe integers (v8:13440)
   'tools/processor': [PASS, ['component_build', SKIP]],
   # triggers OOM condition
-  'huge-typedarrays': [SKIP],
+  'huge-typedarrays-*': [SKIP],
   'es6/typedarray-construct-by-array-like': [SKIP],
   'es6/typedarray-construct-by-array-like-prototype-element-added': [SKIP],
   'regress/regress-324028': [SKIP],
