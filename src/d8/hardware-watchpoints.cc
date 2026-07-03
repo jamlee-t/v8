@@ -253,10 +253,14 @@ void MutateReadValue(struct user_regs_struct& regs,
     // completeness we support mutating them as well.
     // XMM registers are part of the extended state (AVX/YMM). We use the
     // newer PTRACE_GETREGSET API to support both.
-    // The XSAVE area size can vary depending on the processor features.
-    // 8KB is sufficient for most current processors (including Sapphire Rapids
-    // with AMX). We check the required size programmatically via cpuid.
-    alignas(64) uint8_t xsave_buffer[8192];
+    // Newer CPUs like Intel Sapphire Rapids (or Emerald Rapids) with AMX
+    // enabled require more than 8KB for the XSAVE state. AMX matrix tile
+    // registers (TMM0-TMM7) alone add 8KB of state. For such CPUs,
+    // `cpuid leaf 0xD` currently reports a required size of 11008 bytes.
+    // We allocate a 16KB buffer to provide some headroom for future extensions.
+    // If future CPUs require even more space, this buffer size can be
+    // increased accordingly.
+    alignas(64) uint8_t xsave_buffer[16384];
     struct iovec iov;
     iov.iov_base = xsave_buffer;
     iov.iov_len = sizeof(xsave_buffer);
