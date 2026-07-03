@@ -107,11 +107,18 @@ class V8DbgFrameDecorator(FrameDecorator):
         if _VERBOSE:
           traceback.print_exc()
         base_name = ""
-    # TODO(joyee): "Builtin" substring check is a coarse heuristic for
-    # detecting JS-bridge frames whose native name should not suppress the
-    # JS annotation; it can also match unrelated builtins with JS-y names.
-    # Refine this when we have a robust way to identify V8 trampoline frames.
-    if base_name and "Builtin" not in base_name:
+    # On non-pointer-compressed builds with short builtin calls enabled, the
+    # builtins are remapped and no longer sit at the in-binary address range
+    # registered in the symbol table, so gdb cannot symbolize them and renders
+    # them as '???'. Strip the placeholder so an annotated frame does not read
+    # '??? [func @ ...]'.
+    if base_name == "???":
+      base_name = ""
+    # This is a heuristic to early skip frames that clearly not builtin frames.
+    # We only try to symbolicate frames that are either not symbolicated, or have a
+    # name that starts with "Builtins_". The call frame_suffix() below will check
+    # if it's a genuine JS frame.
+    if base_name and not base_name.startswith("Builtins_"):
       return base_name
     frame_pointer = 0
     # Extend this register list as the plugin grows support for more
@@ -130,6 +137,8 @@ class V8DbgFrameDecorator(FrameDecorator):
     if not frame_pointer:
       return base_name
 
+    # frame_suffix() consults debug_helper, which returns a non-empty
+    # annotation only for genuine JS frames, otherwise it returns an empty string.
     bridge = get_bridge(_ptr_size())
     suffix = bridge.frame_suffix(frame_pointer, _read_memory_callback)
     if not suffix:
