@@ -3095,6 +3095,8 @@ filegroup(
             "src/maglev/maglev-range-verification.cc",
             "src/maglev/maglev-regalloc.cc",
             "src/maglev/maglev.cc",
+            "src/maglev/turbolev-escape-analysis.cc",
+            "src/maglev/turbolev-escape-analysis.h",
         ],
         "//conditions:default": [],
     }) + select({
@@ -3912,6 +3914,8 @@ filegroup(
             "src/maglev/maglev-truncation.h",
             "src/maglev/maglev-post-hoc-optimizations-processors.h",
             "src/maglev/maglev-pre-regalloc-codegen-processors.h",
+            "src/maglev/turbolev-escape-analysis.cc",
+            "src/maglev/turbolev-escape-analysis.h",
         ],
     }),
 )

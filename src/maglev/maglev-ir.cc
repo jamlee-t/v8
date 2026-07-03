@@ -180,6 +180,27 @@ void NodeBase::CheckCanOverwriteWith(Opcode new_opcode,
   DCHECK_IMPLIES(new_properties.needs_register_snapshot(),
                  properties().needs_register_snapshot());
   DCHECK_IMPLIES(new_properties.can_throw(), properties().can_throw());
+
+  size_t old_sizeof = -1;
+  switch (opcode()) {
+#define CASE(op)             \
+  case Opcode::k##op:        \
+    old_sizeof = sizeof(op); \
+    break;
+    NODE_BASE_LIST(CASE);
+#undef CASE
+  }
+
+  switch (new_opcode) {
+#define CASE(op)                                        \
+  case Opcode::k##op: {                                 \
+    DCHECK_LE(StaticInputCount<op>(), old_input_count); \
+    DCHECK_LE(sizeof(op), old_sizeof);                  \
+    break;                                              \
+  }
+    NODE_BASE_LIST(CASE)
+#undef CASE
+  }
 }
 
 #endif  // DEBUG

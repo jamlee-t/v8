@@ -1858,6 +1858,19 @@ DEFINE_EXPERIMENTAL_FEATURE(
     "enable Turbolev features that we want to ship in the not-too-far future")
 DEFINE_IMPLICATION(turbolev_future, turbolev)
 
+#if TAGGED_SIZE_8_BYTES
+// The FixedArray length padding is not aligned with the other fields, which is
+// a bit awkward to escape analysis to handle, so we just disable it for now.
+// TODO(dmercadier): support this.
+DEFINE_BOOL_READONLY(turbolev_escape_analysis, false,
+                     "enable escape analysis for Turbolev")
+#else
+DEFINE_EXPERIMENTAL_FEATURE(turbolev_escape_analysis,
+                            "enable escape analysis for Turbolev")
+#endif
+DEFINE_DEVELOPER_FLAG(trace_turbolev_escape_analysis,
+                      "enable tracing for Turbolev's escape analysis phase")
+
 DEFINE_BOOL(
     typed_array_length_loading, true,
     "Enable specializing loading the TypedArray length in Maglev / Turbofan")

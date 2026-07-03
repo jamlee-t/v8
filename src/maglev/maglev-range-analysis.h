@@ -212,7 +212,7 @@ class RangeProcessor {
     ranges_.EnsureMapExistsFor(block);
     return BlockProcessResult::kContinue;
   }
-  void PostProcessBasicBlock(BasicBlock* block) {
+  BlockProcessResult PostProcessBasicBlock(BasicBlock* block) {
     if (JumpLoop* control = block->control_node()->TryCast<JumpLoop>()) {
       if (!ProcessLoopPhisBackedge(control->target(), block)) {
         // We didn't reach a fixpoint for this loop, try this loop header
@@ -234,6 +234,7 @@ class RangeProcessor {
         ProcessNodeBase(block->control_node(), succ);
       });
     }
+    return BlockProcessResult::kContinue;
   }
 
   void PostPhiProcessing() {}

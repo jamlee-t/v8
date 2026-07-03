@@ -686,6 +686,7 @@ constexpr bool CanTriggerGC(T... properties) {
   F(TraceEnter, 0, 1)                                                    \
   F(TraceExit, 1, 1)                                                     \
   F(TurbofanStaticAssert, 1, 1)                                          \
+  F(AssertEscapeAnalysisElided, 1, 1)                                    \
   F(TypedArraySpeciesProtector, 0, 1)                                    \
   F(WaitForBackgroundOptimization, 0, 1)                                 \
   F(WaitUntilBlocked, 2, 1)                                              \

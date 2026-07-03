@@ -4826,6 +4826,7 @@ v8_header_set("v8_internal_headers") {
       "src/maglev/maglev-tracer.h",
       "src/maglev/maglev-truncation.h",
       "src/maglev/maglev.h",
+      "src/maglev/turbolev-escape-analysis.h",
     ]
     if (v8_current_cpu == "arm") {
       sources += [ "src/maglev/arm/maglev-assembler-arm-inl.h" ]
@@ -5624,6 +5625,8 @@ if (!v8_enable_maglev) {
     "src/maglev/maglev-phi-representation-selector.cc",
     "src/maglev/maglev-range-verification.cc",
     "src/maglev/maglev-truncation.cc",
+    "src/maglev/turbolev-escape-analysis.cc",
+    "src/maglev/turbolev-escape-analysis.h",
   ]
 }
 
@@ -6435,6 +6438,7 @@ v8_cluster_source_set("v8_base_without_compiler") {
       "src/maglev/maglev-regalloc.cc",
       "src/maglev/maglev-truncation.cc",
       "src/maglev/maglev.cc",
+      "src/maglev/turbolev-escape-analysis.cc",
     ]
     if (v8_current_cpu == "arm") {
       sources += [

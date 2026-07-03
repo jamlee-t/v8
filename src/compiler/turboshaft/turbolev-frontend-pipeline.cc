@@ -32,6 +32,7 @@
 #include "src/maglev/maglev-range-analysis.h"
 #include "src/maglev/maglev-range-verification.h"
 #include "src/maglev/maglev-truncation.h"
+#include "src/maglev/turbolev-escape-analysis.h"
 
 namespace v8::internal::compiler::turboshaft {
 
@@ -225,6 +226,18 @@ struct PhiUntaggingPhase {
   }
 };
 
+struct EscapeAnalysisPhase {
+  DECL_TURBOLEV_PHASE_CONSTANTS(EscapeAnalysis)
+
+  bool Run(maglev::Graph* graph) {
+    maglev::MaglevCompilationInfo* compilation_info = graph->compilation_info();
+    // TODO(dmercadier): use a proper temporary zone.
+    Zone* temp_zone = graph->zone();
+    maglev::EscapeAnalysis::Run(graph, compilation_info, temp_zone);
+    return true;
+  }
+};
+
 struct RangeAnalysisPhase {
   DECL_TURBOLEV_PHASE_CONSTANTS(RangeAnalysis)
 
@@ -273,12 +286,15 @@ struct PostHocPhase {
   DECL_TURBOLEV_PHASE_CONSTANTS(AnyUseMarking)
 
   bool Run(maglev::Graph* graph) {
-    // Unwrap deopt frames before escape analysis.
-    graph->UnwrapDeoptFrames();
+    if (!v8_flags.turbolev_escape_analysis) {
+      // Unwrap deopt frames before escape analysis.
+      graph->UnwrapDeoptFrames();
+    }
     // Escape analysis.
     maglev::GraphMultiProcessor<maglev::ReturnedValueRepresentationSelector,
                                 maglev::AnyUseMarkingProcessor>
-        processor;
+        processor(
+            maglev::AnyUseMarkingProcessor{!v8_flags.turbolev_escape_analysis});
     processor.ProcessGraph(graph);
     return true;
   }
@@ -290,7 +306,7 @@ struct DeadNodeSweepingPhase {
   bool Run(maglev::Graph* graph) {
     // Dead nodes elimination (which, amongst other things, cleans up the left
     // overs of escape analysis).
-    maglev::GraphMultiProcessor<maglev::DeadNodeSweepingProcessor> processor;
+    maglev::GraphProcessor<maglev::DeadNodeSweepingProcessor> processor;
     processor.ProcessGraph(graph);
     return true;
   }
@@ -356,6 +372,11 @@ std::optional<maglev::Graph*> TurbolevFrontendPipeline::Run() {
     maglev::NodeRanges ranges(graph_);
     Run<RangeAnalysisPhase>(ranges);
     Run<PostOptimizerPhase>(&ranges);
+  }
+  if (v8_flags.turbolev_escape_analysis) {
+    // TODO(dmercadier): it would make sense to run this before Phi untagging so
+    // that Phi untagging can untag the Phis created by Escape Analysis.
+    Run<EscapeAnalysisPhase>();
   }
   Run<PostHocPhase>();
   Run<DeadNodeSweepingPhase>();

@@ -32,7 +32,7 @@ class MaglevGraphOptimizer {
   void PreProcessGraph(Graph* graph) {}
   void PostProcessGraph(Graph* graph) {}
   BlockProcessResult PreProcessBasicBlock(BasicBlock* block);
-  void PostProcessBasicBlock(BasicBlock* block);
+  BlockProcessResult PostProcessBasicBlock(BasicBlock* block);
   void PostPhiProcessing() {}
 
 #define DECLARE_PROCESS(NodeT)                                        \

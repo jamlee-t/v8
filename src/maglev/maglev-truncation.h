@@ -37,7 +37,9 @@ concept IsValueNodeT = std::is_base_of_v<ValueNode, T>;
 class PropagateTruncationProcessor {
  public:
   void PreProcessGraph(Graph* graph) {}
-  void PostProcessBasicBlock(BasicBlock* block) {}
+  BlockProcessResult PostProcessBasicBlock(BasicBlock* block) {
+    return BlockProcessResult::kContinue;
+  }
   BlockProcessResult PreProcessBasicBlock(BasicBlock* block) {
     return BlockProcessResult::kContinue;
   }
@@ -194,7 +196,7 @@ class TruncationProcessor {
   explicit TruncationProcessor(Graph* graph) : reducer_(this, graph) {}
 
   void PreProcessGraph(Graph* graph) {}
-  void PostProcessBasicBlock(BasicBlock* block);
+  BlockProcessResult PostProcessBasicBlock(BasicBlock* block);
   BlockProcessResult PreProcessBasicBlock(BasicBlock* block);
   void PostPhiProcessing() {}
   void PostProcessGraph(Graph* graph) {}

@@ -1274,9 +1274,11 @@ ProcessResult MaglevPhiRepresentationSelector::UpdateNodePhiInput(
   UNREACHABLE();
 }
 
-void MaglevPhiRepresentationSelector::PostProcessBasicBlock(BasicBlock* block) {
+BlockProcessResult MaglevPhiRepresentationSelector::PostProcessBasicBlock(
+    BasicBlock* block) {
   DCHECK_EQ(block, reducer_.current_block());
   reducer_.FlushNodesToBlock();
+  return BlockProcessResult::kContinue;
 }
 
 // When a BranchIfToBooleanTrue has an untagged Int32/Float64 Phi as input, we

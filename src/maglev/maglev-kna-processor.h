@@ -62,6 +62,9 @@ class RecomputeKnownNodeAspectsProcessor {
     }
   }
   void PostProcessGraph(Graph* graph) {}
+  BlockProcessResult PostProcessBasicBlock(BasicBlock* block) {
+    return BlockProcessResult::kContinue;
+  }
   BlockProcessResult PreProcessBasicBlock(BasicBlock* block) {
     bool is_fallthrough = false;
     if (block->is_loop() && block->state()->is_resumable_loop()) {
@@ -121,7 +124,6 @@ class RecomputeKnownNodeAspectsProcessor {
 
     return BlockProcessResult::kContinue;
   }
-  void PostProcessBasicBlock(BasicBlock* block) {}
   void PostPhiProcessing() {}
 
   void ProcessThrowingNode(NodeBase* node, bool mark_handler_reachable = true) {

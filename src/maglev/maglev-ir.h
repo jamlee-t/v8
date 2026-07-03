@@ -221,6 +221,7 @@ class ExceptionHandlerInfo;
   V(TransitionAndStoreArrayElement)     \
   V(TurbofanStaticAssert)               \
   V(AssertPeeled)                       \
+  V(AssertEscapeAnalysisElided)         \
   V(AssumeMap)                          \
   V(AssumeTaggedType)                   \
   V(AssumeInt32Type)                    \
@@ -1487,7 +1488,7 @@ class DeoptFrame {
 
   struct InterpretedFrameData {
     const MaglevCompilationUnit& unit;
-    const CompactInterpreterFrameState* frame_state;
+    CompactInterpreterFrameState* frame_state;
     ValueNode* closure;
     VirtualObject* last_virtual_object;
     const BytecodeOffset bytecode_position;
@@ -1563,7 +1564,7 @@ class DeoptFrame {
 class InterpretedDeoptFrame : public DeoptFrame {
  public:
   InterpretedDeoptFrame(const MaglevCompilationUnit& unit,
-                        const CompactInterpreterFrameState* frame_state,
+                        CompactInterpreterFrameState* frame_state,
                         ValueNode* closure, VirtualObject* last_vo,
                         BytecodeOffset bytecode_position,
                         SourcePosition source_position, DeoptFrame* parent)
@@ -1581,6 +1582,9 @@ class InterpretedDeoptFrame : public DeoptFrame {
   SourcePosition source_position() const { return data().source_position; }
   VirtualObject* last_virtual_object() const {
     return data().last_virtual_object;
+  }
+  void set_last_virtual_object(VirtualObject* last_vobj) {
+    data().last_virtual_object = last_vobj;
   }
 
   int ComputeReturnOffset(interpreter::Register result_location,
@@ -2368,6 +2372,15 @@ class NodeBase : public ZoneObject {
     DCHECK(properties().has_eager_deopt_info());
     new (eager_deopt_info())
         EagerDeoptInfo(zone, deopt_frame, feedback_to_update);
+  }
+
+  void SetLazyDeoptInfo(Zone* zone, DeoptFrame* deopt_frame,
+                        interpreter::Register result_location, int result_size,
+                        compiler::FeedbackSource feedback_to_update =
+                            compiler::FeedbackSource()) {
+    DCHECK(properties().can_lazy_deopt());
+    new (lazy_deopt_info()) LazyDeoptInfo(zone, deopt_frame, result_location,
+                                          result_size, feedback_to_update);
   }
 
   inline void ClearInputs();
@@ -5876,6 +5889,8 @@ class VirtualObject : public FixedInputValueNodeT<0, VirtualObject> {
     allocation_ = allocation;
   }
 
+  const vobj::ObjectLayout* object_layout() const { return object_layout_; }
+
   bool compatible_for_merge(const VirtualObject* other) const {
     if (object_layout_->object_type != other->object_layout_->object_type) {
       return false;
@@ -7803,6 +7818,20 @@ class AssertPeeled : public FixedInputNodeT<0, AssertPeeled> {
 
  private:
   using ExpectPeeledField = NextBitField<bool, 1>;
+};
+
+class AssertEscapeAnalysisElided
+    : public FixedInputNodeT<1, AssertEscapeAnalysisElided> {
+ public:
+  explicit AssertEscapeAnalysisElided(uint64_t bitfield) : Base(bitfield) {}
+
+  static constexpr OpProperties kProperties = OpProperties::Pure();
+
+  DECLARE_INPUTS(Value)
+  DECLARE_INPUT_TYPES(Tagged)
+
+  void SetValueLocationConstraints();
+  void GenerateCode(MaglevAssembler*, const ProcessingState&);
 };
 
 class MajorGCForCompilerTesting

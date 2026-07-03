@@ -40,7 +40,9 @@ class RecomputePhiUseHintsProcessor {
 
   void PreProcessGraph(Graph* graph) {}
   void PostProcessGraph(Graph* graph) {}
-  void PostProcessBasicBlock(BasicBlock* block) {}
+  BlockProcessResult PostProcessBasicBlock(BasicBlock* block) {
+    return BlockProcessResult::kContinue;
+  }
   BlockProcessResult PreProcessBasicBlock(BasicBlock* block) {
     if (!block->has_phi()) return BlockProcessResult::kContinue;
     Phi::List& phis = *block->phis();
@@ -172,7 +174,9 @@ class LoopOptimizationProcessor {
   void PreProcessGraph(Graph* graph) {}
   void PostPhiProcessing() {}
 
-  void PostProcessBasicBlock(BasicBlock* block) {}
+  BlockProcessResult PostProcessBasicBlock(BasicBlock* block) {
+    return BlockProcessResult::kContinue;
+  }
   BlockProcessResult PreProcessBasicBlock(BasicBlock* block) {
     current_block = block;
     if (current_block->is_loop()) {
@@ -316,8 +320,14 @@ constexpr bool CanBeStoreToNonEscapedObject() {
 
 class AnyUseMarkingProcessor {
  public:
+  // TODO(victorgomes): extract the escape analysis to a separate processor.
+  explicit AnyUseMarkingProcessor(bool run_maglev_escape_analysis = true)
+      : run_maglev_escape_analysis_(run_maglev_escape_analysis) {}
+
   void PreProcessGraph(Graph* graph) {}
-  void PostProcessBasicBlock(BasicBlock* block) {}
+  BlockProcessResult PostProcessBasicBlock(BasicBlock* block) {
+    return BlockProcessResult::kContinue;
+  }
   BlockProcessResult PreProcessBasicBlock(BasicBlock* block) {
     return BlockProcessResult::kContinue;
   }
@@ -353,9 +363,11 @@ class AnyUseMarkingProcessor {
   }
 
   void PostProcessGraph(Graph* graph) {
-    RunEscapeAnalysis(graph);
-    DropUseOfValueInStoresToCapturedAllocations();
-    DCHECK(drop_uses_stack_.empty());
+    if (run_maglev_escape_analysis_) {
+      RunEscapeAnalysis(graph);
+      DropUseOfValueInStoresToCapturedAllocations();
+      DCHECK(drop_uses_stack_.empty());
+    }
   }
 
  private:
@@ -457,6 +469,8 @@ class AnyUseMarkingProcessor {
     node->mark_unused_inputs_visited();
     DrainDropUsesStack();
   }
+
+  bool run_maglev_escape_analysis_;
 };
 
 class DeadNodeSweepingProcessor {
@@ -467,7 +481,9 @@ class DeadNodeSweepingProcessor {
     }
   }
   void PostProcessGraph(Graph* graph) {}
-  void PostProcessBasicBlock(BasicBlock* block) {}
+  BlockProcessResult PostProcessBasicBlock(BasicBlock* block) {
+    return BlockProcessResult::kContinue;
+  }
   BlockProcessResult PreProcessBasicBlock(BasicBlock* block) {
     return BlockProcessResult::kContinue;
   }
@@ -549,7 +565,9 @@ class ReachableExceptionHandlerTracker {
 
   void PreProcessGraph(Graph* graph) {}
   void PostProcessGraph(Graph* graph) {}
-  void PostProcessBasicBlock(BasicBlock* block) {}
+  BlockProcessResult PostProcessBasicBlock(BasicBlock* block) {
+    return BlockProcessResult::kContinue;
+  }
   void PostPhiProcessing() {}
 
   void MarkReachable(BasicBlock* block) {
@@ -610,7 +628,9 @@ class BoundsCheckEliminationProcessor {
   void PreProcessGraph(Graph* graph) {}
   void PostProcessGraph(Graph* graph) {}
   void PostPhiProcessing() {}
-  void PostProcessBasicBlock(BasicBlock* block) {}
+  BlockProcessResult PostProcessBasicBlock(BasicBlock* block) {
+    return BlockProcessResult::kContinue;
+  }
 
   BlockProcessResult PreProcessBasicBlock(BasicBlock* block) {
     current_block_ = block;

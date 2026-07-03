@@ -318,8 +318,10 @@ BlockProcessResult MaglevGraphOptimizer::PreProcessBasicBlock(
   return BlockProcessResult::kContinue;
 }
 
-void MaglevGraphOptimizer::PostProcessBasicBlock(BasicBlock* block) {
+BlockProcessResult MaglevGraphOptimizer::PostProcessBasicBlock(
+    BasicBlock* block) {
   reducer_.FlushNodesToBlock();
+  return BlockProcessResult::kContinue;
 }
 
 void MaglevGraphOptimizer::PreProcessNode(Node* node,
@@ -1016,6 +1018,11 @@ ProcessResult MaglevGraphOptimizer::VisitTurbofanStaticAssert(
 
 ProcessResult MaglevGraphOptimizer::VisitAssertPeeled(AssertPeeled*,
                                                       const ProcessingState&) {
+  return ProcessResult::kContinue;
+}
+
+ProcessResult MaglevGraphOptimizer::VisitAssertEscapeAnalysisElided(
+    AssertEscapeAnalysisElided*, const ProcessingState&) {
   return ProcessResult::kContinue;
 }
 

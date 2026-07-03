@@ -281,6 +281,7 @@ namespace v8::internal {
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, TurbolevTruncation)                \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, TurbolevPhiUntagging)              \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, TurbolevLoopPeeling)               \
+  ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, TurbolevEscapeAnalysis)            \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, TurbolevRangeAnalysis)             \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, TurbolevPostOptimizer)             \
   ADD_THREAD_SPECIFIC_COUNTER(V, Optimize, TurbolevAnyUseMarking)             \

@@ -2405,11 +2405,15 @@
   'regress-398879933': [SKIP],
   'regress-399698534': [SKIP],
   'regress-414738826': [SKIP],
+
   # Type assertions block the propagation of word64 truncation useinfo,
   # leading to differences in representation selection.
   'compiler/bigint-multiply-truncate': [SKIP],
   'compiler/bigint-shift-left': [SKIP],
-  'wasm/bigint-opt': [SKIP]
+  'wasm/bigint-opt': [SKIP],
+
+  # Type assertions block Turbolev escape analysis.
+  'turbolev/escape-analysis-*': [SKIP],
 }],  # variant == assert_types
 
 ##############################################################################
@@ -2831,6 +2835,13 @@
   # Mutable Heap Int32 is not enabled in builds with 32-bit smis.
   'mutable-int32-slot': [SKIP],
   'turbolev/phi-untagging-call-launder-1': [SKIP],
+}],
+
+##############################################################################
+['(arch not in (ia32, arm, riscv32)) and (not pointer_compression)', {
+  # Turbolev escape analysis is currently only implement for 32-bit builds or
+  # 64-bit builds with pointer compression enabled.
+  'turbolev/escape-analysis-*': [SKIP],
 }],
 
 ##############################################################################

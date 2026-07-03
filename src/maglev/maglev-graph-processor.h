@@ -50,9 +50,12 @@ template <typename NodeProcessor>
 class GraphBackwardProcessor;
 
 enum class BlockProcessResult {
-  kContinue,  // Process exited normally.
-  kSkip,      // Skip processing this blockand and do not call the following
-              // processors.
+  kContinue,     // Process exited normally.
+  kSkip,         // Skip processing this blockand and do not call the following
+                 // processors. Only valid for PreProcessBasicBlock.
+  kRevisitLoop,  // Revisit the current loop, assuming that the current block
+                 // ends with a JumpLoop (no MultiProcessor support, and only
+                 // valid for PostProcessBasicBlock)
 };
 
 enum class ProcessResult {
@@ -87,10 +90,11 @@ class ProcessingState {
  public:
   static constexpr int kNoNodeIndex = -1;
 
-  explicit ProcessingState(BlockConstIterator block_end,
-                           BlockConstIterator block_it,
+  explicit ProcessingState(Graph* graph, int current_block_index,
                            int node_index = kNoNodeIndex)
-      : block_end_(block_end), block_it_(block_it), node_index_(node_index) {
+      : graph_(graph),
+        current_block_index_(current_block_index),
+        node_index_(node_index) {
     DCHECK_IMPLIES(node_index != kNoNodeIndex, node_index >= 0);
   }
 
@@ -99,14 +103,17 @@ class ProcessingState {
   ProcessingState& operator=(const ProcessingState&) = delete;
 
   BasicBlock* block() const {
-    if (block_it_ == block_end_) return nullptr;
-    return *block_it_;
+    if (current_block_index_ == graph_->num_blocks()) {
+      return nullptr;
+    }
+    return graph_->blocks()[current_block_index_];
   }
+
   BasicBlock* next_block() const {
-    DCHECK_NE(block_it_, block_end_);
-    BlockConstIterator next_block_it = block_it_ + 1;
-    if (next_block_it == block_end_) return nullptr;
-    return *next_block_it;
+    if (current_block_index_ + 1 >= static_cast<int>(graph_->blocks().size())) {
+      return nullptr;
+    }
+    return graph_->blocks()[current_block_index_ + 1];
   }
 
   int node_index() const {
@@ -115,8 +122,8 @@ class ProcessingState {
   }
 
  private:
-  BlockConstIterator block_end_;
-  BlockConstIterator block_it_;
+  Graph* graph_;
+  int current_block_index_;
   const int node_index_;  // Index inside the basic block.
 };
 
@@ -129,9 +136,10 @@ class GraphProcessor {
 
   void ProcessGraph(Graph* graph) {
     graph_ = graph;
-    // Initializing {block_it_} to `graph->end()` so that the ProcessingState
-    // can return nullptr as the block of the constant nodes.
-    block_it_ = graph->end();
+    // Initializing {current_block_index_} to `graph->num_blocks()` so that
+    // the ProcessingState can return nullptr as the block of the constant
+    // nodes.
+    current_block_index_ = graph->num_blocks();
     node_processor_.PreProcessGraph(graph);
 
     auto process_constants = [&](auto& map) {
@@ -169,10 +177,11 @@ class GraphProcessor {
     process_constants(graph->trusted_constants());
     // LINT.ThenChange()
 
-    for (block_it_ = graph->begin(); block_it_ != graph->end(); ++block_it_) {
-      bool process_control_block = true;
-      BasicBlock* block = *block_it_;
+    for (current_block_index_ = 0; current_block_index_ < graph->num_blocks();
+         current_block_index_++) {
+      BasicBlock* block = graph->blocks()[current_block_index_];
       if (V8_UNLIKELY(block->is_dead())) continue;
+      bool process_control_block = true;
 
       BlockProcessResult preprocess_result =
           node_processor_.PreProcessBasicBlock(block);
@@ -181,6 +190,8 @@ class GraphProcessor {
           break;
         case BlockProcessResult::kSkip:
           continue;
+        case BlockProcessResult::kRevisitLoop:
+          UNREACHABLE();
       }
 
       if (block->has_phi()) {
@@ -295,7 +306,19 @@ class GraphProcessor {
         }
       }
     skip_block:
-      node_processor_.PostProcessBasicBlock(block);
+      BlockProcessResult post_action =
+          node_processor_.PostProcessBasicBlock(block);
+      switch (post_action) {
+        case BlockProcessResult::kContinue:
+          break;
+        case BlockProcessResult::kRevisitLoop: {
+          JumpLoop* jump = block->control_node()->Cast<JumpLoop>();
+          current_block_index_ = graph->block_offset(jump->target()) - 1;
+          break;
+        }
+        case BlockProcessResult::kSkip:
+          UNREACHABLE();
+      }
       continue;
     }
 
@@ -308,7 +331,7 @@ class GraphProcessor {
  private:
   ProcessingState GetCurrentState(
       size_t node_index = ProcessingState::kNoNodeIndex) {
-    return ProcessingState(graph_->end(), block_it_,
+    return ProcessingState(graph_, current_block_index_,
                            static_cast<int>(node_index));
   }
 
@@ -409,9 +432,7 @@ class GraphProcessor {
           });
     }
 
-    size_t current_idx = block_it_ - graph_->begin();
-    graph_->AddBlocksAt(splice.all_blocks, current_idx);
-    block_it_ = graph_->begin() + current_idx;
+    graph_->AddBlocksAt(splice.all_blocks, current_block_index_);
     node_it_ = block->nodes().end();
 
     if (truncate) {
@@ -421,7 +442,7 @@ class GraphProcessor {
 
   NodeProcessor node_processor_;
   Graph* graph_;
-  BlockConstIterator block_it_;
+  int current_block_index_;
   NodeIterator node_it_;
 };
 
@@ -556,7 +577,9 @@ class NodeMultiProcessor<> {
   BlockProcessResult PreProcessBasicBlock(BasicBlock* block) {
     return BlockProcessResult::kContinue;
   }
-  void PostProcessBasicBlock(BasicBlock* block) {}
+  BlockProcessResult PostProcessBasicBlock(BasicBlock* block) {
+    return BlockProcessResult::kContinue;
+  }
   V8_INLINE ProcessResult Process(NodeBase* node,
                                   const ProcessingState& state) {
     return ProcessResult::kContinue;
@@ -606,9 +629,19 @@ class NodeMultiProcessor<Processor, Processors...>
     Base::PostProcessGraph(graph);
     processor_.PostProcessGraph(graph);
   }
-  void PostProcessBasicBlock(BasicBlock* block) {
-    Base::PostProcessBasicBlock(block);
-    processor_.PostProcessBasicBlock(block);
+  BlockProcessResult PostProcessBasicBlock(BasicBlock* block) {
+    BlockProcessResult post_action = Base::PostProcessBasicBlock(block);
+    switch (post_action) {
+      [[likely]] case BlockProcessResult::kContinue:
+        return processor_.PostProcessBasicBlock(block);
+      case BlockProcessResult::kRevisitLoop:
+        // TODO(dmercadier): How to combine this with multiple processors
+        // depends on the needs of the actual processors. Implement once needed.
+        UNREACHABLE();
+      case BlockProcessResult::kSkip:
+        // The block has already been processed, there is nothing to skip.
+        UNREACHABLE();
+    }
   }
   BlockProcessResult PreProcessBasicBlock(BasicBlock* block) {
     BlockProcessResult res = processor_.PreProcessBasicBlock(block);
@@ -617,6 +650,8 @@ class NodeMultiProcessor<Processor, Processors...>
         return Base::PreProcessBasicBlock(block);
       case BlockProcessResult::kSkip:
         return res;
+      case BlockProcessResult::kRevisitLoop:
+        UNREACHABLE();
     }
     UNREACHABLE();
   }

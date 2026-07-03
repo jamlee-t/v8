@@ -615,7 +615,10 @@ class GraphBuildingNodeProcessor {
     return is_main_switch_block;
   }
 
-  void PostProcessBasicBlock(maglev::BasicBlock* maglev_block) {}
+  maglev::BlockProcessResult PostProcessBasicBlock(
+      maglev::BasicBlock* maglev_block) {
+    return maglev::BlockProcessResult::kContinue;
+  }
   maglev::BlockProcessResult PreProcessBasicBlock(
       maglev::BasicBlock* maglev_block) {
     TRACE("\nMaglev block: b" << maglev_block->id());
@@ -3018,6 +3021,7 @@ class GraphBuildingNodeProcessor {
         size += alloc->size();
       }
     }
+    DCHECK_NE(size, 0);
     node->set_size(size);
     SetMap(node, __ FinishInitialization(__ Allocate<HeapObject>(
                      size, node->allocation_type(), kTaggedAligned)));
@@ -5689,6 +5693,12 @@ class GraphBuildingNodeProcessor {
     return maglev::ProcessResult::kContinue;
   }
 
+  maglev::ProcessResult Process(maglev::AssertEscapeAnalysisElided* node,
+                                const maglev::ProcessingState&) {
+    DCHECK(!v8_flags.turbolev_escape_analysis);
+    return maglev::ProcessResult::kContinue;
+  }
+
   maglev::ProcessResult Process(maglev::MajorGCForCompilerTesting* node,
                                 const maglev::ProcessingState&) {
     __ MajorGCForCompilerTesting();
@@ -6151,8 +6161,9 @@ class GraphBuildingNodeProcessor {
       OptionalV<FrameStateType> parent_frame =
           BuildParentFrameState<FrameStateType>(*frame.parent(),
                                                 virtual_objects);
-      if (!parent_frame.has_value())
+      if (!parent_frame.has_value()) {
         return OptionalV<FrameStateType>::Nullopt();
+      }
       builder.AddParentFrameState(parent_frame.value());
     }
 
@@ -6219,6 +6230,9 @@ class GraphBuildingNodeProcessor {
                      const maglev::VirtualObjectList& virtual_objects,
                      const maglev::ValueNode* node) {
     node = node->UnwrapIdentities();
+    // Maglev FrameStates should contain InlinedAllocations instead of
+    // VirtualObjects.
+    DCHECK(!node->Is<maglev::VirtualObject>());
     if (const maglev::InlinedAllocation* alloc =
             node->TryCast<maglev::InlinedAllocation>()) {
       DCHECK(alloc->HasBeenAnalysed());
@@ -6366,7 +6380,9 @@ class GraphBuildingNodeProcessor {
         builder.AddRestLength();
         break;
       case maglev::Opcode::kVirtualObject:
-        UNREACHABLE();
+        AddVirtualObjectInput(builder, virtual_objects,
+                              value->Cast<maglev::VirtualObject>());
+        break;
       default:
         AddDeoptInput(builder, virtual_objects, value);
         break;
@@ -6760,7 +6776,7 @@ class GraphBuildingNodeProcessor {
     DCHECK(loop->is_loop());
     if (!loop->has_phi()) return;
     for (maglev::Phi* maglev_phi : *loop->phis()) {
-      // Note that we've already emited the backedge Goto, which means that
+      // Note that we've already emitted the backedge Goto, which means that
       // we're currently not in a block, which means that we need to pass
       // can_be_invalid=false to `Map`, otherwise it will think that we're
       // currently emitting unreachable operations and return

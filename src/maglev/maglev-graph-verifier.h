@@ -43,7 +43,9 @@ class MaglevGraphVerifier {
     }
   }
   void PostProcessGraph(Graph* graph) {}
-  void PostProcessBasicBlock(BasicBlock* block) {}
+  BlockProcessResult PostProcessBasicBlock(BasicBlock* block) {
+    return BlockProcessResult::kContinue;
+  }
   BlockProcessResult PreProcessBasicBlock(BasicBlock* block) {
     // Check Ids are unique.
     CHECK(!seen_[block->id()]);

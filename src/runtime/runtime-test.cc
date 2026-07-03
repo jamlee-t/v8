@@ -2092,6 +2092,14 @@ RUNTIME_FUNCTION(Runtime_AssertNotPeeled) {
   return ReadOnlyRoots(isolate).undefined_value();
 }
 
+RUNTIME_FUNCTION(Runtime_AssertEscapeAnalysisElided) {
+  SealHandleScope shs(isolate);
+  // Always removed during escape analysis in Turbolev, so we never get here in
+  // compiled code (if it was elided). If it wasn't elided, we crash during
+  // compile. In interpreter, we just return undefined.
+  return ReadOnlyRoots(isolate).undefined_value();
+}
+
 RUNTIME_FUNCTION(Runtime_IsBeingInterpreted) {
   SealHandleScope shs(isolate);
   // Always lowered to false in Turbofan, so we never get here in compiled code.

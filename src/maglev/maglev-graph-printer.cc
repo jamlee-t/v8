@@ -548,6 +548,7 @@ void PrintVirtualObject(std::ostream& os, VirtualObject* vobj) {
         switch (desc.type) {
           case maglev::vobj::FieldType::kTagged:
           case maglev::vobj::FieldType::kTrustedPointer:
+          case maglev::vobj::FieldType::kInt32:
           case maglev::vobj::FieldType::kFloat64: {
             if (!is_first) os << ",";
             is_first = false;
@@ -558,7 +559,6 @@ void PrintVirtualObject(std::ostream& os, VirtualObject* vobj) {
             }
             break;
           }
-          case maglev::vobj::FieldType::kInt32:
           case maglev::vobj::FieldType::kNone:
             UNREACHABLE();
         }
