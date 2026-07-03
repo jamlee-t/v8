@@ -1269,11 +1269,7 @@ void RegExpMacroAssemblerIA32::CheckPosition(int cp_offset,
 }
 
 void RegExpMacroAssemblerIA32::BranchOrBacktrack(Label* to) {
-  if (to == nullptr) {
-    Backtrack();
-    return;
-  }
-  __ jmp(to);
+  __ jmp(to ? to : &backtrack_label_);
 }
 
 void RegExpMacroAssemblerIA32::BranchOrBacktrack(Condition condition,

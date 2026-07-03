@@ -2072,11 +2072,7 @@ void RegExpMacroAssemblerX64::CheckPosition(int cp_offset,
 }
 
 void RegExpMacroAssemblerX64::BranchOrBacktrack(Label* to) {
-  if (to == nullptr) {
-    Backtrack();
-    return;
-  }
-  __ jmp(to);
+  __ jmp(to ? to : &backtrack_label_);
 }
 
 void RegExpMacroAssemblerX64::BranchOrBacktrack(Condition condition,
