@@ -262,6 +262,10 @@ declare_args() {
   # Enables various testing features.
   v8_enable_test_features = ""
 
+  # Enables testing-only synchronization points via the
+  # `SYNCHRONIZATION_POINT_TEST_ONLY` macro.
+  v8_enable_test_only_sync_points = ""
+
   # Enable short builtins call instruction sequences by un-embedding builtins.
   # Sets -DV8_SHORT_BUILTIN_CALLS
   v8_enable_short_builtin_calls = ""
@@ -564,6 +568,9 @@ if (v8_enable_regexp_diagnostics == "") {
 if (v8_enable_test_features == "") {
   v8_enable_test_features =
       v8_enable_verification_features || v8_dcheck_always_on
+}
+if (v8_enable_test_only_sync_points == "") {
+  v8_enable_test_only_sync_points = v8_enable_test_features
 }
 if (v8_enable_v8_checks == "") {
   v8_enable_v8_checks = v8_enable_verification_features
@@ -1357,6 +1364,9 @@ config("features") {
     # Expose the runtime flag --hashes-collide for fuzzing purposes (to create
     # hash collisions all the time).
     defines += [ "V8_HASHES_COLLIDE" ]
+  }
+  if (v8_enable_test_only_sync_points) {
+    defines += [ "V8_ENABLE_TEST_ONLY_SYNC_POINTS" ]
   }
   if (v8_enable_i18n_support) {
     defines += [ "V8_INTL_SUPPORT" ]
@@ -3166,6 +3176,7 @@ action("v8_dump_build_config") {
     "memory_corruption_api=$v8_enable_memory_corruption_api",
     "lower_limits_mode=$v8_lower_limits_mode",
     "cppgc_microtask_queue=$v8_cppgc_microtask_queue",
+    "test_only_sync_points=$v8_enable_test_only_sync_points",
 
     # Please add new switches also in `build_config_content` in `bazel/defs.bzl`
     # so that the switches also work for tests triggered by bazel.

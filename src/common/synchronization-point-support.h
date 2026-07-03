@@ -86,6 +86,16 @@ class V8_EXPORT_PRIVATE SynchronizationPointSupport {
   v8::internal::SynchronizationPointSupport::Get()->BlockIfRequested( \
       sync_point_name)
 
+// Similar to `SYNCHRONIZATION_POINT`, but is intended for being used on hot
+// paths. Unlike the former, it compiles to nop unless the
+// `v8_enable_test_only_sync_points` GN flag is true.
+#ifdef V8_ENABLE_TEST_ONLY_SYNC_POINTS
+#define SYNCHRONIZATION_POINT_TEST_ONLY(sync_point_name) \
+  SYNCHRONIZATION_POINT(sync_point_name)
+#else
+#define SYNCHRONIZATION_POINT_TEST_ONLY(sync_point_name) ((void)0)
+#endif
+
 }  // namespace internal
 }  // namespace v8
 

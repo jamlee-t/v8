@@ -4,6 +4,7 @@
 
 #include "src/compiler/common-utils.h"
 
+#include "src/common/synchronization-point-support.h"
 #include "src/compiler/js-heap-broker.h"
 #include "src/heap/local-heap.h"
 #include "src/objects/string-inl.h"
@@ -19,6 +20,7 @@ namespace v8::internal::compiler::utils {
 MaybeHandle<String> ConcatenateStrings(Handle<String> left,
                                        Handle<String> right,
                                        JSHeapBroker* broker) {
+  SYNCHRONIZATION_POINT("ConcurrentConcatenateStrings");
   if (left->length() == 0) return right;
   if (right->length() == 0) return left;
 
