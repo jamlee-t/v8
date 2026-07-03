@@ -4244,6 +4244,7 @@ void BytecodeGraphBuilder::SwitchToMergeEnvironment(int current_offset) {
 void BytecodeGraphBuilder::BuildLoopHeaderEnvironment(int current_offset) {
   if (bytecode_analysis().IsLoopHeader(current_offset)) {
     mark_as_needing_eager_checkpoint(true);
+    PrepareEagerCheckpoint();
     const LoopInfo& loop_info =
         bytecode_analysis().GetLoopInfoFor(current_offset);
     const BytecodeLivenessState* liveness =
@@ -4272,10 +4273,16 @@ void BytecodeGraphBuilder::BuildLoopHeaderEnvironment(int current_offset) {
       environment()->BindGeneratorState(
           jsgraph()->SmiConstant(JSGeneratorObject::kGeneratorExecuting));
     }
+    mark_as_needing_eager_checkpoint(true);
   }
 }
 
 void BytecodeGraphBuilder::MergeIntoSuccessorEnvironment(int target_offset) {
+  if (bytecode_analysis().IsLoopHeader(target_offset) &&
+      bytecode_iterator().current_offset() > target_offset) {
+    mark_as_needing_eager_checkpoint(true);
+    PrepareEagerCheckpoint();
+  }
   BuildLoopExitsForBranch(target_offset);
   Environment*& merge_environment = merge_environments_[target_offset];
 

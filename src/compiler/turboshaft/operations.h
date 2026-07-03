@@ -292,7 +292,8 @@ using Variable = SnapshotTable<OpIndex, VariableData>::Key;
   V(DebugPrint)                                 \
   V(CheckTurboshaftTypeOf)                      \
   V(CheckMaglevType)                            \
-  V(TypeHint)
+  V(TypeHint)                                   \
+  V(PrepareForLoop)
 
 // These Operations are the lowest level handled by Turboshaft, and are
 // supported by the InstructionSelector.
@@ -4163,6 +4164,24 @@ struct DeoptimizeIfOp : FixedArityOperationT<2, DeoptimizeIfOp> {
   }
   auto options() const { return std::tuple{negated, parameters}; }
   void PrintOptions(std::ostream& os) const;
+};
+struct PrepareForLoopOp : FixedArityOperationT<1, PrepareForLoopOp> {
+  static constexpr OpEffects effects = OpEffects().RequiredWhenUnused();
+  base::Vector<const RegisterRepresentation> outputs_rep() const { return {}; }
+
+  base::Vector<const MaybeRegisterRepresentation> inputs_rep(
+      ZoneVector<MaybeRegisterRepresentation>& storage) const {
+    return {};
+  }
+
+  V<EagerFrameState> frame_state() const { return input<EagerFrameState>(0); }
+
+  PrepareForLoopOp(V<EagerFrameState> frame_state) : Base(frame_state) {}
+
+  void Validate(const Graph& graph) const {
+    DCHECK(Get(graph, frame_state()).Is<FrameStateOp>());
+  }
+  auto options() const { return std::tuple{}; }
 };
 
 #if V8_ENABLE_WEBASSEMBLY

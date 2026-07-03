@@ -340,6 +340,11 @@ std::optional<BailoutReason> GraphBuilder::Run() {
       case BasicBlock::kGoto: {
         DCHECK_EQ(block->SuccessorCount(), 1);
         Block* destination = Map(block->SuccessorAt(0));
+        if (destination->IsLoop() &&
+            destination->index() > target_block->index() &&
+            dominating_frame_state.valid()) {
+          __ PrepareForLoop(dominating_frame_state);
+        }
         __ Goto(destination);
         if (destination->IsBound()) {
           DCHECK(destination->IsLoop());
