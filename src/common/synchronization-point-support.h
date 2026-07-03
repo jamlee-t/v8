@@ -12,6 +12,7 @@
 #include <string>
 #include <string_view>
 
+#include "include/v8config.h"
 #include "src/base/macros.h"
 #include "src/base/platform/condition-variable.h"
 #include "src/base/platform/mutex.h"
@@ -71,7 +72,8 @@ class V8_EXPORT_PRIVATE SynchronizationPointSupport {
     base::TimeDelta block_timeout;
   };
 
-  void BlockIfRequestedSlow(std::string_view synchronization_point);
+  V8_NOINLINE V8_PRESERVE_MOST void BlockIfRequestedSlow(
+      std::string_view synchronization_point);
 
   static SynchronizationPointSupport* instance_;
 
