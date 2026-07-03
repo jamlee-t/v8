@@ -3156,11 +3156,13 @@ class StackLimitCheck {
   // Use this to check for stack-overflow when entering runtime from JS code.
   bool JsHasOverflowed(uintptr_t gap = 0) const;
 
+#if V8_ENABLE_WEBASSEMBLY
   // Use this to check for stack-overflow when entering runtime from Wasm code.
   // If it is called from the central stack, while a switch was performed,
   // it checks logical stack limit of a secondary stack stored in the isolate,
   // instead checking actual one.
   bool WasmHasOverflowed(uintptr_t gap = 0) const;
+#endif
 
   // Use this to check for interrupt request in C++ code.
   V8_INLINE bool InterruptRequested() {

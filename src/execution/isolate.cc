@@ -2926,10 +2926,6 @@ Tagged<Object> Isolate::UnwindAndFindHandler() {
                                                iter.wasm_stack()->base());
 #endif
     }
-    // Regardless of the stack that the handler belongs to, these fields should
-    // be cleared.
-    thread_local_top()->secondary_stack_limit_ = 0;
-    thread_local_top()->secondary_stack_sp_ = 0;
 #endif
 
     // Return and clear exception. The contract is that:
@@ -8182,11 +8178,20 @@ bool StackLimitCheck::JsHasOverflowed(uintptr_t gap) const {
   return GetCurrentStackPosition() - gap < stack_guard->real_climit();
 }
 
+#if V8_ENABLE_WEBASSEMBLY
 bool StackLimitCheck::WasmHasOverflowed(uintptr_t gap) const {
   StackGuard* stack_guard = isolate_->stack_guard();
-  auto sp = isolate_->thread_local_top()->secondary_stack_sp_;
-  auto limit = isolate_->thread_local_top()->secondary_stack_limit_;
-  if (sp == 0) {
+  wasm::StackMemory* active_stack = isolate_->isolate_data()->active_stack();
+  uintptr_t sp = 0;
+  uintptr_t limit = 0;
+  auto fp = isolate_->thread_local_top()->c_entry_fp_;
+  if (fp != 0 && active_stack->Contains(fp)) {
+    // If wasm was running on a secondary stack, we had to switch to the central
+    // stack to perform this check, and the current SP is not relevant in this
+    // case. Check whether the wasm SP overflowed the wasm stack limit instead.
+    sp = fp + ExitFrameConstants::kCallerSPDisplacement;
+    limit = reinterpret_cast<uintptr_t>(active_stack->jslimit());
+  } else {
 #ifdef USE_SIMULATOR
     // The simulator uses a separate JS stack.
     // Use it if code is executed on the central stack.
@@ -8199,6 +8204,7 @@ bool StackLimitCheck::WasmHasOverflowed(uintptr_t gap) const {
   }
   return sp - gap < limit;
 }
+#endif
 
 SaveContext::SaveContext(Isolate* isolate) : isolate_(isolate) {
   if (!isolate->context().is_null()) {

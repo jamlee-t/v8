@@ -96,9 +96,9 @@ class StackMemory {
   Tagged<WasmStackObject> stack_obj() { return stack_obj_; }
   bool IsValidContinuation(Tagged<WasmContinuationObject> cont);
   JumpBuffer* jmpbuf() { return &jmpbuf_; }
-  bool Contains(Address addr) {
+  bool Contains(Address addr) const {
     if (!owned_) {
-      return reinterpret_cast<Address>(jslimit()) <= addr && addr < base();
+      return reinterpret_cast<Address>(limit_) <= addr && addr < base();
     }
     for (auto segment = first_segment_; segment;
          segment = segment->next_segment_) {

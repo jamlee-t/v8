@@ -1368,8 +1368,6 @@ intptr_t switch_to_the_central_stack(Isolate* isolate, uintptr_t current_sp) {
   ThreadLocalTop* thread_local_top = isolate->thread_local_top();
   StackGuard* stack_guard = isolate->stack_guard();
 
-  auto secondary_stack_limit = stack_guard->real_jslimit();
-
   stack_guard->SetStackLimitForStackSwitching(
       thread_local_top->central_stack_limit_);
 #if V8_OS_WIN
@@ -1377,8 +1375,6 @@ intptr_t switch_to_the_central_stack(Isolate* isolate, uintptr_t current_sp) {
                                            base::Stack::GetStackStart());
 #endif
 
-  thread_local_top->secondary_stack_limit_ = secondary_stack_limit;
-  thread_local_top->secondary_stack_sp_ = current_sp;
   thread_local_top->is_on_central_stack_flag_ = true;
 
   auto counter = isolate->wasm_switch_to_the_central_stack_counter();
@@ -1390,12 +1386,11 @@ intptr_t switch_to_the_central_stack(Isolate* isolate, uintptr_t current_sp) {
 
 void switch_from_the_central_stack(Isolate* isolate) {
   ThreadLocalTop* thread_local_top = isolate->thread_local_top();
-  CHECK_NE(thread_local_top->secondary_stack_sp_, 0);
-  CHECK_NE(thread_local_top->secondary_stack_limit_, 0);
+  wasm::StackMemory* active_stack = isolate->isolate_data()->active_stack();
+  CHECK_NE(thread_local_top->c_entry_fp_, 0);
 
-  auto secondary_stack_limit = thread_local_top->secondary_stack_limit_;
-  thread_local_top->secondary_stack_limit_ = 0;
-  thread_local_top->secondary_stack_sp_ = 0;
+  auto secondary_stack_limit =
+      reinterpret_cast<uintptr_t>(active_stack->jslimit());
   thread_local_top->is_on_central_stack_flag_ = false;
 
   StackGuard* stack_guard = isolate->stack_guard();
@@ -1404,7 +1399,6 @@ void switch_from_the_central_stack(Isolate* isolate) {
   // The Windows stack limit may have changed after running on the central
   // stack, record it.
   central_stack_limit = base::Stack::GetCommittedStackLimit();
-  wasm::StackMemory* active_stack = isolate->isolate_data()->active_stack();
   base::Stack::SetCurrentThreadStackBounds(active_stack->limit(),
                                            active_stack->base());
 #endif
