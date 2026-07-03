@@ -843,7 +843,7 @@ class MaglevReducer {
   VirtualObject* CreateContext(compiler::MapRef map, int length,
                                compiler::ScopeInfoRef scope_info,
                                ValueNode* previous_context,
-                               std::optional<ValueNode*> extension = {});
+                               ValueNode* extension = nullptr);
   VirtualObject* CreateArgumentsObject(compiler::MapRef map, ValueNode* length,
                                        ValueNode* elements,
                                        std::optional<ValueNode*> callee = {});
@@ -1352,6 +1352,8 @@ class MaglevReducer {
   }
 
   void RecordType(ValueNode* node, NodeType type, NodeType* old = nullptr) {
+    DCHECK(!node->Is<VirtualObject>());
+
     // For Turbolev, we insert an AssumeType node when recording a previously
     // not-known type so that the GraphOptimizer (and in particular the KNA
     // processor) can also be aware of this type when non-eagerly reoptimizing
@@ -1359,12 +1361,6 @@ class MaglevReducer {
     if (const bool already_known = EnsureType(node, type, old);
         already_known || !is_turbolev()) {
       return;
-    }
-    if (const auto* virtual_object = node->TryCast<VirtualObject>()) {
-      if (!virtual_object->allocation()) {
-        return;
-      }
-      node = virtual_object->allocation();
     }
 
     switch (node->value_representation()) {

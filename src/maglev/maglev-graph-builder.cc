@@ -13977,13 +13977,18 @@ ReduceResult MaglevGraphBuilder::VisitCreateClosure() {
 }
 
 MaybeReduceResult MaglevGraphBuilder::TryBuildInlinedAllocatedContext(
-    compiler::MapRef map, compiler::ScopeInfoRef scope, int context_length) {
+    compiler::MapRef map, int context_length, compiler::ScopeInfoRef scope,
+    ValueNode* extension) {
   const int kContextAllocationLimit = 16;
   if (context_length > kContextAllocationLimit) return {};
   DCHECK_GE(context_length, Context::MIN_CONTEXT_SLOTS);
-  auto context =
-      reducer_.CreateContext(map, context_length, scope, GetContext());
-  return reducer_.BuildInlinedAllocation(context, AllocationType::kYoung);
+  VirtualObject* context = reducer_.CreateContext(map, context_length, scope,
+                                                  GetContext(), extension);
+  InlinedAllocation* allocation;
+  GET_VALUE_OR_ABORT(allocation, reducer_.BuildInlinedAllocation(
+                                     context, AllocationType::kYoung));
+  reducer_.RecordType(allocation, NodeType::kContext);
+  return allocation;
 }
 
 ReduceResult MaglevGraphBuilder::VisitCreateBlockContext() {
@@ -13998,7 +14003,7 @@ ReduceResult MaglevGraphBuilder::VisitCreateBlockContext() {
   };
 
   PROCESS_AND_RETURN_IF_DONE(TryBuildInlinedAllocatedContext(
-                                 map, scope_info, scope_info.ContextLength()),
+                                 map, scope_info.ContextLength(), scope_info),
                              done);
   // Fallback.
   done(BuildCallRuntime(Runtime::kPushBlockContext, {GetConstant(scope_info)})
@@ -14010,12 +14015,15 @@ ReduceResult MaglevGraphBuilder::VisitCreateCatchContext() {
   // CreateCatchContext <exception> <scope_info_idx>
   ValueNode* exception = LoadRegister(0);
   compiler::ScopeInfoRef scope_info = GetRefOperand<ScopeInfo>(1);
-  auto context = reducer_.CreateContext(
-      broker()->target_native_context().catch_context_map(broker()),
-      Context::MIN_CONTEXT_EXTENDED_SLOTS, scope_info, GetContext(), exception);
-  RETURN_IF_ABORT(SetAccumulator(
-      reducer_.BuildInlinedAllocation(context, AllocationType::kYoung)));
 
+  InlinedAllocation* allocation;
+  GET_VALUE_OR_ABORT(
+      allocation,
+      TryBuildInlinedAllocatedContext(
+          broker()->target_native_context().catch_context_map(broker()),
+          Context::MIN_CONTEXT_EXTENDED_SLOTS, scope_info, exception));
+
+  SetAccumulator(allocation);
   accumulator_scope_info_ = scope_info;
   return ReduceResult::Done();
 }
@@ -14032,8 +14040,8 @@ ReduceResult MaglevGraphBuilder::VisitCreateFunctionContext() {
   };
 
   PROCESS_AND_RETURN_IF_DONE(
-      TryBuildInlinedAllocatedContext(map, info,
-                                      slot_count + Context::MIN_CONTEXT_SLOTS),
+      TryBuildInlinedAllocatedContext(
+          map, slot_count + Context::MIN_CONTEXT_SLOTS, info),
       done);
   // Fallback.
   done(AddNewNodeNoInputConversion<CreateFunctionContext>(
@@ -14057,8 +14065,8 @@ ReduceResult MaglevGraphBuilder::VisitCreateEvalContext() {
   };
 
   PROCESS_AND_RETURN_IF_DONE(
-      TryBuildInlinedAllocatedContext(map, info,
-                                      slot_count + Context::MIN_CONTEXT_SLOTS),
+      TryBuildInlinedAllocatedContext(
+          map, slot_count + Context::MIN_CONTEXT_SLOTS, info),
       done);
   if (slot_count <= static_cast<uint32_t>(
                         ConstructorBuiltins::MaximumFunctionContextSlots())) {
@@ -14075,12 +14083,15 @@ ReduceResult MaglevGraphBuilder::VisitCreateWithContext() {
   // CreateWithContext <register> <scope_info_idx>
   ValueNode* object = LoadRegister(0);
   compiler::ScopeInfoRef scope_info = GetRefOperand<ScopeInfo>(1);
-  auto context = reducer_.CreateContext(
-      broker()->target_native_context().with_context_map(broker()),
-      Context::MIN_CONTEXT_EXTENDED_SLOTS, scope_info, GetContext(), object);
-  RETURN_IF_ABORT(SetAccumulator(
-      reducer_.BuildInlinedAllocation(context, AllocationType::kYoung)));
 
+  InlinedAllocation* allocation;
+  GET_VALUE_OR_ABORT(
+      allocation,
+      TryBuildInlinedAllocatedContext(
+          broker()->target_native_context().with_context_map(broker()),
+          Context::MIN_CONTEXT_EXTENDED_SLOTS, scope_info, object));
+
+  SetAccumulator(allocation);
   accumulator_scope_info_ = scope_info;
   return ReduceResult::Done();
 }

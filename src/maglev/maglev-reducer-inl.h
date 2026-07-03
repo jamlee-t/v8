@@ -841,11 +841,7 @@ void MaglevReducer<BaseT>::AddNonEscapingUses(InlinedAllocation* allocation,
 template <typename BaseT>
 ReduceResult MaglevReducer<BaseT>::BuildInlinedAllocation(
     VirtualObject* vobject, AllocationType allocation_type) {
-  known_node_aspects().virtual_objects().Add(vobject);
-  InlinedAllocation* allocation;
-
-  using ValueAndDesc = std::pair<ValueNode*, vobj::Field>;
-  SmallZoneVector<ValueAndDesc, 8> values(zone());
+  SmallZoneVector<std::pair<ValueNode*, vobj::Field>, 8> values(zone());
   bool result =
       vobject->ForEachSlot([&](ValueNode* node, vobj::Field desc) -> bool {
         CHECK_NE(node, VirtualObject::kUninitializedSlotValue);
@@ -870,7 +866,7 @@ ReduceResult MaglevReducer<BaseT>::BuildInlinedAllocation(
   if (!result) {
     return ReduceResult::DoneWithAbort();
   }
-  allocation =
+  InlinedAllocation* allocation =
       ExtendOrReallocateCurrentAllocationBlock(allocation_type, vobject);
   AddNonEscapingUses(allocation, static_cast<int>(values.size()));
   StoreTaggedMode store_mode = StoreTaggedMode::kInitializing;
@@ -906,6 +902,7 @@ ReduceResult MaglevReducer<BaseT>::BuildInlinedAllocation(
   if (v8_flags.maglev_allocation_folding < 2) {
     ClearCurrentAllocationBlock();
   }
+  known_node_aspects().virtual_objects().Add(vobject);
   return allocation;
 }
 
@@ -5066,7 +5063,7 @@ VirtualObject* MaglevReducer<BaseT>::CreateFixedDoubleArray(
 template <typename BaseT>
 VirtualObject* MaglevReducer<BaseT>::CreateContext(
     compiler::MapRef map, int length, compiler::ScopeInfoRef scope_info,
-    ValueNode* previous_context, std::optional<ValueNode*> extension) {
+    ValueNode* previous_context, ValueNode* extension) {
   using Shape = ContextShape;
   SBXCHECK_GE(length, Context::MIN_CONTEXT_SLOTS);
   DCHECK_EQ(Context::SizeFor(length) % FieldSizeOf(Shape::kBodyFieldType), 0);
@@ -5084,17 +5081,15 @@ VirtualObject* MaglevReducer<BaseT>::CreateContext(
   vobj->set(Context::OffsetOfElementAt(Context::PREVIOUS_INDEX),
             previous_context);
   int index = Context::PREVIOUS_INDEX + 1;
-  if (extension.has_value()) {
+  if (extension != nullptr) {
     SBXCHECK_GE(length, Context::MIN_CONTEXT_EXTENDED_SLOTS);
-    vobj->set(Context::OffsetOfElementAt(Context::EXTENSION_INDEX),
-              extension.value());
+    vobj->set(Context::OffsetOfElementAt(Context::EXTENSION_INDEX), extension);
     index++;
   }
   for (; index < length; index++) {
     vobj->set(Context::OffsetOfElementAt(index),
               GetRootConstant(RootIndex::kUndefinedValue));
   }
-  RecordType(vobj, NodeType::kContext);
   return vobj;
 }
 

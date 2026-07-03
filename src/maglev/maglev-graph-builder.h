@@ -1500,7 +1500,8 @@ class MaglevGraphBuilder {
   bool CanAllocateInlinedArgumentElements();
 
   MaybeReduceResult TryBuildInlinedAllocatedContext(
-      compiler::MapRef map, compiler::ScopeInfoRef scope, int context_length);
+      compiler::MapRef map, int context_length, compiler::ScopeInfoRef scope,
+      ValueNode* extension = nullptr);
 
   template <Operation kOperation>
   ReduceResult BuildGenericUnaryOperationNode();
