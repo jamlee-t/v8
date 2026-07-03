@@ -2418,7 +2418,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
     case kS390_LoadSimd128: {
       AddressingMode mode = kMode_None;
       MemOperand operand = i.MemoryOperand(&mode);
-      __ vl(i.OutputSimd128Register(), operand, Condition(0));
+      __ LoadV128(i.OutputSimd128Register(), operand, kScratchReg);
       break;
     }
     case kS390_StoreWord8:
@@ -2471,7 +2471,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       size_t index = 0;
       AddressingMode mode = kMode_None;
       MemOperand operand = i.MemoryOperand(&mode, &index);
-      __ vst(i.InputSimd128Register(index), operand, Condition(0));
+      __ StoreV128(i.InputSimd128Register(index), operand, kScratchReg);
       break;
     }
     case kS390_Lay: {
