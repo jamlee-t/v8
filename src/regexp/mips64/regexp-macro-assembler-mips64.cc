@@ -1385,15 +1385,25 @@ void RegExpMacroAssemblerMIPS::LoadCurrentCharacterUnchecked(int cp_offset,
     __ Daddu(t3, current_input_offset(), Operand(cp_offset * char_size()));
     offset = t3;
   }
-  // We assume that we cannot do unaligned loads on MIPS, so this function
-  // must only be used to load a single character at a time.
-  DCHECK_EQ(1, characters);
+
   __ Daddu(t1, end_of_input_address(), Operand(offset));
   if (mode() == LATIN1) {
-    __ Lbu(current_character(), MemOperand(t1, 0));
+    if (characters == 4) {
+      __ Ulwu(current_character(), MemOperand(t1, 0));
+    } else if (characters == 2) {
+      __ Ulhu(current_character(), MemOperand(t1, 0));
+    } else {
+      DCHECK_EQ(1, characters);
+      __ Lbu(current_character(), MemOperand(t1, 0));
+    }
   } else {
     DCHECK(mode() == UC16);
-    __ Lhu(current_character(), MemOperand(t1, 0));
+    if (characters == 2) {
+      __ Ulwu(current_character(), MemOperand(t1, 0));
+    } else {
+      DCHECK_EQ(1, characters);
+      __ Lhu(current_character(), MemOperand(t1, 0));
+    }
   }
 }
 
