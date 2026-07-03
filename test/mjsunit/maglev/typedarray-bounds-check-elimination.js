@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 //
 // Flags: --allow-natives-syntax --turbolev
+// Flags: --max-turbolev-eager-inlined-bytecode-size=0
 
 (function testTypedArrayAscending() {
   // Case 1: Multiple ascending constant accesses in a single block.
@@ -97,4 +98,39 @@
   %OptimizeFunctionOnNextCall(testJSArray);
   assertEquals(600, testJSArray(js_arr));
   assertTrue(isOptimized(testJSArray));
+})();
+
+(function testWithConstantFolding() {
+  function get_2() { return 2; }
+
+function foo(arr) {
+  // `get_2` will be non-eagerly inlined, which means that `dyn_index` will
+  // initially not be a constant, but will later be folded to `3`.
+  let dyn_index1 = 2 + get_2();
+  let dyn_index2 = 1 + get_2();
+  let dyn_index3 = 3 + get_2();
+
+  // Inserting an initial bound check with a constant index.
+  arr[0];
+
+  // `dyn_index` will look non-constant when FindMaxConstantIndicesInBlock runs
+  // the first time after `get_2` has been inlined, but the GraphOptimizer will
+  // constant-fold the addition to `3`. This bound check should not be elided
+  // (or at least not unless we've previously checked that `3` is in bounds).
+  let result = arr[dyn_index1];
+  result += arr[dyn_index2];
+  result += arr[dyn_index3];
+  return result;
+}
+
+%PrepareFunctionForOptimization(foo);
+%PrepareFunctionForOptimization(get_2);
+assertEquals(26, foo([1, 3, 5, 7, 8, 11, 12, 13, 14, 15]));
+assertEquals(26, foo([1, 3, 5, 7, 8, 11, 12, 13, 14, 15]));
+
+%OptimizeFunctionOnNextCall(foo);
+assertEquals(26, foo([1, 3, 5, 7, 8, 11, 12, 13, 14, 15]));
+
+// Calling with smaller array so that `arr[dyn_index]` triggers a deopt.
+assertEquals(NaN, foo([1]));
 })();

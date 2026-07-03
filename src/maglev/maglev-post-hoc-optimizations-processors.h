@@ -691,8 +691,16 @@ class BoundsCheckEliminationProcessor {
       }
       emitted = true;
       return false;
-    }
+    } else if (index > max_index) {
+      // This bounds check did not exist when FindMaxConstantIndicesInBlock was
+      // called. Its index is larger than the maximum we found then, so we have
+      // to emit a bounds check.
 
+      // Future bounds checks can be elided if their index is less than the
+      // index of this bounds check.
+      max_index = index;
+      return false;
+    }
     // Any subsequent constant bounds checks on this length are redundant.
     return true;
   }
