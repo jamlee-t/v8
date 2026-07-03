@@ -762,11 +762,15 @@ MaybeHandle<NativeContext> JSReceiver::GetContextForMicrotask(
     if (IsJSBoundFunction(*receiver)) {
       receiver = direct_handle(
           Cast<JSBoundFunction>(receiver)->bound_target_function(), isolate);
-    } else {
-      DCHECK(IsJSProxy(*receiver));
+    } else if (IsJSProxy(*receiver)) {
       DirectHandle<Object> target(Cast<JSProxy>(receiver)->target(), isolate);
       if (!IsJSReceiver(*target)) return MaybeHandle<NativeContext>();
       receiver = Cast<JSReceiver>(target);
+    } else {
+      DCHECK(IsJSGeneratorObject(*receiver));
+      return handle(
+          Cast<JSGeneratorObject>(receiver)->context()->native_context(),
+          isolate);
     }
   }
 

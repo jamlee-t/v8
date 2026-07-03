@@ -7,6 +7,10 @@ const kGeneratorExecuting:
     constexpr int31 generates 'JSGeneratorObject::kGeneratorExecuting';
 const kGeneratorClosed:
     constexpr int31 generates 'JSGeneratorObject::kGeneratorClosed';
+const kGeneratorResumeModeNext:
+    constexpr int31 generates 'JSGeneratorObject::kNext';
+const kGeneratorResumeModeThrow:
+    constexpr int31 generates 'JSGeneratorObject::kThrow';
 
 @cppObjectLayoutDefinition
 extern class JSGeneratorObject extends JSObject {

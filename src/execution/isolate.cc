@@ -919,13 +919,17 @@ bool IsBuiltinForwardingRejectHandler(Isolate* isolate,
 
 MaybeHandle<JSGeneratorObject> TryGetAsyncGenerator(
     Isolate* isolate, DirectHandle<PromiseReaction> reaction) {
+  DisallowGarbageCollection no_gc;
+  Tagged<HeapObject> fulfill_handler = reaction->fulfill_handler();
+  if (IsJSGeneratorObject(fulfill_handler)) {
+    return handle(Cast<JSGeneratorObject>(fulfill_handler), isolate);
+  }
   // Check if the {reaction} has one of the known async function or
   // async generator continuations as its fulfill handler.
-  if (IsBuiltinAsyncFulfillHandler(isolate, reaction->fulfill_handler())) {
+  if (IsBuiltinAsyncFulfillHandler(isolate, fulfill_handler)) {
     // Now peek into the handlers' AwaitContext to get to
     // the JSGeneratorObject for the async function.
-    DirectHandle<Context> context(
-        Cast<JSFunction>(reaction->fulfill_handler())->context(), isolate);
+    Tagged<Context> context = Cast<JSFunction>(fulfill_handler)->context();
     Handle<JSGeneratorObject> generator_object(
         Cast<JSGeneratorObject>(context->extension()), isolate);
     return generator_object;
@@ -1443,25 +1447,30 @@ void CaptureAsyncStackTrace(Isolate* isolate, DirectHandle<JSPromise> promise,
 }
 
 MaybeDirectHandle<JSPromise> TryGetCurrentTaskPromise(Isolate* isolate) {
+  DisallowGarbageCollection no_gc;
   Handle<Object> current_microtask = isolate->factory()->current_microtask();
   if (IsPromiseReactionJobTask(*current_microtask)) {
     auto promise_reaction_job_task =
         Cast<PromiseReactionJobTask>(current_microtask);
     // Check if the {reaction} has one of the known async function or
     // async generator continuations as its fulfill handler.
-    if (IsBuiltinAsyncFulfillHandler(isolate,
-                                     promise_reaction_job_task->handler()) ||
-        IsBuiltinAsyncRejectHandler(isolate,
-                                    promise_reaction_job_task->handler())) {
+    Tagged<JSGeneratorObject> generator_object;
+    if (IsJSGeneratorObject(promise_reaction_job_task->handler())) {
+      generator_object =
+          Cast<JSGeneratorObject>(promise_reaction_job_task->handler());
+    } else if (IsBuiltinAsyncFulfillHandler(
+                   isolate, promise_reaction_job_task->handler()) ||
+               IsBuiltinAsyncRejectHandler(
+                   isolate, promise_reaction_job_task->handler())) {
       // Now peek into the handlers' AwaitContext to get to
       // the JSGeneratorObject for the async function.
-      DirectHandle<Context> context(
-          Cast<JSFunction>(promise_reaction_job_task->handler())->context(),
-          isolate);
-      Handle<JSGeneratorObject> generator_object(
-          Cast<JSGeneratorObject>(context->extension()), isolate);
+      Tagged<Context> context =
+          Cast<JSFunction>(promise_reaction_job_task->handler())->context();
+      generator_object = Cast<JSGeneratorObject>(context->extension());
+    }
+    if (!generator_object.is_null()) {
       if (generator_object->is_executing()) {
-        if (IsJSAsyncFunctionObject(*generator_object)) {
+        if (IsJSAsyncFunctionObject(generator_object)) {
           auto async_function_object =
               Cast<JSAsyncFunctionObject>(generator_object);
           DirectHandle<JSPromise> promise(async_function_object->promise(),
@@ -1470,8 +1479,8 @@ MaybeDirectHandle<JSPromise> TryGetCurrentTaskPromise(Isolate* isolate) {
         } else {
           auto async_generator_object =
               Cast<JSAsyncGeneratorObject>(generator_object);
-          DirectHandle<Object> queue(async_generator_object->queue(), isolate);
-          if (!IsUndefined(*queue)) {
+          Tagged<Object> queue = async_generator_object->queue();
+          if (!IsUndefined(queue)) {
             auto async_generator_request = Cast<AsyncGeneratorRequest>(queue);
             DirectHandle<JSPromise> promise(
                 Cast<JSPromise>(async_generator_request->promise()), isolate);
@@ -1509,12 +1518,11 @@ MaybeDirectHandle<JSPromise> TryGetCurrentTaskPromise(Isolate* isolate) {
     return promise;
   } else if (IsAsyncResumeTask(*current_microtask)) {
     auto async_resume_task = Cast<AsyncResumeTask>(current_microtask);
-    Handle<JSGeneratorObject> generator_object(async_resume_task->generator(),
-                                               isolate);
+    Tagged<JSGeneratorObject> generator_object = async_resume_task->generator();
     if (generator_object->is_executing()) {
       int kind = async_resume_task->kind();
       if (kind == AsyncResumeTask::kAsyncFunctionAwait) {
-        DCHECK(IsJSAsyncFunctionObject(*generator_object));
+        DCHECK(IsJSAsyncFunctionObject(generator_object));
         auto async_function_object =
             Cast<JSAsyncFunctionObject>(generator_object);
         DirectHandle<JSPromise> promise(async_function_object->promise(),
@@ -1522,10 +1530,10 @@ MaybeDirectHandle<JSPromise> TryGetCurrentTaskPromise(Isolate* isolate) {
         return promise;
       } else {
         DCHECK_EQ(kind, AsyncResumeTask::kYield);
-        DCHECK(IsJSAsyncGeneratorObject(*generator_object));
+        DCHECK(IsJSAsyncGeneratorObject(generator_object));
         auto async_generator_object =
             Cast<JSAsyncGeneratorObject>(generator_object);
-        DirectHandle<Object> queue(async_generator_object->queue(), isolate);
+        Tagged<Object> queue = async_generator_object->queue();
         // The queue may legitimately be empty here. The kYield dispatch calls
         // AsyncGeneratorResolve (which pops the yield request) followed by
         // AsyncGeneratorResumeNext, which may immediately resume the generator
@@ -1534,7 +1542,7 @@ MaybeDirectHandle<JSPromise> TryGetCurrentTaskPromise(Isolate* isolate) {
         // triggers this stack capture. V8 has no separate ~draining-queue~
         // state (spec sec-asyncgeneratorstart), so is_executing() remains true
         // throughout; the empty queue is the tell that we're in that phase.
-        if (IsUndefined(*queue)) return MaybeDirectHandle<JSPromise>();
+        if (IsUndefined(queue)) return MaybeDirectHandle<JSPromise>();
         auto async_generator_request = Cast<AsyncGeneratorRequest>(queue);
         DirectHandle<JSPromise> promise(
             Cast<JSPromise>(async_generator_request->promise()), isolate);
