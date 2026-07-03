@@ -535,9 +535,9 @@
 
     # Debug configs for arm.
     'debug_android_arm_verify_deterministic': [
-      'debug_bot', 'arm', 'android', 'minimal_symbols', 'v8_verify_deterministic'],
+      'debug_static', 'arm', 'android', 'minimal_symbols', 'v8_verify_deterministic'],
     'debug_android_arm64': [
-      'debug_bot', 'arm64', 'android', 'minimal_symbols'],
+      'debug_static', 'arm64', 'android', 'minimal_symbols'],
     'debug_arm': [
       'debug_bot', 'arm', 'hard_float'],
     'debug_arm64': [
@@ -912,6 +912,12 @@
     'debug_bot': {
       'mixins': [
         'debug', 'shared', 'remoteexec', 'v8_enable_slow_dchecks',
+        'v8_optimized_debug', 'v8_enable_google_benchmark'],
+    },
+
+    'debug_static': {
+      'mixins': [
+        'debug', 'static', 'remoteexec', 'v8_enable_slow_dchecks',
         'v8_optimized_debug', 'v8_enable_google_benchmark'],
     },
 
