@@ -8,6 +8,7 @@
 #include <map>
 
 #include "include/cppgc/garbage-collected.h"
+#include "include/cppgc/prefinalizer.h"
 #include "src/base/platform/time.h"
 #include "src/debug/interface-types.h"
 
@@ -17,6 +18,8 @@ class CpuProfiler;
 
 class D8Console : public cppgc::GarbageCollected<D8Console>,
                   public debug::ConsoleDelegate {
+  CPPGC_USING_PRE_FINALIZER(D8Console, DisposeProfiler);
+
  public:
   void Trace(cppgc::Visitor* visitor) const override {
     debug::ConsoleDelegate::Trace(visitor);
