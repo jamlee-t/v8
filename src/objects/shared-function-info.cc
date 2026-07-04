@@ -507,7 +507,11 @@ Handle<Object> SharedFunctionInfo::GetSourceCodeHarmony(
     return indirect_handle(result, isolate);
   }
   // This should be extremely rare (only when {source} is close to
-  // String::kMaxLength), but it is reachable.
+  // String::kMaxLength), but it is reachable. Finish() threw an
+  // invalid-string-length error; clear it, since we return a valid fallback
+  // string rather than propagating the exception.
+  DCHECK(isolate->has_exception());
+  isolate->clear_exception();
   return isolate->factory()->NewStringFromAsciiChecked("<too long to print>");
 }
 
