@@ -73,6 +73,20 @@ class MaglevGraphOptimizer {
 
   void AttachExceptionHandlerInfo(NodeBase* node);
 
+  // Called by the reducer for every node emitted while lowering. Such nodes
+  // (e.g. the specific call a generic call is reduced to) bypass
+  // PostProcessNode, so mirror its allocation-folding barrier here: a
+  // side-effecting node must stop folding into the current allocation block.
+  template <typename NodeT>
+  void MarkPossibleSideEffect(NodeT* node) {
+    if constexpr (Node::opcode_of<NodeT> != Opcode::kAllocationBlock &&
+                  (NodeT::kProperties.can_allocate() ||
+                   NodeT::kProperties.can_deopt() ||
+                   NodeT::kProperties.can_throw())) {
+      reducer_.ClearCurrentAllocationBlock();
+    }
+  }
+
   ProcessResult DeoptAndTruncate(DeoptimizeReason reason) {
     ReduceResult result = reducer_.EmitUnconditionalDeopt(reason);
     CHECK(result.IsDoneWithAbort());
