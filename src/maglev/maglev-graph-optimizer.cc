@@ -2826,6 +2826,21 @@ ProcessResult MaglevGraphOptimizer::VisitInt32DivideWithOverflow(
 ProcessResult MaglevGraphOptimizer::VisitInt32ModulusWithOverflow(
     Int32ModulusWithOverflow* node, const ProcessingState& state) {
   RETURN_IF_SUCCESS(TryFoldInt32Operation<Operation::kModulus>(node));
+  // x % (2^k) == x & (2^k - 1) for x >= 0, and neither the minus-zero nor
+  // the zero-divisor deopt can fire. The result of % follows the sign of the
+  // dividend, so a negative divisor of the same magnitude reduces the same way.
+  if (auto rhs_cst = reducer_.TryGetInt32Constant(node->input_node(1))) {
+    int64_t abs_rhs = *rhs_cst < 0 ? -static_cast<int64_t>(*rhs_cst) : *rhs_cst;
+    if (base::bits::IsPowerOfTwo(abs_rhs)) {
+      if (auto lhs_range = GetRange(node->input_node(0))) {
+        if (lhs_range->IsInt32() && *lhs_range->min() >= 0) {
+          return ReplaceWith<Int32BitwiseAnd>(
+              {node->input_node(0),
+               reducer_.GetInt32Constant(static_cast<int32_t>(abs_rhs - 1))});
+        }
+      }
+    }
+  }
   return ProcessResult::kContinue;
 }
 
