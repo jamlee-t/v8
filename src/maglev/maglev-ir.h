@@ -713,6 +713,7 @@ constexpr bool IsSimpleFieldStore(Opcode opcode) {
          opcode == Opcode::kStoreFixedArrayElementWithWriteBarrier ||
          opcode == Opcode::kStoreFixedArrayElementNoWriteBarrier ||
          opcode == Opcode::kStoreFixedDoubleArrayElement ||
+         opcode == Opcode::kStoreFixedHoleyDoubleArrayElement ||
          opcode == Opcode::kStoreTrustedPointerFieldWithWriteBarrier ||
          opcode == Opcode::kStoreContextSlotWithWriteBarrier ||
          opcode == Opcode::kStoreSmiContextCell ||
