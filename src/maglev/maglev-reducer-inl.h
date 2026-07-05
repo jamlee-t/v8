@@ -5326,6 +5326,88 @@ VirtualObject* MaglevReducer<BaseT>::CreateJSStringIterator(
 }
 
 template <typename BaseT>
+MaybeReduceResult MaglevReducer<BaseT>::TryReducePromisePrototypeThen(
+    compiler::JSFunctionRef target, CallArguments& args) {
+  if (!CanSpeculateCall()) return {};
+  if (args.mode() != CallArguments::kDefault) return {};
+  if (args.receiver_mode() == ConvertReceiverMode::kNullOrUndefined) {
+    TRACE(TraceColor::kRed
+          << "! Failed to reduce Promise.prototype.then - no receiver");
+    return {};
+  }
+  ValueNode* receiver = GetValueOrUndefined(args.receiver());
+
+  compiler::JSObjectRef promise_prototype =
+      broker()->target_native_context().promise_prototype(broker());
+  MapInference<MaglevReducer<BaseT>> inference(this, receiver);
+  auto possible_maps = inference.TryGetPossibleMaps();
+  if (!possible_maps) {
+    TRACE(TraceColor::kRed << "! Failed to reduce Promise.prototype.then - "
+                              "unknown receiver map");
+    return {};
+  }
+  if (possible_maps->is_empty()) {
+    return ReduceResult::DoneWithAbort();
+  }
+  for (compiler::MapRef map : *possible_maps) {
+    if (!map.IsJSPromiseMap() ||
+        !map.prototype(broker()).equals(promise_prototype)) {
+      TRACE(TraceColor::kRed << "! Failed to reduce Promise.prototype.then - "
+                                "not an initial-prototype JSPromise map");
+      return {};
+    }
+  }
+
+  // Non-callable reactions behave like undefined; the fast path only covers
+  // arguments that are statically callable or undefined.
+  ValueNode* undefined_value = GetRootConstant(RootIndex::kUndefinedValue);
+  ValueNode* on_fulfilled =
+      args.count() > 0 ? args[0]->UnwrapIdentities() : undefined_value;
+  ValueNode* on_rejected =
+      args.count() > 1 ? args[1]->UnwrapIdentities() : undefined_value;
+  auto is_callable_or_undefined = [&](ValueNode* value) {
+    return value == undefined_value || CheckType(value, NodeType::kCallable);
+  };
+  if (!is_callable_or_undefined(on_fulfilled)) {
+    TRACE(TraceColor::kRed << "! Failed to reduce Promise.prototype.then - "
+                              "on_fulfilled not callable");
+    return {};
+  }
+  if (!is_callable_or_undefined(on_rejected)) {
+    TRACE(TraceColor::kRed << "! Failed to reduce Promise.prototype.then - "
+                              "on_rejected not callable");
+    return {};
+  }
+
+  // No PromiseThenProtector needed here: unlike Promise.prototype.catch/finally
+  // (which desugar to a `then` lookup), this builtin never reads the "then"
+  // property, so a monkeypatched `then` dispatches elsewhere and never reaches
+  // this reduction. The map checks above only establish an initial-prototype
+  // JSPromise for the species/hook assumptions below.
+  if (!broker()->dependencies()->DependOnPromiseHookProtector()) {
+    TRACE(TraceColor::kRed << "! Failed to reduce Promise.prototype.then - "
+                              "promise hook protector");
+    return {};
+  }
+  if (!broker()->dependencies()->DependOnPromiseSpeciesProtector()) {
+    TRACE(TraceColor::kRed << "! Failed to reduce Promise.prototype.then - "
+                              "species protector");
+    return {};
+  }
+
+  RETURN_IF_ABORT(inference.InsertMapChecks(zone()));
+
+  VirtualObject* result_vobj = CreateJSPromiseObject();
+  ValueNode* result_promise;
+  GET_VALUE_OR_ABORT(result_promise, BuildInlinedAllocation(
+                                         result_vobj, AllocationType::kYoung));
+
+  ValueNode* context = GetConstant(broker()->target_native_context());
+  return BuildCallBuiltin<Builtin::kPerformPromiseThen>(
+      context, {receiver, on_fulfilled, on_rejected, result_promise});
+}
+
+template <typename BaseT>
 MaybeReduceResult MaglevReducer<BaseT>::TryReduceBuiltin(
     Builtin builtin_id, compiler::JSFunctionRef target, CallArguments& args,
     const compiler::FeedbackSource& feedback_source) {
