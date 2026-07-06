@@ -9,6 +9,7 @@
 
 #include "src/compiler/heap-refs.h"
 #include "src/maglev/maglev-compilation-info.h"
+#include "src/maglev/maglev-deopt-frame-visitor.h"
 #include "src/maglev/maglev-graph-printer.h"
 #include "src/maglev/maglev-graph-processor.h"
 #include "src/maglev/maglev-graph.h"
@@ -135,6 +136,30 @@ class RecomputePhiUseHintsProcessor {
             << " and same_loop_use_reprs=" << phi->same_loop_use_repr_hints()
             << " after visiting input " << PrintNode(node));
       }
+    }
+    // Values referenced by deopt frames are re-materialized upon
+    // deoptimization, so they must survive as a non-truncated representation.
+    // Any reversible untagging (Int32/Float64/HoleyFloat64) can be
+    // re-materialized, but the irreversible truncated Int32 cannot. Missing
+    // these uses can let a Phi be truncated, corrupting the value the
+    // interpreter resumes with.
+    auto record_deopt_use = [&](ValueNode* input) {
+      if (Phi* phi = input->TryCast<Phi>()) {
+        phi->RecordUseReprHint(
+            UseRepresentationSet{UseRepresentation::kNonTruncated},
+            live_loop_phis_.contains(phi));
+        TRACE_PHI_USE_HINTS(
+            "updating use hints for "
+            << PrintNodeLabel(phi) << ": use_reprs=" << phi->use_repr_hints()
+            << " and same_loop_use_reprs=" << phi->same_loop_use_repr_hints()
+            << " after visiting deopt frame of " << PrintNode(node));
+      }
+    };
+    if (node->properties().has_eager_deopt_info()) {
+      node->eager_deopt_info()->ForEachInput(record_deopt_use);
+    }
+    if (node->properties().can_lazy_deopt()) {
+      node->lazy_deopt_info()->ForEachInput(record_deopt_use);
     }
     return ProcessResult::kContinue;
   }

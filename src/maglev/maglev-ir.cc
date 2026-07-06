@@ -221,6 +221,8 @@ std::ostream& operator<<(std::ostream& os, UseRepresentation repr) {
       return os << "Float64";
     case UseRepresentation::kHoleyFloat64:
       return os << "HoleyFloat64";
+    case UseRepresentation::kNonTruncated:
+      return os << "NonTruncated";
   }
   UNREACHABLE();
 }

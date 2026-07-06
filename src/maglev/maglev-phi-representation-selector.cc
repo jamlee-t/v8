@@ -360,7 +360,8 @@ MaglevPhiRepresentationSelector::ProcessPhi(Phi* node) {
           UseRepresentationSet(
               {UseRepresentation::kTaggedForNumberToString,
                UseRepresentation::kInt32, UseRepresentation::kTruncatedInt32,
-               UseRepresentation::kFloat64, UseRepresentation::kHoleyFloat64}),
+               UseRepresentation::kFloat64, UseRepresentation::kHoleyFloat64,
+               UseRepresentation::kNonTruncated}),
       UseRepresentationSet());
 
   // The rules for untagging are that we can only widen input representations,
@@ -406,7 +407,8 @@ MaglevPhiRepresentationSelector::ProcessPhi(Phi* node) {
   } else {
     DCHECK(!use_reprs.empty() &&
            use_reprs.is_subset_of({UseRepresentation::kHoleyFloat64,
-                                   UseRepresentation::kTruncatedInt32}));
+                                   UseRepresentation::kTruncatedInt32,
+                                   UseRepresentation::kNonTruncated}));
     allowed_inputs_for_uses = {ValueRepresentation::kInt32,
                                ValueRepresentation::kFloat64,
                                ValueRepresentation::kHoleyFloat64};

@@ -186,6 +186,7 @@ class NodeInfo {
         case UseRepresentation::kHoleyFloat64:
           return holey_float64();
         case UseRepresentation::kUint32:
+        case UseRepresentation::kNonTruncated:
           UNREACHABLE();
       }
       UNREACHABLE();

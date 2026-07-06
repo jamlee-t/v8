@@ -93,6 +93,9 @@ constexpr ValueRepresentation ValueRepresentationFromUse(
       return ValueRepresentation::kFloat64;
     case UseRepresentation::kHoleyFloat64:
       return ValueRepresentation::kHoleyFloat64;
+    case UseRepresentation::kNonTruncated:
+      // Hint-only representation, never used as an actual conversion target.
+      UNREACHABLE();
   }
   UNREACHABLE();
 }

@@ -946,7 +946,11 @@ enum class UseRepresentation : uint8_t {
   kUint32,
   kFloat64,
   kHoleyFloat64,
-  kLast = kHoleyFloat64
+  kNonTruncated,  // Hint-only use (e.g. a value referenced by a deopt frame):
+                  // the value must survive as a non-truncated representation,
+                  // but any reversible untagging (Int32/Float64/HoleyFloat64)
+                  // is fine since it can be re-materialized.
+  kLast = kNonTruncated
 };
 
 std::ostream& operator<<(std::ostream& os, UseRepresentation repr);
