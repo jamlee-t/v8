@@ -728,7 +728,9 @@ constexpr bool IsTypedArrayStore(Opcode opcode) {
   return opcode == Opcode::kStoreIntTypedArrayElement ||
          opcode == Opcode::kStoreDoubleTypedArrayElement ||
          opcode == Opcode::kStoreIntConstantTypedArrayElement ||
-         opcode == Opcode::kStoreDoubleConstantTypedArrayElement;
+         opcode == Opcode::kStoreDoubleConstantTypedArrayElement ||
+         opcode == Opcode::kStoreSignedIntDataViewElement ||
+         opcode == Opcode::kStoreDoubleDataViewElement;
 }
 
 constexpr bool IsTruncatingToInt32(Opcode opcode) {
