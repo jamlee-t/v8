@@ -135,6 +135,9 @@ void MutateRegister(reg_value_type* reg_ptr,
   // (https://crbug.com/361277236).
   uint64_t read_value = static_cast<uint64_t>(*reg_ptr);
   uint64_t new_value = read_value;
+  // This function only handles general-purpose registers, which are at most 8
+  // bytes on x64. Wider vector registers are handled in a separate code path.
+  CHECK_LE(access_info.access_width, 8);
   int bit_width = access_info.access_width * 8;
   switch (g_support.rng.NextInt(4)) {
     case 0:
@@ -285,8 +288,7 @@ void MutateReadValue(struct user_regs_struct& regs,
     // Note: We currently only mutate the lower 64 bits of the YMM/XMM register.
     // This is sufficient to trigger a value change that can be detected in
     // JavaScript, but does not provide full 256-bit mutation.
-    // TODO(clemensb): Implement better mutation for XMM/YMM registers in the
-    // future, e.g. by mutating all bits.
+    // TODO(clemensb): Mutate all bits and respect access_info.access_width.
     uint64_t* target_val_ptr = reinterpret_cast<uint64_t*>(
         xsave_buffer + kXmmRegistersOffset + reg_offset);
     uint64_t read_value_u64 = *target_val_ptr;

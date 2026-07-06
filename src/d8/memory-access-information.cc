@@ -72,6 +72,10 @@ MemoryAccessInformation ParseMemoryAccessInformationFromInstruction(
             .extension = extension};
   }
 
+  if (memcmp(insn_pos, "lddqu", 5) == 0 || memcmp(insn_pos, "vlddqu", 6) == 0) {
+    access_width = 16;
+  }
+
   // TODO(clemensb): Implement more instructions if necessary.
   auto match_mnem = [&](std::initializer_list<const char*> prefixes) {
     for (const char* prefix : prefixes) {
@@ -84,7 +88,8 @@ MemoryAccessInformation ParseMemoryAccessInformationFromInstruction(
                    "vmul",   "vdiv",   "padd",  "psub", "pmul",   "vor",
                    "vxor",   "vand",   "por",   "pxor", "pand",   "vpbroadcast",
                    "vpinsr", "vpextr", "vpmov", "pmov", "vshuf",  "pshuf",
-                   "vunpck", "punpck", "vpack", "pack", "vblend", "pblend"})) {
+                   "vunpck", "punpck", "vpack", "pack", "vblend", "pblend",
+                   "lddqu",  "vlddqu"})) {
     FATAL("Not a recognized instruction: %s\n", insn_pos);
   }
 
