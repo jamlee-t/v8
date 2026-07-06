@@ -99,22 +99,9 @@ class RecomputeKnownNodeAspectsProcessor {
     }
     DCHECK_NOT_NULL(known_node_aspects_);
 
-    if (block->has_state() && !block->is_exception_handler_block()) {
-      // We might now have more accurate types for phi inputs; recompute the phi
-      // types based on them.
-      for (Phi* phi : *block->state()->phis()) {
-        DCHECK_GE(phi->input_count(), 1);
-        NodeType new_type = NodeType::kNone;
-        for (int i = 0; i < phi->input_count(); ++i) {
-          ValueNode* input = phi->input_node(i)->UnwrapIdentities();
-          NodeType input_type =
-              known_node_aspects_->GetTypeUnchecked(broker(), input);
-          new_type = UnionType(new_type, input_type);
-        }
-        known_node_aspects_->GetOrCreateInfoFor(broker(), phi)
-            ->IntersectType(new_type);
-      }
-    }
+    // We might now have more accurate types for phi inputs; recompute the phi
+    // types based on them.
+    RecomputePhiTypes(block);
 
     if (!is_fallthrough) {
       TRACE_KNA("KNA at entry of block B" << block->id() << ":"
@@ -124,6 +111,33 @@ class RecomputeKnownNodeAspectsProcessor {
 
     return BlockProcessResult::kContinue;
   }
+
+  void RecomputePhiTypes(BasicBlock* block) {
+    if (!block->has_state()) return;
+    if (block->is_exception_handler_block()) return;
+    if (!block->has_phi()) return;
+    // Loop-header phis can use other phis of the same block
+    // as input, so we iterate until we reach a fixpoint.
+    bool changed;
+    do {
+      changed = false;
+      for (Phi* phi : *block->state()->phis()) {
+        DCHECK_GE(phi->input_count(), 1);
+        NodeType new_type = NodeType::kNone;
+        for (int i = 0; i < phi->input_count(); ++i) {
+          ValueNode* input = phi->input_node(i)->UnwrapIdentities();
+          NodeType input_type =
+              known_node_aspects_->GetTypeUnchecked(broker(), input);
+          new_type = UnionType(new_type, input_type);
+        }
+        NodeInfo* info = known_node_aspects_->GetOrCreateInfoFor(broker(), phi);
+        NodeType old_type = info->type();
+        info->IntersectType(new_type);
+        changed |= info->type() != old_type;
+      }
+    } while (changed && block->is_loop());
+  }
+
   void PostPhiProcessing() {}
 
   void ProcessThrowingNode(NodeBase* node, bool mark_handler_reachable = true) {
