@@ -3503,18 +3503,30 @@ DEFINE_BOOL(regexp_interpret_all, false, "interpret all regexp code")
 #else
 #define REGEXP_PEEPHOLE_OPTIMIZATION_BOOL true
 #endif
+// The regexp engine runs in one of three modes. The default is single-tier:
+// compile directly to native code on first use, expressed as tier-up with a
+// zero-tick threshold so that regexp_tier_up_ticks stays a usable knob. A
+// nonzero tick count selects the two-tier pipeline (interpret, then compile);
+// regexp_interpret_all never compiles to native code (and is implied by
+// jitless).
+//
+// regexp_jit_all is an explicit alias for the single-tier default. Its
+// implications are strong on purpose: layering a second, conflicting mode on
+// top of it (e.g. --regexp-jit-all --regexp-interpret-all) is then a flag
+// contradiction rather than silently resolving to one of them.
 DEFINE_BOOL(regexp_tier_up, true,
             "enable regexp interpreter and tier up to the compiler after the "
             "number of executions set by the tier up ticks flag")
 DEFINE_NEG_IMPLICATION(regexp_interpret_all, regexp_tier_up)
-DEFINE_SMI(regexp_tier_up_ticks, 1,
+DEFINE_SMI(regexp_tier_up_ticks, 0,
            "set the number of executions for the regexp interpreter before "
            "tiering-up to the compiler")
 DEFINE_REQUIREMENT(v8_flags.regexp_tier_up_ticks >= 0)
 DEFINE_BOOL(
     regexp_jit_all, false,
     "compile all regexp patterns directly to native code, skipping the "
-    "interpreter (equivalent to --regexp-tier-up --regexp-tier-up-ticks=0)")
+    "interpreter (equivalent to --regexp-tier-up --regexp-tier-up-ticks=0, "
+    "which is also the default)")
 DEFINE_NEG_IMPLICATION(jitless, regexp_jit_all)
 DEFINE_IMPLICATION(regexp_jit_all, regexp_tier_up)
 // clang-format off
@@ -3523,7 +3535,7 @@ DEFINE_VALUE_IMPLICATION(regexp_jit_all, regexp_tier_up_ticks, 0)
 DEFINE_BOOL(regexp_peephole_optimization, REGEXP_PEEPHOLE_OPTIMIZATION_BOOL,
             "enable peephole optimization for regexp bytecode")
 DEFINE_BOOL(regexp_results_cache, true, "enable the regexp results cache")
-DEFINE_BOOL(regexp_assemble_from_bytecode, true,
+DEFINE_BOOL(regexp_assemble_from_bytecode, false,
             "assemble regexp JIT-code from bytecode")
 DEFINE_NEG_NEG_IMPLICATION(regexp_tier_up, regexp_assemble_from_bytecode)
 DEFINE_BOOL(regexp_simd_in_rc, true,
