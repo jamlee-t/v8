@@ -964,7 +964,7 @@ void SetBreakOnEntryFlag(Tagged<Script> script, bool enabled) {
 // static
 bool WasmScript::SetBreakPoint(DirectHandle<Script> script, int* position,
                                DirectHandle<BreakPoint> break_point) {
-  DCHECK_NE(kOnEntryBreakpointPosition, *position);
+  if (*position < 0) return false;
 
   // Find the function for this breakpoint.
   Managed<wasm::NativeModule>::Ptr native_module = script->wasm_native_module();
