@@ -3385,9 +3385,14 @@ DEFINE_INT(stop_sim_at, 0, "Simulator stop after x number of instructions")
 DEFINE_INT(sim_stack_alignment, 16,
            "Stack alignment in bytes in simulator. This must be a power of two "
            "and it must be at least 16. 16 is default.")
+DEFINE_REQUIREMENT(
+    v8_flags.sim_stack_alignment >= 16 &&
+    base::bits::IsPowerOfTwo(v8_flags.sim_stack_alignment.value()))
 #else
 DEFINE_INT(sim_stack_alignment, 8,
            "Stack alingment in bytes in simulator (4 or 8, 8 is default)")
+DEFINE_REQUIREMENT(v8_flags.sim_stack_alignment == 4 ||
+                   v8_flags.sim_stack_alignment == 8)
 #endif
 DEFINE_INT(sim_stack_size, 2 * MB / KB,
            "Stack size of the ARM64, MIPS64 and PPC64 simulator "
