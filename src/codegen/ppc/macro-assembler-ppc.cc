@@ -431,6 +431,10 @@ Operand MacroAssembler::ClearedValue() const {
 }
 
 void MacroAssembler::Call(Label* target) {
+  // Keep a trampoline pool from being emitted between the branch and the
+  // safepoint record, so pc_offset_for_safepoint_ stays matched to the return
+  // address. The Register and Address overloads rely on the same scope.
+  BlockTrampolinePoolScope block_trampoline_pool(this);
   b(target, SetLK);
   RecordPcForSafepoint();
 }
