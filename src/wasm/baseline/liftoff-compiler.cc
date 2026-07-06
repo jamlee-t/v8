@@ -124,11 +124,101 @@ struct assert_field_size {
 #define SCOPED_CODE_COMMENT(str) ((void)0)
 #endif
 
-// For fuzzing purposes, we count each instruction as one "step". Certain
-// "bulk" type instructions (dealing with memories, tables, strings, arrays)
-// can take much more time. For simplicity, we count them all as a fixed
-// large number of steps.
-constexpr int kHeavyInstructionSteps = 1000;
+// Returns the complexity cost of an opcode for fuzzer step tracking.
+// These weights are chosen to reflect the backend complexity (TurboFan/
+// Turboshaft graph size and edge density) and runtime cost.
+// By charging more for complex opcodes, we prevent fuzzer-generated modules
+// from exceeding backend limits (like register allocation timeouts).
+constexpr int GetOpcodeCost(WasmOpcode opcode) {
+  switch (opcode) {
+    // Opcodes that trigger runtime calls and process bulk data.
+    // These can have execution times significantly higher than a single
+    // instruction and often involve complex backend lowering.
+    case kExprMemoryCopy:
+    case kExprMemoryFill:
+    case kExprMemoryInit:
+    case kExprDataDrop:
+    case kExprMemoryGrow:
+    case kExprTableCopy:
+    case kExprTableFill:
+    case kExprTableInit:
+    case kExprElemDrop:
+    case kExprArrayCopy:
+    case kExprArrayFill:
+    case kExprArrayInitData:
+    case kExprArrayInitElem:
+    case kExprStringNewWtf8Array:
+    case kExprStringNewWtf16Array:
+    case kExprStringNewUtf8Array:
+    case kExprStringNewLossyUtf8Array:
+    case kExprStringNewUtf8ArrayTry:
+    case kExprStringEncodeWtf8Array:
+    case kExprStringEncodeWtf16Array:
+    case kExprStringEncodeUtf8Array:
+    case kExprStringEncodeLossyUtf8Array:
+    case kExprI32AtomicWait:
+    case kExprI64AtomicWait:
+    case kExprStringConst:
+    case kExprStringConcat:
+    case kExprStringViewWtf8Slice:
+    case kExprStringViewWtf16Slice:
+    case kExprStringViewIterSlice:
+    case kExprThrow:
+    case kExprRethrow:
+    case kExprThrowRef:
+      return 1000;
+
+    // Opcodes that perform heap allocations or introduce high edge density in
+    // the backend. These significantly increase register allocator pressure and
+    // graph complexity.
+    case kExprStructNew:
+    case kExprStructNewDefault:
+    case kExprStructNewDefaultDesc:
+    case kExprArrayNew:
+    case kExprArrayNewDefault:
+    case kExprArrayNewFixed:
+    case kExprArrayNewData:
+    case kExprArrayNewElem:
+    case kExprStringNewWtf8:
+    case kExprStringNewWtf16:
+    case kExprStringNewUtf8:
+    case kExprStringNewLossyUtf8:
+    case kExprStringNewUtf8Try:
+    case kExprCallIndirect:
+    case kExprCallRef:
+    case kExprReturnCallIndirect:
+    case kExprReturnCallRef:
+    case kExprBrTable:
+    case kExprTry:
+    case kExprCatch:
+    case kExprCatchAll:
+      return 20;
+
+    // Opcodes that introduce simple control flow branches or type checks.
+    // Each of these typically results in at least one additional block in
+    // TurboFan/Turboshaft.
+    case kExprIf:
+    case kExprLoop:
+    case kExprBrIf:
+    case kExprBrOnNull:
+    case kExprBrOnNonNull:
+    case kExprBrOnCast:
+    case kExprBrOnCastFail:
+    case kExprRefTest:
+    case kExprRefTestNull:
+    case kExprRefCast:
+    case kExprRefCastNull:
+    case kExprRefCastNop:
+    case kExprAnyConvertExtern:
+    case kExprExternConvertAny:
+      return 5;
+
+    // Baseline for simple instructions that typically map to a small number of
+    // machine instructions within a single block.
+    default:
+      return 1;
+  }
+}
 
 constexpr ValueKind kIntPtrKind = LiftoffAssembler::kIntPtrKind;
 constexpr ValueKind kSmiKind = LiftoffAssembler::kSmiKind;
@@ -1488,14 +1578,6 @@ class LiftoffCompiler {
     asm_.AbortCompilation();
   }
 
-  // Rule of thumb: an instruction is "heavy" when its runtime is linear in
-  // some random variable that the fuzzer generates.
-  V8_INLINE void FuzzerChargeHeavyInstruction(FullDecoder* decoder) {
-    if (V8_UNLIKELY(max_steps_ != nullptr)) {
-      CheckMaxSteps(decoder, kHeavyInstructionSteps);
-    }
-  }
-
   // Load the length of a string, which will be used as steps.
   V8_INLINE void FuzzerChargeStringLength(FullDecoder* decoder,
                                           LiftoffRegister input,
@@ -1573,6 +1655,10 @@ class LiftoffCompiler {
     // precise type information.
     stack_value_types_for_debugging_ = GetStackValueTypesForDebugging(decoder);
 
+    if (V8_UNLIKELY(max_steps_ != nullptr)) {
+      CheckMaxSteps(decoder, GetOpcodeCost(opcode));
+    }
+
     if (!WasmOpcodes::IsBreakable(opcode)) return;
 
     bool has_breakpoint = false;
@@ -1633,9 +1719,6 @@ class LiftoffCompiler {
       __ emit_jump(&cont);
       EmitBreakpoint(decoder);
       __ bind(&cont);
-    }
-    if (V8_UNLIKELY(max_steps_ != nullptr)) {
-      CheckMaxSteps(decoder, 1);
     }
   }
 
@@ -4606,10 +4689,6 @@ class LiftoffCompiler {
 
   void MemoryGrow(FullDecoder* decoder, const MemoryIndexImmediate& imm,
                   const Value& value, Value* result_val) {
-    // Charge a large static cost to account for the runtime transition and
-    // potential GC from increasing externally allocated memory.
-    // Note that we also charge proportional to the number of pages below.
-    FuzzerChargeHeavyInstruction(decoder);
     // Pop the input, then spill all cache registers to make the runtime call.
     LiftoffRegList pinned;
     LiftoffRegister num_pages = pinned.set(__ PopToRegister());
@@ -6172,7 +6251,6 @@ class LiftoffCompiler {
 
   void Throw(FullDecoder* decoder, const TagIndexImmediate& imm,
              const Value* /* args */) {
-    FuzzerChargeHeavyInstruction(decoder);
     LiftoffRegList pinned;
 
     // Load the encoded size in a register for the builtin call.
@@ -6460,7 +6538,6 @@ class LiftoffCompiler {
 
   void AtomicWait(FullDecoder* decoder, ValueKind kind,
                   const MemoryAccessImmediate& imm) {
-    FuzzerChargeHeavyInstruction(decoder);
     ValueKind index_kind;
     {
       LiftoffRegList pinned;
@@ -9482,7 +9559,6 @@ class LiftoffCompiler {
 
   void StringConst(FullDecoder* decoder, const StringConstImmediate& imm,
                    Value* result) {
-    FuzzerChargeHeavyInstruction(decoder);
     VarState index_var{kI32, static_cast<int32_t>(imm.index), 0};
 
     CallBuiltin(Builtin::kWasmStringConst, MakeSig::Returns(kRef).Params(kI32),
@@ -9666,7 +9742,6 @@ class LiftoffCompiler {
 
   void StringConcat(FullDecoder* decoder, const Value& head, const Value& tail,
                     Value* result) {
-    FuzzerChargeHeavyInstruction(decoder);  // Fast but may create long strings.
     LiftoffRegList pinned;
 
     LiftoffRegister tail_reg = pinned.set(__ PopToRegister(pinned));
@@ -10198,7 +10273,6 @@ class LiftoffCompiler {
 
     if (needs_indirect_call) {
       // A direct call to an imported function.
-      FuzzerChargeHeavyInstruction(decoder);
       LiftoffRegList pinned;
       Register implicit_arg =
           pinned.set(__ GetUnusedRegister(kGpReg, pinned)).gp();
