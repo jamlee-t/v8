@@ -1380,11 +1380,11 @@ int GetWasmFrameCount(Isolate* isolate, Tagged<WasmSuspenderObject> suspender) {
     if (frame->is_wasm()) {
       WasmFrame* wasm_frame = WasmFrame::cast(frame);
       count += wasm_frame->Summarize().size();
-      DCHECK(suspender->stack()->Contains(frame->sp()));
+      DCHECK(suspender->stack()->Contains(frame->fp()));
     } else if (frame->is_javascript()) {
       // By construction, the first JS frame must be the JSPI entry point and is
       // outside of the captured stack. Stop the count.
-      DCHECK(!suspender->stack()->Contains(frame->sp()));
+      DCHECK(!suspender->stack()->Contains(frame->fp()));
       break;
     }
   }

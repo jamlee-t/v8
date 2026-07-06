@@ -98,12 +98,12 @@ class StackMemory {
   JumpBuffer* jmpbuf() { return &jmpbuf_; }
   bool Contains(Address addr) const {
     if (!owned_) {
-      return reinterpret_cast<Address>(limit_) <= addr && addr < base();
+      return reinterpret_cast<Address>(limit_) <= addr && addr <= base();
     }
     for (auto segment = first_segment_; segment;
          segment = segment->next_segment_) {
       if (reinterpret_cast<Address>(segment->limit_) <= addr &&
-          addr < segment->base()) {
+          addr <= segment->base()) {
         return true;
       }
       if (segment == active_segment_) break;
