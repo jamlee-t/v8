@@ -4,6 +4,7 @@
 
 #include "src/maglev/maglev-known-node-aspects.h"
 
+#include <algorithm>
 #include <iostream>
 
 #include "include/v8-internal.h"
@@ -500,7 +501,7 @@ void KnownNodeAspects::ClearUnstableNodeAspectsForStoreMap(
       };
       // Mark aliasing maps as stale.
       if (MarkMapsStaleIfAny(MaybeAliases)) {
-        if (V8_UNLIKELY(v8_flags.trace_maglev_kna)) {
+        if (V8_UNLIKELY(v8_flags.trace_maglev_kna && is_tracing_enabled)) {
           std::cout << kRed << "[KNA] StoreMap: Invalidate alias "
                     << Brief(*old_map.object()) << kReset << std::endl;
         }
@@ -511,8 +512,49 @@ void KnownNodeAspects::ClearUnstableNodeAspectsForStoreMap(
 
   // TODO(olivf): Only invalidate nodes with the same type.
   OnSideEffect();
-  if (V8_UNLIKELY(v8_flags.trace_maglev_kna)) {
+  if (V8_UNLIKELY(v8_flags.trace_maglev_kna && is_tracing_enabled)) {
     std::cout << kRed << "[KNA] StoreMap: Invalidate all unstable maps"
+              << kReset << std::endl;
+  }
+}
+
+void KnownNodeAspects::ClearUnstableNodeAspectsForElementsTransition(
+    const ZoneVector<compiler::MapRef>& transition_sources,
+    bool is_tracing_enabled) {
+  // The transition only fires on objects whose current map is one of the
+  // sources, so only facts about nodes that may hold such an object can go
+  // stale; everything else survives.
+  auto MaybeAliases = [&](compiler::MapRef map) -> bool {
+    for (compiler::MapRef source : transition_sources) {
+      if (source.equals(map)) return true;
+    }
+    return false;
+  };
+  if (MarkMapsStaleIfAny(MaybeAliases)) {
+    if (V8_UNLIKELY(v8_flags.trace_maglev_kna && is_tracing_enabled)) {
+      std::cout << kRed
+                << "[KNA] ElementsTransition: Invalidate source-map aliases"
+                << kReset << std::endl;
+    }
+  }
+  // A transitioning object's elements store may be reallocated; drop cached
+  // elements for any node that may alias a source-mapped object (including
+  // nodes whose map is unknown or already stale).
+  auto it = loaded_properties_.find(PropertyKey::Elements());
+  if (it == loaded_properties_.end()) return;
+  bool dropped_any =
+      std::erase_if(it->second, [&](const auto& entry) {
+        const NodeInfo* info = TryGetInfoFor(entry.first);
+        if (!info || !info->possible_maps_are_known() ||
+            info->maps_are_stale()) {
+          return true;
+        }
+        const auto& maps = info->possible_maps();
+        return std::any_of(maps.begin(), maps.end(), MaybeAliases);
+      }) > 0;
+  if (dropped_any &&
+      V8_UNLIKELY(v8_flags.trace_maglev_kna && is_tracing_enabled)) {
+    std::cout << kRed << "[KNA] ElementsTransition: Drop aliased [Elements]"
               << kReset << std::endl;
   }
 }

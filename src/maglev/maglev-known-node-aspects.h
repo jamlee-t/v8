@@ -414,6 +414,9 @@ class KnownNodeAspects {
 
   void ClearUnstableNodeAspectsForStoreMap(StoreMap* node,
                                            bool is_tracing_enabled);
+  void ClearUnstableNodeAspectsForElementsTransition(
+      const ZoneVector<compiler::MapRef>& transition_sources,
+      bool is_tracing_enabled);
   void ClearUnstableNodeAspects(bool is_tracing_enabled);
 
   void OnSideEffect() {
@@ -789,6 +792,11 @@ class KnownNodeAspects {
       // values themselves, so cached values are still valid.
     } else if constexpr (std::is_same_v<NodeT, StoreMap>) {
       ClearUnstableNodeAspectsForStoreMap(node, is_tracing_enabled);
+    } else if constexpr (std::is_same_v<NodeT, TransitionElementsKind> ||
+                         std::is_same_v<NodeT,
+                                        TransitionElementsKindOrCheckMap>) {
+      ClearUnstableNodeAspectsForElementsTransition(node->transition_sources(),
+                                                    is_tracing_enabled);
     } else if constexpr (!IsSimpleFieldStore(Node::opcode_of<NodeT>) &&
                          !IsTypedArrayStore(Node::opcode_of<NodeT>)) {
       // Don't change known node aspects for simple field stores. The only
