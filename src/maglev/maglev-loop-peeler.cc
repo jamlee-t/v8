@@ -35,6 +35,16 @@ void RegisterClonedNode(Graph* graph, NodeBase* clone, const NodeBase* src) {
     graph->graph_labeller()->RegisterNode(
         clone, &graph->graph_labeller()->GetNodeProvenance(src));
   }
+  // Register the cloned deopt top frame(s) so passes walking the graph's frame
+  // sets (e.g. RecomputePhiUseHintsProcessor) see the peeled iteration.
+  if (clone->properties().has_eager_deopt_info()) {
+    graph->AddEagerTopFrame(&clone->eager_deopt_info()->top_frame());
+  }
+  if (clone->properties().can_lazy_deopt()) {
+    auto [top_frame, result_location, result_size] =
+        clone->lazy_deopt_info()->GetFrameForCloning();
+    graph->AddLazyTopFrame(top_frame, result_location, result_size);
+  }
 }
 
 int LoopHeaderBytecodeOffset(BasicBlock* block) {

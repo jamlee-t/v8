@@ -40,7 +40,68 @@ class RecomputePhiUseHintsProcessor {
   explicit RecomputePhiUseHintsProcessor(Zone* zone) : live_loop_phis_(zone) {}
 
   void PreProcessGraph(Graph* graph) {}
-  void PostProcessGraph(Graph* graph) {}
+  void PostProcessGraph(Graph* graph) {
+#ifdef DEBUG
+    // The recording below trusts the graph's top-frame sets to be exhaustive:
+    // a top frame referencing a Phi that isn't registered would be skipped,
+    // silently letting the Phi be truncated. Enforce the invariant that any
+    // unregistered top frame is Phi-free (e.g. the FunctionEntryStackCheck
+    // frame, which is never registered but has no Phis at function entry).
+    // TODO(victorgomes): Move this check to the Maglev verifier and make frame
+    // registration a global invariant (kept live across escape analysis and the
+    // classic-Maglev LICM frame rewrites), so it can run at every pipeline
+    // point instead of only here.
+    auto references_phi = [](const auto* deopt_info) {
+      bool found = false;
+      deopt_info->ForEachInput([&](ValueNode* input) {
+        if (input->Is<Phi>()) found = true;
+      });
+      return found;
+    };
+    for (BasicBlock* block : graph->blocks()) {
+      if (block->is_dead()) continue;
+      block->ForEachNodeAndControl([&](NodeBase* node) {
+        if (node->properties().has_eager_deopt_info()) {
+          const EagerDeoptInfo* info = node->eager_deopt_info();
+          DCHECK_IMPLIES(
+              !graph->eager_deopt_top_frames().contains(&info->top_frame()),
+              !references_phi(info));
+        }
+        if (node->properties().can_lazy_deopt()) {
+          const LazyDeoptInfo* info = node->lazy_deopt_info();
+          DCHECK_IMPLIES(
+              !graph->lazy_deopt_top_frames().contains(&info->top_frame()),
+              !references_phi(info));
+        }
+      });
+    }
+#endif  // DEBUG
+    // Record kNonTruncated for Phis referenced by deopt frames, walking the
+    // graph's deduplicated top-frame sets instead of every node's frame. This
+    // uses the non-const ForEachInput, which also unwraps the frames and moves
+    // their deopt uses onto the unwrapped nodes, which UnwrapDeoptFrames relies
+    // on. Relies on every live top frame being registered there (the loop
+    // peeler registers its cloned frames).
+    auto record_deopt_use = [](ValueNode* input) {
+      Phi* phi = input->TryCast<Phi>();
+      if (!phi) return;
+      phi->RecordUseReprHint(
+          UseRepresentationSet{UseRepresentation::kNonTruncated},
+          /*force_same_loop=*/false);
+      TRACE_PHI_USE_HINTS("updating deopt-frame use hints for "
+                          << PrintNodeLabel(phi)
+                          << ": use_reprs=" << phi->use_repr_hints());
+    };
+    for (DeoptFrame* top_frame : graph->eager_deopt_top_frames()) {
+      EagerDeoptInfo info(graph->zone(), top_frame, {});
+      info.ForEachInput(record_deopt_use);
+    }
+    for (auto [top_frame, result_location] : graph->lazy_deopt_top_frames()) {
+      LazyDeoptInfo info(graph->zone(), top_frame, result_location.first,
+                         result_location.second, {});
+      info.ForEachInput(record_deopt_use);
+    }
+  }
   BlockProcessResult PostProcessBasicBlock(BasicBlock* block) {
     return BlockProcessResult::kContinue;
   }
@@ -137,30 +198,7 @@ class RecomputePhiUseHintsProcessor {
             << " after visiting input " << PrintNode(node));
       }
     }
-    // Values referenced by deopt frames are re-materialized upon
-    // deoptimization, so they must survive as a non-truncated representation.
-    // Any reversible untagging (Int32/Float64/HoleyFloat64) can be
-    // re-materialized, but the irreversible truncated Int32 cannot. Missing
-    // these uses can let a Phi be truncated, corrupting the value the
-    // interpreter resumes with.
-    auto record_deopt_use = [&](ValueNode* input) {
-      if (Phi* phi = input->TryCast<Phi>()) {
-        phi->RecordUseReprHint(
-            UseRepresentationSet{UseRepresentation::kNonTruncated},
-            live_loop_phis_.contains(phi));
-        TRACE_PHI_USE_HINTS(
-            "updating use hints for "
-            << PrintNodeLabel(phi) << ": use_reprs=" << phi->use_repr_hints()
-            << " and same_loop_use_reprs=" << phi->same_loop_use_repr_hints()
-            << " after visiting deopt frame of " << PrintNode(node));
-      }
-    };
-    if (node->properties().has_eager_deopt_info()) {
-      node->eager_deopt_info()->ForEachInput(record_deopt_use);
-    }
-    if (node->properties().can_lazy_deopt()) {
-      node->lazy_deopt_info()->ForEachInput(record_deopt_use);
-    }
+    // Deopt-frame uses are recorded in PostProcessGraph.
     return ProcessResult::kContinue;
   }
 
