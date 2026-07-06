@@ -3793,8 +3793,9 @@ class TurboshaftGraphBuildingInterface
         }
         case wasm::kRef:
         case wasm::kRefNull:
-          __ StoreFixedArrayElement(values_array, index, value,
-                                    compiler::kFullWriteBarrier);
+          __ StoreFixedArrayElement(
+              values_array, index, value, compiler::kFullWriteBarrier,
+              /*maybe_initializing_or_transitioning=*/true);
           index++;
           break;
         case kS128: {
@@ -9087,10 +9088,12 @@ class TurboshaftGraphBuildingInterface
     V<Smi> upper_half =
         ChangeUint31ToSmi(__ Word32ShiftRightLogical(value, 16));
     __ StoreFixedArrayElement(values_array, index, upper_half,
-                              compiler::kNoWriteBarrier);
+                              compiler::kNoWriteBarrier,
+                              /*maybe_initializing_or_transitioning=*/true);
     V<Smi> lower_half = ChangeUint31ToSmi(__ Word32BitwiseAnd(value, 0xffffu));
     __ StoreFixedArrayElement(values_array, index + 1, lower_half,
-                              compiler::kNoWriteBarrier);
+                              compiler::kNoWriteBarrier,
+                              /*maybe_initializing_or_transitioning=*/true);
   }
 
   V<Word32> BuildDecodeException32BitValue(V<FixedArray> exception_values_array,

@@ -1336,7 +1336,11 @@ struct BuiltinCallDescriptor {
     static constexpr bool kNeedsFrameState = false;
     static constexpr bool kNeedsContext = false;
     static constexpr Operator::Properties kProperties = Operator::kNoProperties;
-    static constexpr OpEffects kEffects = base_effects.CanAllocate();
+    // Returns an uninitialized array whose elements are filled by later
+    // initializing stores, so the allocation must stay anchored (as for
+    // WasmAllocateDescriptorStruct) and not float across a trap.
+    static constexpr OpEffects kEffects =
+        base_effects.CanAllocate().CanDoRawHeapAccess();
   };
 
   struct WasmThrow : public Descriptor<WasmThrow> {

@@ -3331,11 +3331,14 @@ class AssemblerOpInterface : public Next {
           maybe_initializing_or_transitioning);
   }
 
-  void StoreFixedArrayElement(V<FixedArray> array, int index, V<Object> value,
-                              compiler::WriteBarrierKind write_barrier) {
+  void StoreFixedArrayElement(
+      V<FixedArray> array, int index, V<Object> value,
+      compiler::WriteBarrierKind write_barrier,
+      bool maybe_initializing_or_transitioning = false) {
     Store(array, value, LoadOp::Kind::TaggedBase(),
           MemoryRepresentation::AnyTagged(), write_barrier,
-          FixedArray::OffsetOfElementAt(index));
+          FixedArray::OffsetOfElementAt(index),
+          maybe_initializing_or_transitioning);
   }
 
   void StoreFixedArrayElement(V<FixedArray> array, V<WordPtr> index,
