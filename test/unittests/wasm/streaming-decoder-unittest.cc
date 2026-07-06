@@ -102,7 +102,7 @@ class WasmStreamingDecoderTest : public ::testing::Test {
                       size_t expected_sections, size_t expected_functions) {
     for (size_t split = 0; split <= data.size(); ++split) {
       MockStreamingResult result;
-      auto stream = StreamingDecoder::CreateAsyncStreamingDecoder(
+      auto stream = StreamingDecoder::Create(
           std::make_unique<MockStreamingProcessor>(&result));
       stream->OnBytesReceived(data.SubVector(0, split));
       stream->OnBytesReceived(data.SubVector(split, data.size()));
@@ -117,7 +117,7 @@ class WasmStreamingDecoderTest : public ::testing::Test {
   void ExpectFailure(base::Vector<const uint8_t> data) {
     for (size_t split = 0; split <= data.size(); ++split) {
       MockStreamingResult result;
-      auto stream = StreamingDecoder::CreateAsyncStreamingDecoder(
+      auto stream = StreamingDecoder::Create(
           std::make_unique<MockStreamingProcessor>(&result));
       stream->OnBytesReceived(data.SubVector(0, split));
       stream->OnBytesReceived(data.SubVector(split, data.size()));
@@ -130,7 +130,7 @@ class WasmStreamingDecoderTest : public ::testing::Test {
 
 TEST_F(WasmStreamingDecoderTest, EmptyStream) {
   MockStreamingResult result;
-  auto stream = StreamingDecoder::CreateAsyncStreamingDecoder(
+  auto stream = StreamingDecoder::Create(
       std::make_unique<MockStreamingProcessor>(&result));
   stream->Finish({});
   EXPECT_FALSE(result.ok());
@@ -140,7 +140,7 @@ TEST_F(WasmStreamingDecoderTest, IncompleteModuleHeader) {
   const uint8_t data[] = {U32_LE(kWasmMagic), U32_LE(kWasmVersion)};
   {
     MockStreamingResult result;
-    auto stream = StreamingDecoder::CreateAsyncStreamingDecoder(
+    auto stream = StreamingDecoder::Create(
         std::make_unique<MockStreamingProcessor>(&result));
     stream->OnBytesReceived(base::VectorOf(data, 1));
     stream->Finish({});

@@ -2497,8 +2497,8 @@ class AsyncStreamingProcessor final : public StreamingProcessor {
 
 std::shared_ptr<StreamingDecoder> AsyncCompileJob::CreateStreamingDecoder() {
   DCHECK_NULL(stream_);
-  stream_ = StreamingDecoder::CreateAsyncStreamingDecoder(
-      std::make_unique<AsyncStreamingProcessor>(this));
+  stream_ =
+      StreamingDecoder::Create(std::make_unique<AsyncStreamingProcessor>(this));
   return stream_;
 }
 
