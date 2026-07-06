@@ -215,6 +215,12 @@ void DisassemblePreviousInstruction(struct user_regs_struct& regs,
     return;
   }
 
+  fprintf(stderr, "Bytes around rip (offset %zu):", rip_offset);
+  for (uint8_t b : bytes_around_rip) {
+    fprintf(stderr, " %02x", b);
+  }
+  fprintf(stderr, "\n");
+
   FATAL("Failed to disassemble instruction before 0x%" PRIx64,
         static_cast<uint64_t>(regs.rip));
 }
