@@ -787,6 +787,8 @@ class KnownNodeAspects {
         }
       }
     } else if constexpr (std::is_same_v<NodeT, CheckMapsWithMigration> ||
+                         std::is_same_v<NodeT,
+                                        CheckMapsWithMigrationAndDeopt> ||
                          std::is_same_v<NodeT, MigrateMapIfNeeded>) {
       // These instructions only migrate representations of values, not the
       // values themselves, so cached values are still valid.
