@@ -508,6 +508,11 @@ class MergePointInterpreterFrameState {
   bool is_loop_with_peeled_iteration() const {
     return kIsLoopWithPeeledIterationBit::decode(bitfield_);
   }
+  void set_is_loop_with_peeled_iteration() {
+    DCHECK(is_loop());
+    DCHECK(!is_resumable_loop());
+    bitfield_ = kIsLoopWithPeeledIterationBit::update(bitfield_, true);
+  }
 
   int merge_offset() const { return merge_offset_; }
 

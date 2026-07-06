@@ -656,6 +656,7 @@ void MaglevLoopPeeler::PeelLoop(const LoopInfo& loop) {
   RewireLoopConnections(ctx);
   SplicePeeledBlocks(ctx);
 
+  loop.header()->state()->set_is_loop_with_peeled_iteration();
   TRACE_PEEL_PEELED("@" << LoopHeaderBytecodeOffset(loop.header())
                         << ": peeled (body=" << loop.body.size()
                         << " block(s), exits=" << loop.exits.size());
