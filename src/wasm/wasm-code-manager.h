@@ -469,6 +469,8 @@ class V8_EXPORT_PRIVATE WasmCode final {
     DCHECK_LE(jump_table_info_offset, unpadded_binary_size);
   }
 
+  void TryLoadSourceMap(Isolate* isolate) const;
+
   std::unique_ptr<const uint8_t[]> ConcatenateBytes(
       std::initializer_list<base::Vector<const uint8_t>>);
 

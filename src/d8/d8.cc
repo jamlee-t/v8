@@ -5076,7 +5076,12 @@ void Shell::Initialize(Isolate* isolate, D8Console* console,
 
 Local<String> Shell::WasmLoadSourceMapCallback(Isolate* isolate,
                                                const char* path) {
-  return Shell::ReadFile(isolate, path, false).ToLocalChecked();
+  MaybeLocal<String> result = Shell::ReadFile(isolate, path, false);
+  if (result.IsEmpty()) {
+    fprintf(stderr, "Error loading Wasm source map file '%s'\n", path);
+    return Local<String>();
+  }
+  return result.ToLocalChecked();
 }
 
 MaybeLocal<Context> Shell::CreateEvaluationContext(Isolate* isolate) {

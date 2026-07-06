@@ -303,23 +303,7 @@ void WasmCode::LogCode(Isolate* isolate, const char* source_url,
   WasmName name = base::VectorOf(fn_name);
 
   if (native_module_) {
-    const WasmModule* module = native_module_->module();
-    const WasmDebugSymbols& symbol =
-        module->debug_symbols[WasmDebugSymbols::Type::SourceMap];
-    auto load_wasm_source_map = isolate->wasm_load_source_map_callback();
-    auto source_map = native_module_->GetWasmSourceMap();
-    if (!source_map && symbol.type == WasmDebugSymbols::Type::SourceMap &&
-        !symbol.external_url.is_empty() && load_wasm_source_map) {
-      ModuleWireBytes wire_bytes(native_module_->wire_bytes());
-      WasmName external_url = wire_bytes.GetNameOrNull(symbol.external_url);
-      std::string external_url_string(external_url.data(), external_url.size());
-      HandleScope scope(isolate);
-      v8::Isolate* v8_isolate = reinterpret_cast<v8::Isolate*>(isolate);
-      Local<v8::String> source_map_str =
-          load_wasm_source_map(v8_isolate, external_url_string.c_str());
-      native_module_->SetWasmSourceMap(
-          std::make_unique<WasmModuleSourceMap>(v8_isolate, source_map_str));
-    }
+    TryLoadSourceMap(isolate);
   }
 
   // Record source positions before adding code, otherwise when code is added,
@@ -424,6 +408,31 @@ void WasmCode::Validate() const {
     }
   }
 #endif
+}
+
+void WasmCode::TryLoadSourceMap(Isolate* isolate) const {
+  auto load_wasm_source_map = isolate->wasm_load_source_map_callback();
+  if (!load_wasm_source_map) return;
+
+  if (native_module_->GetWasmSourceMap()) return;
+
+  const WasmModule* module = native_module_->module();
+  const WasmDebugSymbols& symbol =
+      module->debug_symbols[WasmDebugSymbols::Type::SourceMap];
+  if (symbol.type != WasmDebugSymbols::Type::SourceMap) return;
+  if (symbol.external_url.is_empty()) return;
+
+  ModuleWireBytes wire_bytes(native_module_->wire_bytes());
+  WasmName external_url = wire_bytes.GetNameOrNull(symbol.external_url);
+  std::string external_url_string(external_url.data(), external_url.size());
+  HandleScope scope(isolate);
+  v8::Isolate* v8_isolate = reinterpret_cast<v8::Isolate*>(isolate);
+  Local<v8::String> source_map_str =
+      load_wasm_source_map(v8_isolate, external_url_string.c_str());
+  if (source_map_str.IsEmpty()) return;
+
+  native_module_->SetWasmSourceMap(
+      std::make_unique<WasmModuleSourceMap>(v8_isolate, source_map_str));
 }
 
 void WasmCode::MaybePrint() const {
