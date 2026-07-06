@@ -252,6 +252,14 @@ MaybeDirectHandle<Context> NewScriptContext(
       }
 
       JSGlobalObject::InvalidatePropertyCell(global_object, name);
+
+      // HasRestrictedGlobalProperty can run user code via a global-object
+      // property interceptor, which may re-entrantly add script contexts and
+      // replace the table. Reload it so the clash checks above on later
+      // iterations (and the extension below) observe those additions instead
+      // of clobbering them. PatchValue reuses the handle rather than allocating
+      // one per iteration.
+      script_context.PatchValue(native_context->script_context_table());
     }
   }
 
