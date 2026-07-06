@@ -137,6 +137,7 @@ class MaybeObjectSize final {
   V(JSExternalObject)                       \
   V(JSFinalizationRegistry)                 \
   V(JSFunction)                             \
+  V(JSGlobalProxy)                          \
   V(JSObject)                               \
   V(JSRegExp)                               \
   V(JSSynchronizationPrimitive)             \

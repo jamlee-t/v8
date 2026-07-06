@@ -10,6 +10,7 @@
 
 #include "include/v8-metrics.h"
 #include "src/base/atomic-utils.h"
+#include "src/base/atomicops.h"
 #include "src/base/logging.h"
 #include "src/base/platform/time.h"
 #include "src/base/strings.h"
@@ -859,6 +860,12 @@ void GCTracer::AddIncrementalSweepingStep(double duration) {
   ReportIncrementalSweepingStepToRecorder(duration);
 }
 
+void GCTracer::IncrementJSGlobalProxyCount() {
+  v8::base::Relaxed_AtomicIncrement(reinterpret_cast<v8::base::AtomicWord*>(
+                                        &current_.found_js_global_proxies),
+                                    1);
+}
+
 void GCTracer::Output(const char* format, ...) const {
   if (v8_flags.trace_gc) {
     va_list arguments;
@@ -1166,6 +1173,7 @@ void GCTracer::PrintNVP() const {
              current_scope(Scope::MC_MARK_EMBEDDER_PROLOGUE))
           .p("mark.embedder_tracing",
              current_scope(Scope::MC_MARK_EMBEDDER_TRACING))
+          .p("mark.js_global_proxies", current_.found_js_global_proxies)
           .p("prologue", current_scope(Scope::MC_PROLOGUE))
           .p("sweep", current_scope(Scope::MC_SWEEP))
           .p("sweep.code", current_scope(Scope::MC_SWEEP_CODE))

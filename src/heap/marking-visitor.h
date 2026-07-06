@@ -90,6 +90,9 @@ class MarkingVisitorBase : public ConcurrentHeapVisitor<ConcreteVisitor> {
                                    MaybeObjectSize);
   V8_INLINE size_t VisitJSFunction(Tagged<Map> map, Tagged<JSFunction> object,
                                    MaybeObjectSize);
+  V8_INLINE size_t VisitJSGlobalProxy(Tagged<Map> map,
+                                      Tagged<JSGlobalProxy> object,
+                                      MaybeObjectSize);
   V8_INLINE size_t VisitJSWeakRef(Tagged<Map> map, Tagged<JSWeakRef> object,
                                   MaybeObjectSize);
   V8_INLINE size_t VisitMap(Tagged<Map> map, Tagged<Map> object,

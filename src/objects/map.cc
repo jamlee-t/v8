@@ -393,8 +393,9 @@ VisitorId Map::GetVisitorId(Tagged<Map> map) {
     // Objects that are used as API wrapper objects and can have embedder
     // fields. Note that there's more of these kinds (e.g. JS_ARRAY_BUFFER_TYPE)
     // but they have their own visitor id for other reasons
-    case JS_API_OBJECT_TYPE:
     case JS_GLOBAL_PROXY_TYPE:
+      return kVisitJSGlobalProxy;
+    case JS_API_OBJECT_TYPE:
     case JS_GLOBAL_OBJECT_TYPE:
     case JS_SPECIAL_API_OBJECT_TYPE:
       return kVisitJSApiObject;

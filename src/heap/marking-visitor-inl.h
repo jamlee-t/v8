@@ -451,6 +451,14 @@ size_t MarkingVisitorBase<ConcreteVisitor>::VisitJSFunction(
 }
 
 template <typename ConcreteVisitor>
+size_t MarkingVisitorBase<ConcreteVisitor>::VisitJSGlobalProxy(
+    Tagged<Map> map, Tagged<JSGlobalProxy> object,
+    MaybeObjectSize maybe_object_size) {
+  this->heap_->tracer()->IncrementJSGlobalProxyCount();
+  return Base::VisitJSGlobalProxy(map, object, maybe_object_size);
+}
+
+template <typename ConcreteVisitor>
 size_t MarkingVisitorBase<ConcreteVisitor>::VisitSharedFunctionInfo(
     Tagged<Map> map, Tagged<SharedFunctionInfo> shared_info,
     MaybeObjectSize maybe_object_size) {

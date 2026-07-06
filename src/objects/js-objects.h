@@ -1225,6 +1225,8 @@ class JSIteratorResult : public JSObject {
 
 V8_OBJECT class JSGlobalProxy : public JSSpecialObject {
  public:
+  class BodyDescriptor;
+
   inline bool IsDetachedFrom(Tagged<JSGlobalObject> global) const;
   inline bool IsDetached() const;
 

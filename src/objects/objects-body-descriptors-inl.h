@@ -191,6 +191,23 @@ class JSAPIObjectWithEmbedderSlots::BodyDescriptor
   }
 };
 
+class JSGlobalProxy::BodyDescriptor
+    : public JSAPIObjectWithEmbedderSlotsOrJSSpecialObjectBodyDescriptor {
+ public:
+  template <typename ObjectVisitor>
+  static inline void IterateBody(Tagged<Map> map, Tagged<HeapObject> obj,
+                                 int object_size, ObjectVisitor* v) {
+    IterateJSAPIObjectWithEmbedderSlotsHeader(map, obj, object_size, v);
+    IterateJSAPIObjectWithEmbedderSlotsTail<
+        JSAPIObjectWithEmbedderSlotsOrJSSpecialObjectBodyDescriptor>(
+        map, obj, object_size, v);
+  }
+
+  static inline int SizeOf(Tagged<Map> map, Tagged<HeapObject> object) {
+    return map->instance_size();
+  }
+};
+
 class CppHeapExternalObject::BodyDescriptor final : public BodyDescriptorBase {
  public:
   template <typename ObjectVisitor>
