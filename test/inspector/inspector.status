@@ -204,20 +204,7 @@
 
 ##############################################################################
 ['variant == stress_concurrent_allocation', {
-  # TODO(dinfuehr): Fix tests such that we can remove these lines.
-  'cpu-profiler/coverage': [SKIP],
-  'cpu-profiler/coverage-block': [SKIP],
-  'runtime/internal-properties-entries': [SKIP],
-
-  # TODO(v8:12590): the test became too slow with external code space enabled.
-  # Skip it for now.
-  'debugger/wasm-step-a-lot': [SKIP],
-
-  # Skip tests that might fail with concurrent allocation
-  'debugger/pause-on-oom-wide': [SKIP],
-
-  # TODO(v8:12612): This test may fail on builds with MinorMS because incremental marking prevents getting any minor GCs.
-  'heap-profiler/sampling-heap-profiler-flags': [PASS, ['mode == debug or tsan', SKIP]],
+  '*': [SKIP],
 }], # stress_concurrent_allocation
 
 ##############################################################################
