@@ -7332,3 +7332,56 @@ TEST(ScriptContextTableReentrancy) {
   CHECK_EQ(1234, v8_run_int32("c_9"));
   CHECK_EQ(0, v8_run_int32("v_0"));
 }
+
+namespace {
+
+// Query interceptor that, the first time it sees the outer script's second
+// lexical name `b`, re-enters V8 to declare `a` -- a name the outer clash
+// check has already passed by then.
+v8::Intercepted ReenterAndDeclareEarlierName(
+    Local<Name> property, const v8::PropertyCallbackInfo<v8::Integer>& info) {
+  v8::Isolate* isolate = info.GetIsolate();
+  String::Utf8Value name(isolate, property);
+  if (*name == nullptr || strcmp(*name, "b") != 0) {
+    return v8::Intercepted::kNo;
+  }
+  bool& declared_a = *GetData<bool>(info);
+  if (!declared_a) {
+    declared_a = true;
+    CompileRun("let a = 1;");
+  }
+  return v8::Intercepted::kNo;
+}
+
+}  // namespace
+
+// Regression test: the name-clash check in NewScriptContext runs before each
+// name's interceptor, so a re-entrant declaration colliding with an
+// already-checked name used to slip past clash detection and end up as a
+// silent duplicate binding added by ScriptContextTable::Add. Compiling
+// `let a; let b;` re-enters on `b` to declare `a`, which must turn the outer
+// `a` into a redeclaration SyntaxError rather than a second binding.
+TEST(ScriptContextTableReentrantClash) {
+  v8::Isolate* isolate = CcTest::isolate();
+  v8::HandleScope scope(isolate);
+
+  bool declared_a = false;
+  Local<ObjectTemplate> global_template = ObjectTemplate::New(isolate);
+  global_template->SetHandler(v8::NamedPropertyHandlerConfiguration(
+      nullptr, nullptr, ReenterAndDeclareEarlierName, nullptr, nullptr,
+      MakeData(isolate, &declared_a),
+      v8::PropertyHandlerFlags::kHasDontDeleteProperty));
+
+  Local<Context> context = Context::New(isolate, nullptr, global_template);
+  v8::Context::Scope context_scope(context);
+
+  v8::TryCatch try_catch(isolate);
+  CompileRun("let a; let b;");
+  CHECK(try_catch.HasCaught());
+  CHECK(try_catch.Exception()->IsNativeError());
+  String::Utf8Value message(isolate, try_catch.Message()->Get());
+  CHECK_NOT_NULL(strstr(*message, "has already been declared"));
+
+  // The re-entrant declaration committed before the outer script was rejected.
+  CHECK_EQ(1, v8_run_int32("a"));
+}
