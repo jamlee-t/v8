@@ -38,6 +38,7 @@
 #include "include/v8-isolate.h"
 #include "include/v8-json.h"
 #include "include/v8-locker.h"
+#include "include/v8-platform.h"
 #include "include/v8-profiler.h"
 #include "include/v8-wasm.h"
 #include "src/api/api-inl.h"
@@ -96,6 +97,7 @@
 #endif  // V8_ENABLE_MAGLEV
 
 #ifdef V8_ENABLE_PARTITION_ALLOC
+#include "third_party/partition_alloc/src/partition_alloc/partition_alloc.h"
 #include "third_party/partition_alloc/src/partition_alloc/partition_root.h"
 #include "third_party/partition_alloc/src/partition_alloc/shim/allocator_shim_default_dispatch_to_partition_alloc.h"
 #endif  // V8_ENABLE_PARTITION_ALLOC
@@ -458,6 +460,99 @@ base::Thread::Options GetThreadOptions(const char* name) {
 }
 
 }  // namespace
+
+#ifdef V8_ENABLE_SANDBOX
+#ifdef V8_ENABLE_PARTITION_ALLOC
+
+class PAInSandboxAllocator final : public v8::Allocator {
+ public:
+  explicit PAInSandboxAllocator(i::Sandbox* sandbox) {
+    const size_t max_pool_size = partition_alloc::internal::
+        PartitionAddressSpace::ConfigurablePoolMaxSize();
+    const size_t min_pool_size = partition_alloc::internal::
+        PartitionAddressSpace::ConfigurablePoolMinSize();
+    size_t pool_size = max_pool_size;
+    // Try to reserve the maximum size of the pool at first, then keep halving
+    // the size on failure until it succeeds.
+    uintptr_t pool_base = 0;
+    while (!pool_base && pool_size >= min_pool_size) {
+      pool_base = sandbox->address_space()->AllocatePages(
+          VirtualAddressSpace::kNoHint, pool_size, pool_size,
+          v8::PagePermissions::kNoAccess);
+      if (!pool_base) {
+        pool_size /= 2;
+      }
+    }
+    // The V8 sandbox is guaranteed to be large enough to host the pool.
+    CHECK(pool_base);
+    // Call PartitionAddressSpace::Init() first just to make sure metadata
+    // region start is initialized and the configurable pool allocations do have
+    // out-of-line metadata.
+    partition_alloc::internal::PartitionAddressSpace::Init();
+    partition_alloc::internal::PartitionAddressSpace::InitConfigurablePool(
+        pool_base, pool_size);
+
+    partition_alloc::PartitionOptions opts;
+    opts.backup_ref_ptr = partition_alloc::PartitionOptions::kDisabled;
+    opts.use_configurable_pool = partition_alloc::PartitionOptions::kAllowed;
+    partition_.init(std::move(opts));
+
+    // Also adjust the limits for dirty bytes and slot span ring size in the
+    // ArrayBuffer partition root assuming we are running foregrounded.
+    constexpr int kForegroundMaxEmptySlotSpansDirtyBytesShift = 2;
+    partition_.root()->AdjustSlotSpanRing(
+        partition_alloc::internal::kMaxEmptySlotSpanRingSize,
+        kForegroundMaxEmptySlotSpansDirtyBytesShift);
+  }
+
+  ~PAInSandboxAllocator() {
+    // Intentionally leak pages here. The sandbox is never destroyed in d8.
+  }
+
+  PAInSandboxAllocator(const PAInSandboxAllocator&) = delete;
+  PAInSandboxAllocator& operator=(const PAInSandboxAllocator&) = delete;
+
+  void* Allocate(size_t size) override {
+    constexpr partition_alloc::AllocFlags flags =
+        partition_alloc::AllocFlags::kZeroFill |
+        partition_alloc::AllocFlags::kReturnNull;
+    return AllocateInternal<flags>(size);
+  }
+
+  void* AllocateUninitialized(size_t size) override {
+    constexpr partition_alloc::AllocFlags flags =
+        partition_alloc::AllocFlags::kReturnNull;
+    return AllocateInternal<flags>(size);
+  }
+
+  void* AllocateUninitializedOrCrash(size_t size) override {
+    return AllocateInternal<partition_alloc::AllocFlags::kNone>(size);
+  }
+
+  void Free(void* ptr) override {
+    partition_.root()->Free<partition_alloc::FreeFlags::kNoMemoryToolOverride>(
+        ptr);
+  }
+
+ private:
+  template <partition_alloc::AllocFlags flags>
+  void* AllocateInternal(size_t length) {
+    // The V8 sandbox requires all ArrayBuffer backing stores to be allocated
+    // inside the sandbox address space. This isn't guaranteed if allocation
+    // override hooks (which are e.g. used by GWP-ASan) are enabled or if a
+    // memory tool (e.g. ASan) overrides malloc, so disable both.
+    constexpr auto new_flags =
+        flags | partition_alloc::AllocFlags::kNoOverrideHooks |
+        partition_alloc::AllocFlags::kNoMemoryToolOverride;
+    return partition_.root()->AllocInline<new_flags>(length,
+                                                     "PAInSandboxAllocator");
+  }
+
+  partition_alloc::PartitionAllocator partition_;
+};
+
+#endif  // V8_ENABLE_PARTITION_ALLOC
+#endif  // V8_ENABLE_SANDBOX
 
 namespace tracing {
 
@@ -7857,6 +7952,13 @@ int Shell::Main(int argc, char* argv[]) {
   } else {
     v8::V8::InitializeExternalStartupData(argv[0]);
   }
+#ifdef V8_ENABLE_SANDBOX
+#ifdef V8_ENABLE_PARTITION_ALLOC
+  v8::V8::SetInSandboxAllocator(
+      std::make_shared<PAInSandboxAllocator>(i::Sandbox::current()));
+#endif  // V8_ENABLE_PARTITION_ALLOC
+#endif  // V8_ENABLE_SANDBOX
+
   int result = 0;
   Isolate::CreateParams create_params = GetDefaultIsolateCreateParams();
   ShellArrayBufferAllocator shell_array_buffer_allocator;

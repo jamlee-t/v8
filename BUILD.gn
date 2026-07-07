@@ -494,11 +494,11 @@ declare_args() {
   # Experimental testing mode where various limits are artificially set lower.
   v8_lower_limits_mode = false
 
-  # Enables the use of partition_alloc as the default allocator for standalone
-  # V8. This should be used for benchmarking and testing purposes to more
+  # Enables the use of PartitionAlloc as the default allocator for standalone
+  # d8. This should be used for benchmarking and testing purposes to more
   # closely mimic in-browser behavior.
   #
-  # Currently used in d8.
+  # Note that this has no effect on V8 when it is embedded elsewhere
   v8_enable_partition_alloc = ""
 
   # V8 uses Chrome's blink-gc clang plugin for checking V8's internal cppgc

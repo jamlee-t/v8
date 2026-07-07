@@ -26,6 +26,7 @@
 #include "include/v8-function.h"
 #include "include/v8-json.h"
 #include "include/v8-locker.h"
+#include "include/v8-platform.h"
 #include "include/v8-primitive-object.h"
 #include "include/v8-profiler.h"
 #include "include/v8-source-location.h"
@@ -342,7 +343,7 @@ class ArrayBufferAllocator : public v8::ArrayBuffer::Allocator {
  public:
   explicit ArrayBufferAllocator(i::IsolateGroup* group)
       : sandbox_(group->sandbox()),
-        allocator_(group->GetSandboxedArrayBufferAllocator()) {}
+        allocator_(group->GetInSandboxAllocator()) {}
 
   void* Allocate(size_t length) override {
     return allocator_->Allocate(length);
@@ -362,7 +363,7 @@ class ArrayBufferAllocator : public v8::ArrayBuffer::Allocator {
 
  private:
   i::Sandbox* sandbox_ = nullptr;
-  i::SandboxedArrayBufferAllocatorBase* allocator_ = nullptr;
+  v8::Allocator* allocator_ = nullptr;
 };
 
 #else
@@ -6606,6 +6607,10 @@ size_t v8::V8::GetSandboxReservationSizeInBytes() {
                   "v8::V8::GetSandboxReservationSizeInBytes",
                   "The sandbox must be initialized first");
   return i::Sandbox::current()->reservation_size();
+}
+
+void v8::V8::SetInSandboxAllocator(std::shared_ptr<Allocator> allocator) {
+  i::Sandbox::current()->set_in_sandbox_allocator(std::move(allocator));
 }
 
 v8::V8::SandboxMode v8::V8::GetSandboxMode() {

@@ -6003,8 +6003,7 @@ class BigIntPlatform final : public bigint::Platform {
 #if V8_ENABLE_SANDBOX
   explicit BigIntPlatform(Isolate* isolate)
       : isolate_(isolate),
-        allocator_(
-            IsolateGroup::GetDefault()->GetSandboxedArrayBufferAllocator()) {}
+        allocator_(IsolateGroup::current()->GetInSandboxAllocator()) {}
 
   digit_t* Allocate(size_t count) final {
     DCHECK_LT(count, std::numeric_limits<size_t>::max() / sizeof(digit_t));
@@ -6027,7 +6026,7 @@ class BigIntPlatform final : public bigint::Platform {
  private:
   Isolate* isolate_;
 #if V8_ENABLE_SANDBOX
-  SandboxedArrayBufferAllocatorBase* allocator_;
+  v8::Allocator* allocator_;
 #endif  // V8_ENABLE_SANDBOX
 };
 }  // namespace
