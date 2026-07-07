@@ -89,6 +89,7 @@ static constexpr int kNumberOfLeafNodeTypes = 0 LEAF_NODE_TYPE_LIST(COUNT);
     kJSArray | kCallable | kStringWrapper | kJSDataView | kOtherJSReceiver) \
   V(JSReceiverOrNull, kJSReceiver | kNull)                                  \
   V(JSReceiverOrNullOrUndefined, kJSReceiver | kNullOrUndefined)            \
+  V(NotUndetectable, kNumeric | kName | kBoolean)                           \
   V(AnyHeapObject, kUnknown - kSmi)
 
 #define NODE_TYPE_LIST(V) \

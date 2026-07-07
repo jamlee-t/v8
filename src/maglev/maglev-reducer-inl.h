@@ -2206,8 +2206,14 @@ MaybeReduceResult MaglevReducer<BaseT>::TryFoldTestUndetectable(
   }
 
   NodeType node_type;
-  if (CheckType(value, NodeType::kSmi, &node_type)) {
+  if (CheckType(value, NodeType::kNotUndetectable, &node_type)) {
     return GetBooleanConstant(false);
+  }
+
+  if (broker()->dependencies()->DependOnNoUndetectableObjectsProtector()) {
+    if (CheckType(value, NodeType::kJSReceiver, &node_type)) {
+      return GetBooleanConstant(false);
+    }
   }
 
   MapInference<MaglevReducer<BaseT>> inference(
