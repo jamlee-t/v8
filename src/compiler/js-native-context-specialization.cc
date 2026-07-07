@@ -1295,6 +1295,12 @@ Reduction JSNativeContextSpecialization::ReduceProxyAccess(
     AccessMode access_mode, FeedbackSource const& source, Node* key) {
   DCHECK_EQ(access_mode, AccessMode::kLoad);
 
+  // For a super property load the proxy sits on the home object's prototype,
+  // not on input 0 (the receiver). The fast path below assumes the proxy is
+  // the receiver and lookup start object, so bail out and let the generic IC
+  // handle super accesses.
+  if (node->opcode() == IrOpcode::kJSLoadNamedFromSuper) return NoChange();
+
   Node* context = NodeProperties::GetContextInput(node);
   FrameState frame_state{NodeProperties::GetFrameStateInput(node)};
   Effect effect{NodeProperties::GetEffectInput(node)};
