@@ -847,6 +847,7 @@
   'wasm/code-flushing*': [SKIP],
   'wasm/lazy-compilation': [SKIP],
   'wasm/lazy-feedback-vector-allocation': [SKIP],
+  'wasm/regress-wasm-sourcemap-logging': [SKIP],
   'wasm/serialize-lazy-module': [SKIP],
   'wasm/test-serialization-with-lazy-compilation': [SKIP],
 
@@ -1031,6 +1032,7 @@
   'regress/wasm/regress-509674461': [SKIP],
   'regress/wasm/regress-511772679': [SKIP],
   'regress/wasm/regress-518697709': [SKIP],
+  'regress/wasm/regress-524792614': [SKIP],
   'regress/wasm/regress-crbug-1507751': [SKIP],
   'regress/wasm/regress-simd-518058891': [SKIP],
   'regress/wasm/regress-simd-526303929': [SKIP],

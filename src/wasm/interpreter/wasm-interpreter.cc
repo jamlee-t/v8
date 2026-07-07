@@ -7420,7 +7420,7 @@ void WasmEHDataGenerator::RecordPotentialExceptionThrowingInstruction(
 }
 
 WasmBytecode::WasmBytecode(int func_index, const uint8_t* code_data,
-                           size_t code_length, uint32_t stack_frame_size,
+                           size_t code_length, size_t stack_frame_size,
                            const FunctionSig* signature,
                            const CanonicalSig* canonical_signature,
                            const InterpreterCode* interpreter_code,
