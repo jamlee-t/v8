@@ -1254,10 +1254,6 @@ void FeedbackMetadata::FeedbackMetadataVerify(Isolate* isolate) {
   }
 }
 
-void StrongDescriptorArray::StrongDescriptorArrayVerify(Isolate* isolate) {
-  CHECK(Is<StrongDescriptorArray>(this));
-  DescriptorArrayVerify(isolate);
-}
 
 void DescriptorArray::DescriptorArrayEntryTypesVerify(Isolate* isolate) {
   // Header: enum_cache_ is strong.

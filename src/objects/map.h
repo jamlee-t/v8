@@ -64,7 +64,6 @@ enum InstanceType : uint16_t;
   V(CppHeapExternalObject)           \
   V(DataHandler)                     \
   V(DescriptorArray)                 \
-  V(StrongDescriptorArray)           \
   V(DoubleStringCache)               \
   V(EmbedderDataArray)               \
   V(EphemeronHashTable)              \
@@ -994,8 +993,6 @@ V8_OBJECT class Map : public HeapObject {
 #undef MAKE_CASE
       case DESCRIPTOR_ARRAY_TYPE:
         return RootIndex::kDescriptorArrayMap;
-      case STRONG_DESCRIPTOR_ARRAY_TYPE:
-        return RootIndex::kStrongDescriptorArrayMap;
       case ON_HEAP_BASIC_BLOCK_PROFILER_DATA_TYPE:
         return RootIndex::kOnHeapBasicBlockProfilerDataMap;
       case TURBOFAN_BITSET_TYPE_TYPE:

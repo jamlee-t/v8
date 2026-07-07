@@ -334,7 +334,6 @@ Deserializer<IsolateT>::Deserializer(IsolateT* isolate,
       interceptor_infos_(isolate),
       function_template_infos_(isolate),
       new_scripts_(isolate),
-      new_descriptor_arrays_(isolate->heap()),
       deserializing_user_code_(deserializing_user_code),
       should_rehash_((v8_flags.rehash_snapshot && can_rehash) ||
                      deserializing_user_code),
@@ -430,11 +429,6 @@ void Deserializer<IsolateT>::LogNewMapEvents() {
     LOG(isolate(), MapCreate(*map));
     LOG(isolate(), MapDetails(*map));
   }
-}
-
-template <typename IsolateT>
-void Deserializer<IsolateT>::WeakenDescriptorArrays() {
-  isolate()->heap()->WeakenDescriptorArrays(std::move(new_descriptor_arrays_));
 }
 
 template <typename IsolateT>
@@ -705,10 +699,6 @@ void Deserializer<IsolateT>::PostProcessNewObject(DirectHandle<Map> map,
     no_gc.Release();
     return PostProcessNewJSReceiver(raw_map, Cast<JSReceiver>(obj),
                                     instance_type, space);
-  } else if (InstanceTypeChecker::IsDescriptorArray(instance_type)) {
-    DCHECK(InstanceTypeChecker::IsStrongDescriptorArray(instance_type));
-    auto descriptors = Cast<DescriptorArray>(obj);
-    new_descriptor_arrays_.Push(*descriptors);
   } else if (InstanceTypeChecker::IsNativeContext(instance_type)) {
     Tagged<NativeContext> context = Cast<NativeContext>(raw_obj);
     context->init_microtask_queue(main_thread_isolate(), nullptr);

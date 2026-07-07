@@ -353,23 +353,6 @@ static_assert(offsetof(DescriptorArray, number_of_descriptors_) ==
 static_assert(offsetof(DescriptorArray, flags_) ==
               sizeof(HeapObject) + 2 * sizeof(uint16_t));
 
-// A DescriptorArray where all values are held strongly. Bodyless subclass with
-// identical layout and BodyDescriptor. The distinct instance type routes to
-// the default VisitWithBodyDescriptor path, bypassing the specialized
-// MarkingVisitorBase::VisitDescriptorArray override (which runs the
-// DescriptorArrayMarkingState epoch/delta protocol for incremental weak-Map
-// trimming).
-V8_OBJECT class StrongDescriptorArray : public DescriptorArray {
- public:
-  DECL_PRINTER(StrongDescriptorArray)
-  DECL_VERIFIER(StrongDescriptorArray)
-} V8_OBJECT_END;
-
-template <>
-struct ObjectTraits<StrongDescriptorArray> {
-  using BodyDescriptor = DescriptorArray::BodyDescriptor;
-};
-
 }  // namespace internal
 }  // namespace v8
 

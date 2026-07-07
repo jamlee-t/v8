@@ -437,12 +437,6 @@ class Heap final {
   // should not happen during deserialization.
   void NotifyDeserializationComplete();
 
-  // Weakens StrongDescriptorArray objects into regular DescriptorArray objects.
-  //
-  // Thread-safe.
-  void WeakenDescriptorArrays(
-      GlobalHandleVector<DescriptorArray> strong_descriptor_arrays);
-
   void NotifyBootstrapComplete();
 
   enum class OldGenerationExpansionNotificationOrigin {

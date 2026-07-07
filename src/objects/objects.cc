@@ -2084,8 +2084,7 @@ int HeapObject::SizeFromMap(Tagged<Map> map) const {
   if (instance_type == FEEDBACK_METADATA_TYPE) {
     return UncheckedCast<FeedbackMetadata>(this)->AllocatedSize();
   }
-  if (base::IsInRange(instance_type, FIRST_DESCRIPTOR_ARRAY_TYPE,
-                      LAST_DESCRIPTOR_ARRAY_TYPE)) {
+  if (instance_type == DESCRIPTOR_ARRAY_TYPE) {
     return DescriptorArray::SizeFor(
         UncheckedCast<DescriptorArray>(this)->number_of_all_descriptors());
   }
@@ -2202,7 +2201,6 @@ bool HeapObject::NeedsRehashing(InstanceType instance_type) const {
   DCHECK_EQ(instance_type, map()->instance_type());
   switch (instance_type) {
     case DESCRIPTOR_ARRAY_TYPE:
-    case STRONG_DESCRIPTOR_ARRAY_TYPE:
       return Cast<DescriptorArray>(this)->number_of_descriptors() > 1;
     case TRANSITION_ARRAY_TYPE:
       return Cast<TransitionArray>(this)->number_of_transitions() > 1;
@@ -2249,7 +2247,6 @@ bool HeapObject::CanBeRehashed() const {
     case SWISS_NAME_DICTIONARY_TYPE:
       return true;
     case DESCRIPTOR_ARRAY_TYPE:
-    case STRONG_DESCRIPTOR_ARRAY_TYPE:
       return true;
     case TRANSITION_ARRAY_TYPE:
       return true;
@@ -2296,7 +2293,6 @@ void HeapObject::RehashBasedOnMap(IsolateT* isolate) {
       Cast<SimpleNumberDictionary>(this)->Rehash();
       break;
     case DESCRIPTOR_ARRAY_TYPE:
-    case STRONG_DESCRIPTOR_ARRAY_TYPE:
       DCHECK_LE(1, Cast<DescriptorArray>(this)->number_of_descriptors());
       Cast<DescriptorArray>(this)->Sort();
       break;

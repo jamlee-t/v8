@@ -3331,9 +3331,6 @@ void MarkCompactCollector::ClearNonLiveReferences() {
         // ClearFullMapTransitions must be called before weak references are
         // cleared.
         ClearFullMapTransitions();
-        // Weaken recorded strong DescriptorArray objects. This phase can
-        // potentially move everywhere after `ClearFullMapTransitions()`.
-        WeakenStrongDescriptorArrays();
       }).Enqueue(parallel_clearing_job);
 
   {
@@ -3938,6 +3935,9 @@ void MarkCompactCollector::ClearFullMapTransitions() {
           Tagged<Object> constructor_or_back_pointer =
               map->constructor_or_back_pointer();
           if (IsSmi(constructor_or_back_pointer)) {
+            // This map is still being deserialized. Skip transition clearing to
+            // prevent premature descriptor array trimming during
+            // deserialization.
             DCHECK(isolate->has_active_deserializer());
             DCHECK_EQ(constructor_or_back_pointer,
                       Smi::uninitialized_deserialization_value());
@@ -3967,7 +3967,8 @@ bool MarkCompactCollector::TransitionArrayNeedsCompaction(
   for (int i = 0; i < num_transitions; ++i) {
     Tagged<MaybeObject> raw_target = transitions->GetRawTarget(i);
     if (raw_target.IsSmi()) {
-      // This target is still being deserialized,
+      // This target is still being deserialized. Abort compaction to prevent
+      // premature descriptor array trimming during deserialization.
       DCHECK(heap_->isolate()->has_active_deserializer());
       DCHECK_EQ(raw_target.ToSmi(), Smi::uninitialized_deserialization_value());
 #ifdef DEBUG
@@ -4111,27 +4112,6 @@ void TrimEnumCache(Heap* heap, Tagged<Map> map,
 }
 
 }  // namespace
-
-void MarkCompactCollector::RecordStrongDescriptorArraysForWeakening(
-    GlobalHandleVector<DescriptorArray> strong_descriptor_arrays) {
-  DCHECK(heap_->incremental_marking()->IsMajorMarking());
-  base::MutexGuard guard(&strong_descriptor_arrays_mutex_);
-  strong_descriptor_arrays_.push_back(std::move(strong_descriptor_arrays));
-}
-
-void MarkCompactCollector::WeakenStrongDescriptorArrays() {
-  Tagged<Map> descriptor_array_map =
-      ReadOnlyRoots(heap_->isolate()).descriptor_array_map();
-  for (auto& vec : strong_descriptor_arrays_) {
-    for (auto it = vec.begin(); it != vec.end(); ++it) {
-      Tagged<DescriptorArray> raw = it.raw();
-      DCHECK(IsStrongDescriptorArray(raw));
-      raw->set_map_safe_transition_no_write_barrier(heap_->isolate(),
-                                                    descriptor_array_map);
-    }
-  }
-  strong_descriptor_arrays_.clear();
-}
 
 void MarkCompactCollector::TrimDescriptorArray(
     Tagged<Map> map, Tagged<DescriptorArray> descriptors) {

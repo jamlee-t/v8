@@ -61,7 +61,6 @@ class MaybeObjectSize final {
   V(CoverageInfo)                     \
   V(DataHandler)                      \
   V(DescriptorArray)                  \
-  V(StrongDescriptorArray)            \
   V(DoubleStringCache)                \
   V(EmbedderDataArray)                \
   V(EphemeronHashTable)               \

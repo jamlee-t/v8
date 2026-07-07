@@ -230,7 +230,6 @@ class RootVisitor;
   V(Map, js_atomics_mutex_map, JSAtomicsMutexMap)                              \
   V(Map, js_atomics_condition_map, JSAtomicsConditionMap)                      \
   V(Map, descriptor_array_map, DescriptorArrayMap)                             \
-  V(Map, strong_descriptor_array_map, StrongDescriptorArrayMap)                \
   V(Map, on_heap_basic_block_profiler_data_map,                                \
     OnHeapBasicBlockProfilerDataMap)                                           \
   V(Map, turbofan_bitset_type_map, TurbofanBitsetTypeMap)                      \
