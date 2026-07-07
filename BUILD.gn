@@ -1652,7 +1652,10 @@ config("toolchain") {
     defines += [ "_MIPS_TARGET_SIMULATOR" ]
   }
 
-  if (v8_current_cpu == "mips64el" || v8_current_cpu == "mips64") {
+  assert(v8_current_cpu != "mips64",
+         "Fatal: MIPS64 Big-Endian ('mips64')  has been explicitly disabled.")
+
+  if (v8_current_cpu == "mips64el") {
     defines += [ "V8_TARGET_ARCH_MIPS64" ]
     if (v8_can_use_fpu_instructions) {
       defines += [ "CAN_USE_FPU_INSTRUCTIONS" ]
@@ -1662,8 +1665,6 @@ config("toolchain") {
     }
     if (host_byteorder == "little") {
       defines += [ "V8_TARGET_ARCH_MIPS64_LE" ]
-    } else if (host_byteorder == "big") {
-      defines += [ "V8_TARGET_ARCH_MIPS64_BE" ]
     }
     if (v8_use_mips_abi_hardfloat) {
       defines += [
