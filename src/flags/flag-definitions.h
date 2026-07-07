@@ -1867,7 +1867,6 @@ DEFINE_BOOL_READONLY(turbolev_escape_analysis, false,
 #else
 DEFINE_EXPERIMENTAL_FEATURE(turbolev_escape_analysis,
                             "enable escape analysis for Turbolev")
-DEFINE_WEAK_IMPLICATION(turbolev_future, turbolev_escape_analysis)
 #endif
 DEFINE_DEVELOPER_FLAG(trace_turbolev_escape_analysis,
                       "enable tracing for Turbolev's escape analysis phase")
