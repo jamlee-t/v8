@@ -1117,6 +1117,9 @@ struct GetResultLocationAndSizeHelper<
   static std::pair<interpreter::Register, int> GetResultLocationAndSize(
       const interpreter::BytecodeArrayIterator& iterator) {
     interpreter::RegisterList list = iterator.GetRegisterListOperand(index);
+    if (list.register_count() == 0) {
+      return {interpreter::Register::invalid_value(), 0};
+    }
     return {list.first_register(), list.register_count()};
   }
   static bool HasOutputRegisterOperand() { return true; }
@@ -13407,25 +13410,142 @@ ReduceResult MaglevGraphBuilder::VisitCreateArrayFromIterable() {
 ReduceResult MaglevGraphBuilder::VisitArrayDestructure() {
   ValueNode* receiver = GetAccumulator();
   uint32_t count = iterator_.GetRegisterCountOperand(1);
-  ValueNode* count_node = GetSmiConstant(count);
   interpreter::RegisterList outputs = iterator_.GetRegisterListOperand(0);
-  ValueNode* result;
+
+  ValueNode* undefined = GetRootConstant(RootIndex::kUndefinedValue);
+  ValueNode* the_hole = GetRootConstant(RootIndex::kTheHoleValue);
+  ValueNode* zero_index = GetTaggedIndexConstant(0);
+  ValueNode* first_reg_node = GetSmiConstant(outputs.first_register().index());
+  ValueNode* count_node = GetSmiConstant(count);
+  ValueNode* minus_one_node = GetSmiConstant(-1);
+
+  ValueNode* iterator;
   {
     LazyDeoptFrameScope lazy_deopt_scope(
         this, Builtin::kArrayDestructureLazyDeoptContinuation, {},
         base::VectorOf<ValueNode*>(
-            {GetSmiConstant(outputs.first_register().index()), count_node}));
-    GET_VALUE_OR_ABORT(
-        result, BuildCallBuiltinWithTaggedInputs<Builtin::kArrayDestructure>(
-                    {receiver, count_node}));
+            {the_hole, the_hole, minus_one_node, first_reg_node, count_node}));
+    // This is not allowed to return DoneWithAbort (i.e. unconditionally eager
+    // deopt) without an eager continuation, since we have to populate the
+    // remaining registers if it does. It can, however, lazy deopt, since the
+    // continuation handles populating the interpreter registers.
+    //
+    // TODO(leszeks): This builtin is called "WithFeedback" but we are calling
+    // it without feedback.
+    GET_VALUE(
+        iterator,
+        BuildCallBuiltinWithTaggedInputs<Builtin::kGetIteratorWithFeedback>(
+            {receiver, zero_index, zero_index, undefined}));
   }
+
+  ValueNode* next_string = GetConstant(broker()->next_string());
+  ValueNode* next_method;
+  {
+    LazyDeoptFrameScope lazy_deopt_scope(
+        this, Builtin::kArrayDestructureLazyDeoptContinuation, {},
+        base::VectorOf<ValueNode*>(
+            {iterator, the_hole, minus_one_node, first_reg_node, count_node}));
+    // This is not allowed to return DoneWithAbort (i.e. unconditionally eager
+    // deopt) without an eager continuation, since we have to populate the
+    // remaining registers if it does. It can, however, lazy deopt, since the
+    // continuation handles populating the interpreter registers.
+    //
+    // TODO(leszeks): The "next" method is loaded without feedback.
+    GET_VALUE(next_method,
+              BuildCallBuiltinWithTaggedInputs<Builtin::kGetProperty>(
+                  {iterator, next_string}));
+  }
+
+  if (count == 0) {
+    LazyDeoptResultLocationScope result_location_scope(
+        this, interpreter::Register::invalid_value(), 0);
+    return BuildCallBuiltinWithTaggedInputs<Builtin::kIteratorClose>(
+        {iterator});
+  }
+
+  ValueNode* true_node = GetBooleanConstant(true);
+  ValueNode* false_node = GetBooleanConstant(false);
+
+  MaglevSubGraphBuilder subgraph(this, 2);
+  MaglevSubGraphBuilder::Variable var_iterator_is_done(0);
+  MaglevSubGraphBuilder::Variable var_element(1);
+  subgraph.set(var_iterator_is_done, false_node);
+
   for (uint32_t i = 0; i < count; ++i) {
-    ValueNode* element = AddNewNodeNoInputConversion<LoadTaggedField>(
-        {result}, FixedArray::OffsetOfElementAt(i), NodeType::kUnknown, false,
-        PropertyKey::None(), IsArrayLength::kNo);
-    StoreRegister(outputs[i], element);
+    ValueNode* index_node = GetSmiConstant(i);
+    subgraph.set(var_element, undefined);
+    ValueNode* current_is_done = subgraph.get(var_iterator_is_done);
+
+    MaglevSubGraphBuilder::Label iterator_is_done(
+        &subgraph, i == 0 ? 1 : 2, {&var_iterator_is_done, &var_element});
+    MaglevSubGraphBuilder::Label next(&subgraph, 2,
+                                      {&var_iterator_is_done, &var_element});
+
+    if (i == 0) {
+      // On the first iteration we know the iterator isn't already done.
+      DCHECK_EQ(current_is_done->Cast<RootConstant>()->index(),
+                RootIndex::kFalseValue);
+    } else {
+      CHECK(subgraph
+                .GotoIfTrue<BranchIfRootConstant>(
+                    &iterator_is_done, {current_is_done}, RootIndex::kTrueValue)
+                .IsDoneWithoutAbort());
+    }
+
+    ValueNode* step_result;
+    {
+      LazyDeoptFrameScope lazy_deopt_scope(
+          this, Builtin::kArrayDestructureLazyDeoptContinuation, {},
+          base::VectorOf<ValueNode*>(
+              {iterator, next_method, index_node, first_reg_node, count_node}));
+      // The lazy deopt continuation will write only from `i` up to count, so
+      // change the lazy deopt result location to only include those registers.
+      // This ensures that the `i` register values already written with
+      // StoreRegister into the DeoptFrame are considered "live" by the
+      // compiler.
+      LazyDeoptResultLocationScope result_location_scope(this, outputs[i],
+                                                         count - i);
+      // This is not allowed to return DoneWithAbort (i.e. unconditionally eager
+      // deopt) without an eager continuation, since we have to populate the
+      // remaining registers if it does. It can, however, lazy deopt, since the
+      // continuation handles populating the interpreter registers.
+      GET_VALUE(step_result,
+                BuildCallBuiltinWithTaggedInputs<Builtin::kForOfNext>(
+                    {iterator, next_method, undefined, GetSmiConstant(0)}));
+    }
+    CHECK(subgraph
+              .GotoIfTrue<BranchIfRootConstant>(
+                  &iterator_is_done, {step_result}, RootIndex::kTheHoleValue)
+              .IsDoneWithoutAbort());
+    subgraph.set(var_iterator_is_done, false_node);
+    subgraph.set(var_element, step_result);
+    subgraph.Goto(&next);
+
+    subgraph.Bind(&iterator_is_done);
+    {
+      subgraph.set(var_iterator_is_done, true_node);
+      subgraph.set(var_element, undefined);
+      subgraph.Goto(&next);
+    }
+
+    subgraph.Bind(&next);
+    StoreRegister(outputs[i], subgraph.get(var_element));
   }
-  return ReduceResult::Done();
+
+  // If var_is_done is false, the iterator is not done yet, so we must close it.
+  return subgraph.Branch(
+      {},
+      [&](BranchBuilder& builder) {
+        return BuildBranchIfRootConstant(
+            builder, subgraph.get(var_iterator_is_done), RootIndex::kTrueValue);
+      },
+      [&] { return ReduceResult::Done(); },
+      [&]() -> ReduceResult {
+        LazyDeoptResultLocationScope result_location_scope(
+            this, interpreter::Register::invalid_value(), 0);
+        return BuildCallBuiltinWithTaggedInputs<Builtin::kIteratorClose>(
+            {iterator});
+      });
 }
 
 ReduceResult MaglevGraphBuilder::VisitCreateEmptyArrayLiteral() {

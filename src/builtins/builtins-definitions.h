@@ -785,8 +785,6 @@ constexpr int kGearboxGenericBuiltinIdOffset = -2;
       ForOfNextLoadValueEagerDeoptContinuation)                                \
   TFC(ForOfNextLoadValueLazyDeoptContinuation,                                 \
       ForOfNextLoadValueLazyDeoptContinuation)                                 \
-  TFC(ArrayDestructureLazyDeoptContinuation,                                   \
-      ArrayDestructureLazyDeoptContinuation)                                   \
                                                                                \
   /* Global object */                                                          \
   CPP(GlobalDecodeURI, kDontAdaptArgumentsSentinel)                            \
@@ -878,7 +876,6 @@ constexpr int kGearboxGenericBuiltinIdOffset = -2;
                                                                                \
   /* IterableToList */                                                         \
   TFS(IterableToList, NeedsContext{true}, kIterable, kIteratorFn)              \
-  TFS(ArrayDestructure, NeedsContext{true}, kReceiver, kCount)                 \
   TFS(IterableToFixedArray, NeedsContext{true}, kIterable, kIteratorFn)        \
   TFS(IterableToListWithSymbolLookup, NeedsContext{true}, kIterable)           \
   TFS(IterableToFixedArrayWithSymbolLookupSlow, NeedsContext{true}, kIterable) \

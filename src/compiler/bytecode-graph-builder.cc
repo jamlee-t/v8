@@ -2540,21 +2540,7 @@ void BytecodeGraphBuilder::VisitCreateArrayFromIterable() {
   environment()->BindAccumulator(iterable, Environment::kAttachFrameState);
 }
 
-void BytecodeGraphBuilder::VisitArrayDestructure() {
-  Node* receiver = environment()->LookupAccumulator();
-  uint32_t count = bytecode_iterator().GetRegisterCountOperand(1);
-  interpreter::RegisterList outputs =
-      bytecode_iterator().GetRegisterListOperand(0);
-  int first_reg = outputs.first_register().index();
-  Node* result =
-      NewNode(javascript()->ArrayDestructure(count, first_reg), receiver);
-  if (count == 0) {
-    environment()->RecordAfterState(result, Environment::kAttachFrameState);
-  } else {
-    environment()->BindRegistersToProjections(outputs.first_register(), result,
-                                              Environment::kAttachFrameState);
-  }
-}
+void BytecodeGraphBuilder::VisitArrayDestructure() { UNREACHABLE(); }
 
 void BytecodeGraphBuilder::VisitCreateObjectLiteral() {
   ObjectBoilerplateDescriptionRef constant_properties =

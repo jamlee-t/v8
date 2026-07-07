@@ -930,31 +930,6 @@ std::ostream& operator<<(std::ostream&, ForOfNextParameters const&);
 
 const ForOfNextParameters& ForOfNextParametersOf(const Operator* op);
 
-class ArrayDestructureParameters final {
- public:
-  ArrayDestructureParameters(int count, int first_reg)
-      : count_(count), first_reg_(first_reg) {}
-
-  int count() const { return count_; }
-  int first_reg() const { return first_reg_; }
-
- private:
-  int const count_;
-  int const first_reg_;
-};
-
-bool operator==(ArrayDestructureParameters const&,
-                ArrayDestructureParameters const&);
-bool operator!=(ArrayDestructureParameters const&,
-                ArrayDestructureParameters const&);
-
-size_t hash_value(ArrayDestructureParameters const&);
-
-std::ostream& operator<<(std::ostream&, ArrayDestructureParameters const&);
-
-const ArrayDestructureParameters& ArrayDestructureParametersOf(
-    const Operator* op);
-
 enum class ForInMode : uint8_t {
   kUseEnumCacheKeysAndIndices,
   kUseEnumCacheKeys,
@@ -1264,7 +1239,6 @@ class V8_EXPORT_PRIVATE JSOperatorBuilder final
   const Operator* ObjectIsArray();
   const Operator* ParseInt();
   const Operator* RegExpTest();
-  const Operator* ArrayDestructure(int count, int first_reg);
 
   const Operator* GetIterator(FeedbackSource const& load_feedback,
                               FeedbackSource const& call_feedback);
@@ -1392,21 +1366,6 @@ class JSGetIteratorNode final : public JSNodeWrapperBase {
 #undef INPUTS
 };
 
-class JSArrayDestructureNode final : public JSNodeWrapperBase {
- public:
-  explicit constexpr JSArrayDestructureNode(Node* node)
-      : JSNodeWrapperBase(node) {
-    DCHECK_EQ(IrOpcode::kJSArrayDestructure, node->opcode());
-  }
-
-  const ArrayDestructureParameters& Parameters() const {
-    return ArrayDestructureParametersOf(node()->op());
-  }
-
-#define INPUTS(V) V(Receiver, receiver, 0, Object)
-  INPUTS(DEFINE_INPUT_ACCESSORS)
-#undef INPUTS
-};
 
 class JSForOfNextNode final : public JSNodeWrapperBase {
  public:

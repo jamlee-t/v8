@@ -57,7 +57,6 @@ bool OperatorProperties::NeedsExactContext(const Operator* op) {
     case IrOpcode::kJSStackCheck:
     case IrOpcode::kJSStoreMessage:
     case IrOpcode::kJSGetIterator:
-    case IrOpcode::kJSArrayDestructure:
       return false;
 
     case IrOpcode::kJSCallRuntime:
@@ -272,7 +271,6 @@ bool OperatorProperties::HasFrameStateInput(const Operator* op) {
 
     // Iterator protocol operations
     case IrOpcode::kJSGetIterator:
-    case IrOpcode::kJSArrayDestructure:
     case IrOpcode::kJSForOfNext:
       return true;
 

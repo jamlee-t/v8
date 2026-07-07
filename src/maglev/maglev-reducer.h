@@ -144,6 +144,9 @@ class V8_NODISCARD MaybeReduceResult {
   // function, etc)
   bool IsDoneWithAbort() const { return kind() == kDoneWithAbort; }
 
+  // Done and not aborting.
+  bool IsDoneWithoutAbort() const { return IsDone() && !IsDoneWithAbort(); }
+
   Kind kind() const { return payload_.GetPayload(); }
 
   inline ReduceResult Checked();
@@ -173,7 +176,9 @@ class V8_NODISCARD ReduceResult : public MaybeReduceResult {
   static ReduceResult Done() { return ReduceResult(kDoneWithoutPayload); }
   static ReduceResult DoneWithAbort() { return ReduceResult(kDoneWithAbort); }
 
+  bool IsDone() const { return true; }
   bool IsFail() const { return false; }
+  bool IsDoneWithoutAbort() const { return !IsDoneWithAbort(); }
   ReduceResult Checked() { return *this; }
 
  protected:

@@ -240,7 +240,6 @@
   V(JSForInNext)                       \
   V(JSForInPrepare)                    \
   V(JSGetIterator)                     \
-  V(JSArrayDestructure)                \
   V(JSForOfNext)                       \
   V(JSLoadMessage)                     \
   V(JSStoreMessage)                    \
@@ -1513,7 +1512,6 @@ class V8_EXPORT_PRIVATE IrOpcode {
       case kJSForInNext:
       case kJSForInPrepare:
       case kJSGetIterator:
-      case kJSArrayDestructure:
       case kJSGetTemplateObject:
       case kJSHasProperty:
       case kJSInstanceOf:

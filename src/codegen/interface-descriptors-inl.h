@@ -635,11 +635,6 @@ constexpr auto ForOfNextResultDeoptContinuationDescriptor::registers() {
 }
 
 // static
-constexpr auto ArrayDestructureLazyDeoptContinuationDescriptor::registers() {
-  return RegisterArray();
-}
-
-// static
 constexpr auto ForOfNextLoadDoneLazyDeoptContinuationDescriptor::registers() {
   return RegisterArray();
 }

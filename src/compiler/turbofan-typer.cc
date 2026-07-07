@@ -2802,7 +2802,6 @@ Type Typer::Visitor::TypeConstant(Handle<Object> value) {
 }
 
 Type Typer::Visitor::TypeJSGetIterator(Node* node) { return Type::Any(); }
-Type Typer::Visitor::TypeJSArrayDestructure(Node* node) { return Type::Any(); }
 
 }  // namespace compiler
 }  // namespace internal
