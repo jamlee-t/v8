@@ -31,6 +31,9 @@ struct MemoryAccessInformation {
   int xmm_reg_index = -1;
 
   int access_width = 8;
+  // Width of the destination register. Differs from access_width only for
+  // sign/zero-extending moves (e.g. movsxbl: byte source, 32-bit destination).
+  int dest_width = 8;
   Extension extension = kNoExtend;
 };
 

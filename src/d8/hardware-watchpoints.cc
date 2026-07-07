@@ -159,11 +159,18 @@ void MutateRegister(reg_value_type* reg_ptr,
   uint64_t mutated_bits = new_value & mask;
 
   if (access_info.extension == MemoryAccessInformation::kSignExtend) {
+    // Sign-extend the source value up to the destination register width, then
+    // zero the bits above it: a movsx into a 32-bit register (movsxbl/movsxwl)
+    // sign-extends within 32 bits and zero-extends the upper half.
+    int dest_bit_width = access_info.dest_width * 8;
+    uint64_t dest_mask = (dest_bit_width == 64)
+                             ? ~uint64_t{0}
+                             : ((uint64_t{1} << dest_bit_width) - 1);
     uint64_t sign_bit = uint64_t{1} << (bit_width - 1);
     if ((mutated_bits & sign_bit) != 0) {
-      mutated_bits |= ~mask;
+      mutated_bits |= (~mask & dest_mask);
     }
-    new_value = mutated_bits;
+    new_value = mutated_bits & dest_mask;
   } else if (access_info.extension == MemoryAccessInformation::kZeroExtend) {
     new_value = mutated_bits;
   } else {

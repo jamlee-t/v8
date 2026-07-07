@@ -27,11 +27,15 @@ MemoryAccessInformation ParseMemoryAccessInformationFromInstruction(
       MemoryAccessInformation::kNoExtend;
 
   char suffix;
+  char dest_suffix;
   if (mnem_len >= 6 && (memcmp(insn_pos, "movzx", 5) == 0 ||
                         memcmp(insn_pos, "movsx", 5) == 0)) {
     extension = (insn_pos[3] == 'z') ? MemoryAccessInformation::kZeroExtend
                                      : MemoryAccessInformation::kSignExtend;
     suffix = insn_pos[5];
+    // The char after the source-width suffix is the destination width (e.g.
+    // movsxbl sign-extends a byte into a 32-bit register).
+    dest_suffix = mnem_len >= 7 ? insn_pos[6] : suffix;
   } else {
     DCHECK_GT(mnem_len, 0);
     suffix = insn_pos[mnem_len - 1];
@@ -42,17 +46,26 @@ MemoryAccessInformation ParseMemoryAccessInformationFromInstruction(
     if (suffix == 'l') {
       extension = MemoryAccessInformation::kZeroExtend;
     }
+    dest_suffix = suffix;
   }
 
-  if (suffix == 'b') {
-    access_width = 1;
-  } else if (suffix == 'w') {
-    access_width = 2;
-  } else if (suffix == 'l' || suffix == 'd') {
-    access_width = 4;
-  } else if (suffix == 'q') {
-    access_width = 8;
-  }
+  auto width_from_suffix = [](char c) -> int {
+    switch (c) {
+      case 'b':
+        return 1;
+      case 'w':
+        return 2;
+      case 'l':
+      case 'd':
+        return 4;
+      case 'q':
+        return 8;
+      default:
+        return 8;
+    }
+  };
+  access_width = width_from_suffix(suffix);
+  int dest_width = width_from_suffix(dest_suffix);
 
   if (memcmp(insn_pos, "cmp", 3) == 0 || memcmp(insn_pos, "test", 4) == 0 ||
       memcmp(insn_pos, "comi", 4) == 0 || memcmp(insn_pos, "ucomi", 5) == 0 ||
@@ -177,6 +190,7 @@ MemoryAccessInformation ParseMemoryAccessInformationFromInstruction(
             .result_reg = matched_reg,
             .xmm_reg_index = -1,
             .access_width = access_width,
+            .dest_width = dest_width,
             .extension = extension};
   }
 
