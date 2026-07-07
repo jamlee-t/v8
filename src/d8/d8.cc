@@ -4486,7 +4486,13 @@ void Shell::ReportException(Isolate* isolate, Local<v8::Message> message,
     return *value ? *value : "<string conversion failed>";
   };
 
-  v8::String::Utf8Value exception(isolate, exception_obj);
+  // Stringify the exception explicitly. Constructing the Utf8Value below would
+  // do this implicitly, but exception_obj may carry a user toString that
+  // terminates execution (or throws); doing it here lets us bail before
+  // re-entering V8 for the message conversions further down.
+  Local<String> exception_str;
+  if (!exception_obj->ToString(context).ToLocal(&exception_str)) return;
+  v8::String::Utf8Value exception(isolate, exception_str);
   const char* exception_string = ToCString(exception);
   if (message.IsEmpty()) {
     // V8 didn't provide any extra information about this error; just
