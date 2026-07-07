@@ -4422,7 +4422,8 @@ DEFINE_NOT_EXPLICITLY_SET_IMPLICATION(disallow_unsafe_flags &&
 // Runs a program as security POC. This mode is used to determine whether a bug
 // in a program is a security problem. V8 supports many different configurations
 // and modes that are sometimes incomplete or incompatible. The flag aims at
-// providing guidance on what is actually considered a security issue.
+// providing guidance on what is actually considered a security issue. The flag
+// must be passed as first argument.
 //
 // Note: The mode may be insufficient and/or incomplete. Passing this flag does
 // not guarantee a bug will be classified as a valid vulnerability. The V8 team
@@ -4447,7 +4448,8 @@ DEFINE_NEG_IMPLICATION(run_as_security_poc, experimental)
 // the memory corruption APIs and as such allows to directly modify untrusted V8
 // heap contents. V8 supports many different configurations and modes that are
 // sometimes incomplete or incompatible. The flag aims at providing guidance on
-// what is actually considered a security issue.
+// what is actually considered a security issue. The flag must be passed as
+// first argument.
 //
 // Note: The mode may be insufficient and/or incomplete. Passing this flag does
 // not guarantee a bug will be classified as a valid vulnerability. The V8 team

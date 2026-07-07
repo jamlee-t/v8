@@ -52,6 +52,7 @@
 #include "src/base/platform/time.h"
 #include "src/base/platform/wrappers.h"
 #include "src/base/sanitizer/msan.h"
+#include "src/base/strong-alias.h"
 #include "src/base/sys-info.h"
 #include "src/base/utils/random-number-generator.h"
 #include "src/compiler-dispatcher/optimizing-compile-dispatcher.h"
@@ -6803,7 +6804,10 @@ void Worker::Close(const v8::FunctionCallbackInfo<v8::Value>& info) {
 
 namespace {
 
-bool FlagMatches(const char* flag, char** arg, bool keep_flag = false) {
+using KeepFlag = base::StrongAlias<struct KeepFlagTag, bool>;
+
+bool FlagMatches(const char* flag, char** arg,
+                 KeepFlag keep_flag = KeepFlag{false}) {
   if (strcmp(*arg, flag) == 0) {
     if (!keep_flag) {
       *arg = nullptr;
@@ -6815,7 +6819,8 @@ bool FlagMatches(const char* flag, char** arg, bool keep_flag = false) {
 
 template <size_t N>
 bool FlagWithArgMatches(const char (&flag)[N], char** flag_value, int argc,
-                        char* argv[], int* i, bool keep_flag = false) {
+                        char* argv[], int* i,
+                        KeepFlag keep_flag = KeepFlag{false}) {
   char* current_arg = argv[*i];
 
   // Compare the flag up to the last character of the flag name (not including
@@ -6845,6 +6850,7 @@ bool FlagWithArgMatches(const char (&flag)[N], char** flag_value, int argc,
 }  // namespace
 
 bool Shell::SetOptions(int argc, char* argv[]) {
+  i::v8_flags.flag_processing_mode = "abort-on-error";
   options.d8_path = argv[0];
   bool disallow_unsafe_flags = false;
   bool flag_processing_mode_explicitly_set = false;
@@ -6862,7 +6868,7 @@ bool Shell::SetOptions(int argc, char* argv[]) {
     } else if (FlagMatches("--simulate-errors", &argv[i])) {
       options.simulate_errors = true;
     } else if (FlagWithArgMatches("--flag-processing-mode", &flag_value, argc,
-                                  argv, &i, /*keep_flag=*/true)) {
+                                  argv, &i, KeepFlag{true})) {
       if (!flag_processing_mode_explicitly_set) {
         flag_processing_mode_explicitly_set = true;
         if (strcmp(flag_value, "exit-on-error") == 0) {
@@ -6876,8 +6882,8 @@ bool Shell::SetOptions(int argc, char* argv[]) {
           exit_on_flag_contradictions = false;
         }
       }
-    } else if (FlagMatches("--fuzzing", &argv[i], /*keep_flag=*/true) ||
-               FlagMatches("--sandbox-fuzzing", &argv[i], /*keep_flag=*/true)) {
+    } else if (FlagMatches("--fuzzing", &argv[i], KeepFlag{true}) ||
+               FlagMatches("--sandbox-fuzzing", &argv[i], KeepFlag{true})) {
       // Set v8_flags.fuzzing early because this is tested in some locations to
       // decide how to handle conflicting flags (it would later be set by
       // implications but we need it being set earlier).
@@ -6885,8 +6891,26 @@ bool Shell::SetOptions(int argc, char* argv[]) {
       if (!flag_processing_mode_explicitly_set) {
         check_d8_flag_contradictions = false;
       }
+    } else if (FlagMatches("--run-as-security-poc", &argv[i], KeepFlag{true}) ||
+               FlagMatches("--run-as-sandbox-security-poc", &argv[i],
+                           KeepFlag{true})) {
+      // Setting the security poc flag automatically also sets the flag
+      // processing mode. We cannot use a regular implication on V8 flags here
+      // as we want to prevent --fuzzing or other --flag-processing-mode to
+      // override any behavior here.
+      flag_processing_mode_explicitly_set = true;
+      check_d8_flag_contradictions = true;
+      exit_on_flag_contradictions = true;
+      i::v8_flags.flag_processing_mode = "exit-on-error";
+      // We require `--run-as-security-poc`or `--run-as-sandbox-security-poc` as
+      // first parameter to set the flag processing modes properly. The
+      // configuration then consistently bails out with exit(-1) for flag
+      // contradictions.
+      if (i != 1) {
+        ReportFlagError("Flag '%s' must be the first parameter.", argv[i]);
+      }
     } else if (FlagMatches("--disallow-unsafe-flags", &argv[i],
-                           /*keep_flag=*/true)) {
+                           KeepFlag{true})) {
       disallow_unsafe_flags = true;
     } else if (FlagMatches("--version", &argv[i])) {
       printf("V8 version %s\n", V8::GetVersion());
@@ -6911,12 +6935,12 @@ bool Shell::SetOptions(int argc, char* argv[]) {
       // TODO(herhut) Remove this flag once wasm compilation is fully
       // isolate-independent.
       options.wait_for_background_tasks = false;
-    } else if (FlagMatches("-f", &argv[i], /*keep_flag=*/true)) {
+    } else if (FlagMatches("-f", &argv[i], KeepFlag{true})) {
       // Ignore any -f flags for compatibility with other stand-alone
       // JavaScript engines.
       continue;
     } else if (FlagWithArgMatches("-C", &flag_value, argc, argv, &i,
-                                  /*keep_flag=*/true)) {
+                                  KeepFlag{true})) {
       if (options.cwd.WasSpecified()) {
         FATAL("Only one -C option is allowed.");
       }
@@ -7155,7 +7179,6 @@ bool Shell::SetOptions(int argc, char* argv[]) {
       "  -C        set the current working directory before executing "
       "subsequent files\n";
   using HelpOptions = i::FlagList::HelpOptions;
-  i::v8_flags.flag_processing_mode = "abort-on-error";
   static constexpr char kStandaloneD8ShellFlag[] = "--is_standalone_d8_shell";
   i::FlagList::SetFlagsFromString(kStandaloneD8ShellFlag,
                                   strlen(kStandaloneD8ShellFlag));
