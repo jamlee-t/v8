@@ -4703,7 +4703,7 @@ void Compiler::PostInstantiation(Isolate* isolate,
 // Implementation of ScriptStreamingData
 
 ScriptStreamingData::ScriptStreamingData(
-    std::unique_ptr<ScriptCompiler::ExternalSourceStream> source_stream,
+    std::unique_ptr<ScriptCompiler::ExternalSourceStreamBase> source_stream,
     ScriptCompiler::StreamedSource::Encoding encoding)
     : source_stream(std::move(source_stream)), encoding(encoding) {}
 

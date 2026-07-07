@@ -1896,7 +1896,13 @@ ScriptCompiler::CachedData::CompatibilityCheck(Isolate* isolate) {
 
 ScriptCompiler::StreamedSource::StreamedSource(
     std::unique_ptr<ExternalSourceStream> stream, Encoding encoding)
-    : impl_(new i::ScriptStreamingData(std::move(stream), encoding)) {}
+    : impl_(new i::ScriptStreamingData(std::move(stream), encoding)) {
+  CHECK_NE(encoding, FLEXIBLE_UTF16);
+}
+
+ScriptCompiler::StreamedSource::StreamedSource(
+    std::unique_ptr<FlexibleExternalSourceStream> stream)
+    : impl_(new i::ScriptStreamingData(std::move(stream), FLEXIBLE_UTF16)) {}
 
 ScriptCompiler::StreamedSource::~StreamedSource() = default;
 

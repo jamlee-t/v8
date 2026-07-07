@@ -669,7 +669,7 @@ class V8_EXPORT_PRIVATE BackgroundCompileTask {
 // background parsing and compiling and finalizing it on the main thread.
 struct V8_EXPORT_PRIVATE ScriptStreamingData {
   ScriptStreamingData(
-      std::unique_ptr<ScriptCompiler::ExternalSourceStream> source_stream,
+      std::unique_ptr<ScriptCompiler::ExternalSourceStreamBase> source_stream,
       ScriptCompiler::StreamedSource::Encoding encoding);
   ScriptStreamingData(const ScriptStreamingData&) = delete;
   ScriptStreamingData& operator=(const ScriptStreamingData&) = delete;
@@ -678,7 +678,7 @@ struct V8_EXPORT_PRIVATE ScriptStreamingData {
   void Release();
 
   // Internal implementation of v8::ScriptCompiler::StreamedSource.
-  std::unique_ptr<ScriptCompiler::ExternalSourceStream> source_stream;
+  std::unique_ptr<ScriptCompiler::ExternalSourceStreamBase> source_stream;
   ScriptCompiler::StreamedSource::Encoding encoding;
 
   // Task that performs background parsing and compilation.
