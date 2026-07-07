@@ -3628,6 +3628,7 @@ void Builtins::Generate_WasmHandleStackOverflow(MacroAssembler* masm) {
     __ AddWord(new_fp, kReturnRegister0, new_fp);
     __ mv(fp, new_fp);
   }
+  SwitchSimulatorStackLimit(masm);
   __ mv(sp, kReturnRegister0);
   {
     UseScratchRegisterScope temps(masm);
