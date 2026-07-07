@@ -6907,7 +6907,13 @@ bool Shell::SetOptions(int argc, char* argv[]) {
       flag_processing_mode_explicitly_set = true;
       check_d8_flag_contradictions = true;
       exit_on_flag_contradictions = true;
-      i::v8_flags.flag_processing_mode = "exit-on-error";
+      // Flag implications are only processed much later, so we need to manually
+      // establish this link here.
+      disallow_unsafe_flags = true;
+      static constexpr char kFlagProcessingMode[] =
+          "--flag-processing-mode=exit-on-error";
+      i::FlagList::SetFlagsFromString(kFlagProcessingMode,
+                                      strlen(kFlagProcessingMode));
       // We require `--run-as-security-poc`or `--run-as-sandbox-security-poc` as
       // first parameter to set the flag processing modes properly. The
       // configuration then consistently bails out with exit(-1) for flag
