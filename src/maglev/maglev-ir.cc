@@ -309,9 +309,6 @@ void Phi::RecordUseReprHint(UseRepresentationSet repr_mask,
   }
 }
 
-InitialValue::InitialValue(uint64_t bitfield, interpreter::Register source)
-    : Base(bitfield), source_(source) {}
-
 namespace {
 
 // ---

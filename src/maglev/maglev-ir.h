@@ -5275,11 +5275,14 @@ class GeneratorRestoreRegister
 
 class InitialValue : public FixedInputValueNodeT<0, InitialValue> {
  public:
-  explicit InitialValue(uint64_t bitfield, interpreter::Register source);
+  explicit InitialValue(uint64_t bitfield, interpreter::Register source,
+                        NodeType type)
+      : Base(bitfield), source_(source), type_(type) {}
 
   interpreter::Register source() const { return source_; }
   uint32_t stack_slot() const;
   static uint32_t stack_slot(uint32_t register_idx);
+  NodeType type() const { return type_; }
 
   void SetValueLocationConstraints();
   void GenerateCode(MaglevAssembler*, const ProcessingState&);
@@ -5288,10 +5291,11 @@ class InitialValue : public FixedInputValueNodeT<0, InitialValue> {
   bool is_unused() const { return UnusedField::decode(bitfield()); }
   void mark_unused() { set_bitfield(UnusedField::update(bitfield(), true)); }
 
-  auto options() const { return std::tuple{source()}; }
+  auto options() const { return std::tuple{source(), type()}; }
 
  private:
   const interpreter::Register source_;
+  NodeType type_;
   using UnusedField = NextBitField<bool, 1>;
 };
 

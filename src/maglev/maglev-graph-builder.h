@@ -124,7 +124,6 @@ class MaglevGraphBuilder {
 
   void StartPrologue();
   void SetArgument(int i, ValueNode* value);
-  void InitializeRegister(interpreter::Register reg, ValueNode* value);
   ValueNode* GetArgument(int i);
   ValueNode* GetInlinedArgument(int i);
   void BuildRegisterFrameInitialization(ValueNode* context = nullptr,

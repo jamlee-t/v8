@@ -961,12 +961,6 @@ ValueNode* MaglevGraphBuilder::GetInlinedArgument(int i) {
   return caller_details_->arguments[i];
 }
 
-void MaglevGraphBuilder::InitializeRegister(interpreter::Register reg,
-                                            ValueNode* value) {
-  current_interpreter_frame_.set(
-      reg, value ? value : AddNewNodeNoInputConversion<InitialValue>({}, reg));
-}
-
 void MaglevGraphBuilder::BuildRegisterFrameInitialization(
     ValueNode* context, ValueNode* closure, ValueNode* new_target) {
   if (closure == nullptr &&
@@ -977,43 +971,44 @@ void MaglevGraphBuilder::BuildRegisterFrameInitialization(
     closure = GetConstant(function);
     context = GetConstant(function.context(broker()));
   }
-  InitializeRegister(interpreter::Register::current_context(), context);
-  InitializeRegister(interpreter::Register::function_closure(), closure);
 
-  reducer_.RecordType(GetContext(), NodeType::kContext);
-  reducer_.RecordType(GetClosure(), NodeType::kJSFunction);
+  auto InitializeRegister = [&](interpreter::Register reg,
+                                ValueNode* value = nullptr,
+                                NodeType type = NodeType::kUnknown) {
+    auto* res = value
+                    ? value
+                    : AddNewNodeNoInputConversion<InitialValue>({}, reg, type);
+    current_interpreter_frame_.set(reg, res);
+    return res;
+  };
 
-  interpreter::Register new_target_or_generator_register =
-      bytecode().incoming_new_target_or_generator_register();
-
-  int register_index = 0;
+  InitializeRegister(interpreter::Register::current_context(), context,
+                     NodeType::kContext);
+  InitializeRegister(interpreter::Register::function_closure(), closure,
+                     NodeType::kJSFunction);
 
   if (compilation_unit_->is_osr()) {
-    for (; register_index < register_count(); register_index++) {
-      auto val = AddNewNodeNoInputConversion<InitialValue>(
-          {}, interpreter::Register(register_index));
-      InitializeRegister(interpreter::Register(register_index), val);
-      graph_->osr_values().push_back(val);
+    for (int i = 0; i < register_count(); i++) {
+      graph_->osr_values().push_back(
+          InitializeRegister(interpreter::Register(i))->Cast<InitialValue>());
     }
     return;
   }
 
   // TODO(leszeks): Don't emit if not needed.
   ValueNode* undefined_value = GetRootConstant(RootIndex::kUndefinedValue);
-  if (new_target_or_generator_register.is_valid()) {
-    int new_target_index = new_target_or_generator_register.index();
-    for (; register_index < new_target_index; register_index++) {
-      current_interpreter_frame_.set(interpreter::Register(register_index),
-                                     undefined_value);
-    }
-    current_interpreter_frame_.set(
-        new_target_or_generator_register,
-        new_target ? new_target
-                   : GetRegisterInput(kJavaScriptCallNewTargetRegister));
-    register_index++;
+  for (int i = 0; i < register_count(); i++) {
+    current_interpreter_frame_.set(interpreter::Register(i), undefined_value);
   }
-  for (; register_index < register_count(); register_index++) {
-    InitializeRegister(interpreter::Register(register_index), undefined_value);
+
+  if (const auto target_or_generator_register =
+          bytecode().incoming_new_target_or_generator_register();
+      target_or_generator_register.is_valid()) {
+    ValueNode* new_target_value =
+        new_target ? new_target
+                   : GetRegisterInput(kJavaScriptCallNewTargetRegister);
+    current_interpreter_frame_.set(target_or_generator_register,
+                                   new_target_value);
   }
 }
 
@@ -16080,7 +16075,7 @@ bool MaglevGraphBuilder::Build() {
   for (int i = 0; i < parameter_count(); i++) {
     // TODO(v8:7700): Consider creating InitialValue nodes lazily.
     ValueNode* v = AddNewNodeNoInputConversion<InitialValue>(
-        {}, interpreter::Register::FromParameterIndex(i));
+        {}, interpreter::Register::FromParameterIndex(i), NodeType::kUnknown);
     DCHECK_EQ(graph()->parameters().size(), static_cast<size_t>(i));
     graph()->parameters().push_back(v);
     SetArgument(i, v);
