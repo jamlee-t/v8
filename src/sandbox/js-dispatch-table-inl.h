@@ -234,16 +234,21 @@ bool JSDispatchEntry::IsFreelistEntry() const {
 std::optional<uint32_t> JSDispatchEntry::GetNextFreelistEntryIndex() const {
 #ifdef V8_TARGET_ARCH_64_BIT
   auto entrypoint = entrypoint_.load(std::memory_order_relaxed);
-  // With in-sandbox corruption the entry could get overwritten with an invalid
-  // freelist index, the SBXCHECK ensures that the freelist entry contains the
-  // kFreeEntryTag.
-  SBXCHECK(IsFreelistEntry(entrypoint));
+  // The entry may have been concurrently claimed and overwritten by another
+  // allocation, or corrupted from within the sandbox. Return nullopt so the
+  // allocator's compare-exchange fails: a benign allocation race then retries,
+  // while a corrupted entry that reaches a successful allocation is caught by
+  // the CHECK_IMPLIES in TryAllocateEntryFromFreelist.
+  if (!IsFreelistEntry(entrypoint)) return std::nullopt;
   uint32_t next_freelist_entry = static_cast<uint32_t>(entrypoint);
   DCHECK_LT(next_freelist_entry, kMaxJSDispatchEntries);
   return next_freelist_entry;
 #else
-  DCHECK(IsFreelistEntry());
-  return next_free_entry_.load(std::memory_order_relaxed) - 1;
+  // See the comment above. A value of 0 marks a non-free entry, so the entry
+  // was concurrently claimed (or corrupted) and is no longer on the freelist.
+  uint32_t next_free_entry = next_free_entry_.load(std::memory_order_relaxed);
+  if (next_free_entry == 0) return std::nullopt;
+  return next_free_entry - 1;
 #endif
 }
 
