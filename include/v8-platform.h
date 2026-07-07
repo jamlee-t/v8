@@ -777,6 +777,8 @@ class PageAllocator {
  */
 class Allocator {
  public:
+  virtual ~Allocator() = default;
+
   /**
    * Allocates zero-initialized memory.
    *
