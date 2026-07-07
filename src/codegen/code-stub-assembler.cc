@@ -36,6 +36,7 @@
 #include "src/objects/instance-type-inl.h"
 #include "src/objects/instance-type.h"
 #include "src/objects/js-generator.h"
+#include "src/objects/js-interceptor-map.h"
 #include "src/objects/map.h"
 #include "src/objects/objects.h"
 #include "src/objects/oddball.h"
@@ -1495,6 +1496,69 @@ void CodeStubAssembler::GotoIfForceSlowPath(Label* if_true) {
     Branch(force_slow, if_true, &done);
   }
   BIND(&done);
+}
+
+TNode<BoolT> CodeStubAssembler::HasIndexedInterceptor(TNode<Map> map) {
+  return IsSetWord32<Map::Bits1::HasIndexedInterceptorBit>(
+      LoadMapBitField(map));
+}
+
+void CodeStubAssembler::BranchIfFastIterableToListInterceptor(
+    TNode<JSAnyNotSmi> iterable, Label* if_true, Label* if_false) {
+  TNode<Map> map = LoadMap(iterable);
+  GotoIfNot(HasIndexedInterceptor(map), if_false);
+
+  CSA_DCHECK(this, IsJSInterceptorMap(map));
+
+  // Check if the interceptor supports fast iterable to list conversion.
+  TNode<Uint8T> flags =
+      LoadObjectField<Uint8T>(map, offsetof(JSInterceptorMap, flags_));
+  TNode<BoolT> supports_fast =
+      IsSetWord32<JSInterceptorMap::SupportsFastIterableToListBit>(flags);
+  GotoIfNot(supports_fast, if_false);
+
+  Label clear_fast_flag_and_false(this, Label::kDeferred);
+  // Ensure the receiver is unmodified (not in dictionary mode and has 0 own
+  // descriptors). This is currently a bit too conservative, so alternative
+  // approach would be to unset the "supports fast" flag upon interceptor
+  // objects modifications.
+  GotoIf(IsDictionaryMap(map), &clear_fast_flag_and_false);
+  TNode<Int32T> num_descriptors = LoadNumberOfOwnDescriptors(map);
+  GotoIfNot(Word32Equal(num_descriptors, Int32Constant(0)),
+            &clear_fast_flag_and_false);
+
+  // Check if the prototype is unmodified since last validation which ensures
+  // that "length" and @@iterator properties have expected values allowing fast
+  // conversion.
+  {
+    TNode<Object> validity_cell = LoadObjectField(
+        map, offsetof(JSInterceptorMap, fast_case_validity_cell_));
+    CSA_DCHECK(this, TaggedIsNotSmi(validity_cell));
+    TNode<MaybeObject> cell_value = LoadCellMaybeValue(CAST(validity_cell));
+    GotoIf(TaggedNotEqual(cell_value, PrototypeChainInvalidConstant()),
+           if_true);
+  }
+
+  // Check interceptor's prototype requirements for fast iterable to list
+  // conversion, recompute validity cell if fast path is still applicable.
+  {
+    TNode<Object> heal_result =
+        CallRuntime(Runtime::kCheckFastIterableToListPrototype,
+                    NoContextConstant(), iterable);
+    Branch(IsTrue(heal_result), if_true, &clear_fast_flag_and_false);
+  }
+
+  BIND(&clear_fast_flag_and_false);
+  {
+    // Clear the "supports fast" flag and proceed to if_false.
+    TNode<Uint8T> cleared_flags = UncheckedCast<Uint8T>(
+        UpdateWord32<JSInterceptorMap::SupportsFastIterableToListBit>(
+            flags, Uint32Constant(0)));
+
+    StoreObjectFieldNoWriteBarrier(map, offsetof(JSInterceptorMap, flags_),
+                                   cleared_flags);
+    Goto(if_false);
+  }
 }
 
 TNode<HeapObject> CodeStubAssembler::AllocateRaw(TNode<IntPtrT> size_in_bytes,

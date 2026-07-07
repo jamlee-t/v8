@@ -65,6 +65,7 @@
 #include "src/objects/js-collection-inl.h"
 #include "src/objects/js-disposable-stack-inl.h"
 #include "src/objects/js-generator-inl.h"
+#include "src/objects/js-interceptor-map-inl.h"
 #include "src/objects/js-objects.h"
 #include "src/objects/js-proxy-inl.h"
 #include "src/objects/js-regexp-inl.h"
@@ -1910,6 +1911,7 @@ DirectHandle<InterceptorInfo> Factory::NewInterceptorInfo(
 #undef INIT_CALLBACK_FIELD
 
   info->init_indexed_index_of();
+  info->init_indexed_iterable_to_list();
 
   return direct_handle(info, isolate());
 }
@@ -2840,6 +2842,16 @@ DirectHandle<ExtendedMap> Factory::NewExtendedMapWithMetaMap(
                  elements_kind, inobject_properties, allocation_type));
   map->set_is_extended_map(true);
   map->set_map_kind_and_size(map_kind, map_size);
+
+  // Factory methods must initialize all tagged fields.
+  int fields_count =
+      (map_size - ExtendedMap::kStartOfStrongExtendedFieldsOffset) /
+      kTaggedSize;
+  if (fields_count > 0) {
+    MemsetTagged(map->RawField(ExtendedMap::kStartOfStrongExtendedFieldsOffset),
+                 read_only_roots().undefined_value(), fields_count);
+  }
+
   return map;
 }
 
@@ -2889,18 +2901,11 @@ DirectHandle<ExtendedMap> Factory::NewContextfulMap(
          InstanceTypeChecker::IsWasmStruct(type) ||
 #endif  // V8_ENABLE_WEBASSEMBLY
          InstanceTypeChecker::IsMap(type));
-  int map_size = ExtendedMapSizeForKind(map_kind);
-  DCHECK_GE(map_size, ExtendedMap::kMinimumSize);
-  auto meta_map_provider = [native_context] {
-    // Tie new map to given native context.
-    return native_context->meta_map();
-  };
-  DirectHandle<ExtendedMap> map = UncheckedCast<ExtendedMap>(
-      NewMapImpl(meta_map_provider, map_size, type, instance_size,
-                 elements_kind, inobject_properties, allocation_type));
-  map->set_is_extended_map(true);
-  map->set_map_kind_and_size(map_kind, map_size);
-  return map;
+
+  DirectHandle<Map> meta_map(native_context->meta_map(), isolate());
+  return NewExtendedMapWithMetaMap(meta_map, map_kind, type, instance_size,
+                                   elements_kind, inobject_properties,
+                                   allocation_type);
 }
 
 Handle<Map> Factory::NewContextfulMapForCurrentContext(

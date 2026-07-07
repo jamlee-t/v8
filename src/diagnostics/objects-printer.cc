@@ -4865,10 +4865,15 @@ void Map::MapPrint(std::ostream& os) {
       case ExtendedMapKind::kJSInterceptorMap: {
         Tagged<JSInterceptorMap> js_interceptor_map =
             UncheckedCast<JSInterceptorMap>(map_ex);
+        if (js_interceptor_map->supports_fast_iterable_to_list()) {
+          os << "\n - supports_fast_iterable_to_list";
+        }
         os << "\n - named_interceptor: "
            << Brief(js_interceptor_map->named_interceptor());
         os << "\n - indexed_interceptor: "
            << Brief(js_interceptor_map->indexed_interceptor());
+        os << "\n - fast_case_validity_cell: "
+           << Brief(js_interceptor_map->fast_case_validity_cell());
         break;
       }
     }

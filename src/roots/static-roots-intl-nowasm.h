@@ -1219,10 +1219,10 @@ struct StaticReadOnlyRoot {
   static constexpr Tagged_t kJSAtomicsMutexMap = 0x1800cd;
   static constexpr Tagged_t kJSAtomicsConditionMap = 0x1800f5;
   static constexpr Tagged_t kNoOpNamedInterceptorInfo = 0x18011d;
-  static constexpr Tagged_t kNoOpIndexedInterceptorInfo = 0x180169;
+  static constexpr Tagged_t kNoOpIndexedInterceptorInfo = 0x180171;
 
   static constexpr Tagged_t kFirstAllocatedRoot = 0x11;
-  static constexpr Tagged_t kLastAllocatedRoot = 0x180169;
+  static constexpr Tagged_t kLastAllocatedRoot = 0x180171;
 };
 
 static constexpr std::array<Tagged_t, 1022> StaticReadOnlyRootsPointerTable = {

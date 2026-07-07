@@ -1855,10 +1855,8 @@ void StringBuiltinsAssembler::ReplaceUnpairedSurrogates(TNode<String> source,
 }
 
 void StringBuiltinsAssembler::BranchIfStringPrimitiveWithNoCustomIteration(
-    TNode<Object> object, TNode<Context> context, Label* if_true,
-    Label* if_false) {
-  GotoIf(TaggedIsSmi(object), if_false);
-  GotoIfNot(IsString(CAST(object)), if_false);
+    TNode<JSAnyNotSmi> object, Label* if_true, Label* if_false) {
+  GotoIfNot(IsString(object), if_false);
 
   // Check that the String iterator hasn't been modified in a way that would
   // affect iteration.

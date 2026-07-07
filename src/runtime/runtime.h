@@ -353,6 +353,8 @@ constexpr bool CanTriggerGC(T... properties) {
   I(CopyDataPropertiesWithExcludedPropertiesOnStack, -1 /* >= 1 */, 1) \
   I(CreateDataProperty, 3, 1)                                          \
   I(CreateIterResultObject, 2, 1)                                      \
+  F(IterableToListWithInterceptor, 1, 1)                               \
+  F(CheckFastIterableToListPrototype, 1, 1)                            \
   F(CreatePrivateAccessors, 2, 1)                                      \
   F(DefineAccessorPropertyUnchecked, 5, 1)                             \
   F(DefineKeyedOwnPropertyInLiteral, 6, 1)                             \

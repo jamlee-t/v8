@@ -1752,6 +1752,15 @@ void ObjectTemplate::SetAccessCheckCallbackAndHandler(
       indexed_handler.query, indexed_handler.descriptor,
       indexed_handler.deleter, indexed_handler.enumerator,
       indexed_handler.definer, indexed_handler.data, indexed_handler.flags);
+  if (indexed_handler.index_of) {
+    indexed_interceptor->set_indexed_index_of(
+        i_isolate, reinterpret_cast<i::Address>(indexed_handler.index_of));
+  }
+  if (indexed_handler.iterable_to_list) {
+    indexed_interceptor->set_indexed_iterable_to_list(
+        i_isolate,
+        reinterpret_cast<i::Address>(indexed_handler.iterable_to_list));
+  }
   info->set_indexed_interceptor(*indexed_interceptor);
 
   if (data.IsEmpty()) {
@@ -1777,6 +1786,10 @@ void ObjectTemplate::SetHandler(
   if (config.index_of) {
     obj->set_indexed_index_of(i_isolate,
                               reinterpret_cast<i::Address>(config.index_of));
+  }
+  if (config.iterable_to_list) {
+    obj->set_indexed_iterable_to_list(
+        i_isolate, reinterpret_cast<i::Address>(config.iterable_to_list));
   }
   i::FunctionTemplateInfo::SetIndexedPropertyHandler(i_isolate, cons, obj);
 }

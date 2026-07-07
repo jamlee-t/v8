@@ -1445,7 +1445,7 @@ void Heap::CreateReadOnlyApiObjects() {
   // Make sure read only heap layout does not depend on the size of
   // ExternalPointer fields.
   constexpr int kMaxPossibleInterceptorInfoSize =
-      3 * kTaggedSize + 8 * kSystemPointerSize;
+      3 * kTaggedSize + 9 * kSystemPointerSize;
 
   auto info = isolate()->factory()->NewInterceptorInfo(
       InterceptorKind::kNamed, AllocationType::kReadOnly);

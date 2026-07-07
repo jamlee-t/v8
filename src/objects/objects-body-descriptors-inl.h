@@ -1996,7 +1996,9 @@ class InterceptorInfo::BodyDescriptor final : public BodyDescriptorBase {
                 offsetof(InterceptorInfo, definer_));
   static_assert(offsetof(InterceptorInfo, definer_) <
                 offsetof(InterceptorInfo, index_of_));
-  static_assert(InterceptorInfo::kIndexOfOffsetEnd + 1 ==
+  static_assert(offsetof(InterceptorInfo, index_of_) <
+                offsetof(InterceptorInfo, iterable_to_list_));
+  static_assert(InterceptorInfo::kIterableToListOffsetEnd + 1 ==
                 InterceptorInfo::kSize);
 
   template <typename ObjectVisitor>

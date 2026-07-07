@@ -26,8 +26,7 @@ class StringBuiltinsAssembler : public CodeStubAssembler {
                         TNode<String> rhs, TNode<Word32T> rhs_instance_type,
                         TNode<IntPtrT> length, Label* if_equal,
                         Label* if_not_equal, Label* if_indirect);
-  void BranchIfStringPrimitiveWithNoCustomIteration(TNode<Object> object,
-                                                    TNode<Context> context,
+  void BranchIfStringPrimitiveWithNoCustomIteration(TNode<JSAnyNotSmi> object,
                                                     Label* if_true,
                                                     Label* if_false);
 

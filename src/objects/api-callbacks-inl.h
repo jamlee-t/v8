@@ -155,6 +155,9 @@ INTERCEPTOR_INFO_HAS_GETTER(definer)
 INTERCEPTOR_INFO_HAS_GETTER(enumerator)
 
 bool InterceptorInfo::has_index_of() const { return has_indexed_index_of(); }
+bool InterceptorInfo::has_iterable_to_list() const {
+  return has_indexed_iterable_to_list();
+}
 
 #undef INTERCEPTOR_INFO_HAS_GETTER
 
@@ -224,6 +227,12 @@ LAZY_EXTERNAL_POINTER_ACCESSORS_MAYBE_READ_ONLY_HOST_CHECKED2(
     InterceptorInfo, indexed_index_of, Address,
     offsetof(InterceptorInfo, index_of_), kApiIndexedPropertyIndexOfCallbackTag,
     !is_named(), !is_named() && (value != kNullAddress))
+
+LAZY_EXTERNAL_POINTER_ACCESSORS_MAYBE_READ_ONLY_HOST_CHECKED2(
+    InterceptorInfo, indexed_iterable_to_list, Address,
+    offsetof(InterceptorInfo, iterable_to_list_),
+    kApiIndexedPropertyIterableToListCallbackTag, !is_named(),
+    !is_named() && (value != kNullAddress))
 
 BOOL_ACCESSORS(InterceptorInfo, flags, can_intercept_symbols,
                CanInterceptSymbolsBit::kShift)

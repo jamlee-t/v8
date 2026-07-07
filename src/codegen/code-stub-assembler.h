@@ -923,6 +923,15 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
   void BranchIfJSReceiver(TNode<Object> object, Label* if_true,
                           Label* if_false);
 
+  TNode<BoolT> HasIndexedInterceptor(TNode<Map> map);
+
+  // Checks if given iterable is an indexed interceptor that supports fast
+  // iterable-to-list conversion. In case one of the required checks fail
+  // it also resets the supports-fast-iterable-to-list bit in the
+  // interceptor's map.
+  void BranchIfFastIterableToListInterceptor(TNode<JSAnyNotSmi> iterable,
+                                             Label* if_true, Label* if_false);
+
   // Branches to {if_true} when --force-slow-path flag has been passed.
   // It's used for testing to ensure that slow path implementation behave
   // equivalent to corresponding fast paths (where applicable).

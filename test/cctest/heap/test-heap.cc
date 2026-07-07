@@ -908,9 +908,11 @@ TEST(JSInterceptorMap) {
             JS_OBJECT_TYPE,
             JSObject::kHeaderSize + inobject_properties * kTaggedSize,
             TERMINAL_FAST_ELEMENTS_KIND, inobject_properties));
-        map->clear_extended_padding();
+        map->init_flags_and_clear_extended_padding();
         map->set_named_interceptor(*named_interceptor);
         map->set_indexed_interceptor(*indexed_interceptor);
+        map->set_fast_case_validity_cell(
+            ReadOnlyRoots(isolate).invalid_prototype_validity_cell());
       }
 
       Handle<JSObject> obj = factory->NewJSObjectFromMap(map);
