@@ -267,4 +267,11 @@
   'debugger/wasm-jspi-async-stack': [SKIP],
 }],  # (arch != x64 and arch != arm64 and arch != ia32 and arch != arm and arch != ppc64 and arch != s390x)
 
+##############################################################################
+['arch == arm64 or arch == arm or arch == ia32', {
+  # https://crbug.com/518246754: Safepoint mismatch during OSR.
+  'debugger/wasm-osr-safepoint-mismatch': [SKIP],
+  'debugger/wasm-step-after-trap': [SKIP],
+}],  # 'arch == arm64 or arch == arm or arch == ia32'
+
 ]

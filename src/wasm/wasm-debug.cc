@@ -8,6 +8,7 @@
 #include <unordered_map>
 
 #include "src/base/logging.h"
+#include "src/codegen/safepoint-table.h"
 #include "src/common/assert-scope.h"
 #include "src/common/simd128.h"
 #include "src/compiler/wasm-compiler.h"
@@ -771,6 +772,28 @@ class DebugInfoImpl {
         FindNewPC(frame, new_code, summary.code_offset(), return_location);
 #ifdef DEBUG
     int old_position = summary.SourcePosition();
+#if !defined(V8_TARGET_ARCH_X64)
+    // On non-x64 architectures, we patch the return address of the currently
+    // executing builtin (e.g. kWasmDebugBreak) to jump directly into the new
+    // code. If the new code has a different safepoint entry than the physical
+    // frame state, a GC could miss live references or cause type confusion. On
+    // x64, we return to the old code first, which then performs a cooperative
+    // transition to the new code, so the safepoint information does not need to
+    // match exactly at the OSR target PC.
+    {
+      SafepointTable old_table(frame->wasm_code());
+      SafepointTable new_table(new_code);
+      const SafepointEntry& old_entry = old_table.FindEntry(frame->pc());
+      const SafepointEntry& new_entry = new_table.FindEntry(new_pc);
+      DCHECK_EQ(old_entry.tagged_slots().size(),
+                new_entry.tagged_slots().size());
+      DCHECK_EQ(old_entry.tagged_register_indexes(),
+                new_entry.tagged_register_indexes());
+      for (size_t i = 0; i < old_entry.tagged_slots().size(); ++i) {
+        DCHECK_EQ(old_entry.tagged_slots()[i], new_entry.tagged_slots()[i]);
+      }
+    }
+#endif
 #endif
 #if V8_TARGET_ARCH_X64
     base::Memory<Address>(frame->fp() - kOSRTargetOffset) = new_pc;
