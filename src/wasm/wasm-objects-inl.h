@@ -32,6 +32,7 @@
 #include "src/objects/trusted-object-inl.h"
 #include "src/objects/trusted-pointer-inl.h"
 #include "src/roots/roots.h"
+#include "src/sandbox/check.h"
 #include "src/sandbox/isolate-inl.h"
 #include "src/wasm/wasm-code-manager.h"
 #include "src/wasm/wasm-module.h"
@@ -407,6 +408,10 @@ Tagged<WasmMemoryObject> WasmTrustedInstanceData::memory_object(
 }
 
 uint8_t* WasmTrustedInstanceData::memory_base(uint32_t memory_index) const {
+  const uint32_t bases_and_sizes_length =
+      memory_bases_and_sizes()->length().value();
+  SBXCHECK_EQ(bases_and_sizes_length % 2u, 0u);
+  SBXCHECK_LT(memory_index, bases_and_sizes_length / 2u);
   DCHECK_EQ(memory0_start(),
             reinterpret_cast<uint8_t*>(memory_bases_and_sizes()->get(0)));
   return reinterpret_cast<uint8_t*>(
@@ -414,6 +419,10 @@ uint8_t* WasmTrustedInstanceData::memory_base(uint32_t memory_index) const {
 }
 
 size_t WasmTrustedInstanceData::memory_size(uint32_t memory_index) const {
+  const uint32_t bases_and_sizes_length =
+      memory_bases_and_sizes()->length().value();
+  SBXCHECK_EQ(bases_and_sizes_length % 2u, 0u);
+  SBXCHECK_LT(memory_index, bases_and_sizes_length / 2u);
   DCHECK_EQ(memory0_size(), memory_bases_and_sizes()->get(1));
   return memory_bases_and_sizes()->get(2 * memory_index + 1);
 }

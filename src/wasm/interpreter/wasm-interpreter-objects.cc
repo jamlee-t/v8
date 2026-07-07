@@ -49,7 +49,8 @@ bool WasmInterpreterObject::RunInterpreter(
 
   // Publish the currently-executing instance to the runtime so that
   // wasm_trusted_instance_data() (and any cross-instance identity checks)
-  // always see the correct, GC-rooted instance.
+  // always see the correct, GC-rooted instance. The InstanceScope constructor
+  // also binds the (corruptible) handle to {instance} via an SBXCHECK.
   wasm::WasmInterpreterRuntime::InstanceScope instance_scope(
       handle->ptr()->interpreter()->GetWasmRuntime(), instance);
 
@@ -75,7 +76,8 @@ bool WasmInterpreterObject::RunInterpreter(
   DirectHandle<Managed<wasm::InterpreterHandle>> handle =
       wasm::GetInterpreterHandle(isolate, interpreter_object);
 
-  // See comment in the other RunInterpreter overload above.
+  // See comment in the other RunInterpreter overload above; the InstanceScope
+  // constructor binds the handle to {instance}.
   wasm::WasmInterpreterRuntime::InstanceScope instance_scope(
       handle->ptr()->interpreter()->GetWasmRuntime(), instance);
 

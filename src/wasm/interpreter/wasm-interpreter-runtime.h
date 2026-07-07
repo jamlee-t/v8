@@ -53,6 +53,7 @@ class WasmInterpreterRuntime {
    private:
     WasmInterpreterRuntime* const runtime_;
     IndirectHandle<WasmInstanceObject> const previous_;
+    IndirectHandle<WasmTrustedInstanceData> const previous_trusted_data_;
   };
 
   inline WasmBytecode* GetFunctionBytecode(uint32_t func_index);
@@ -121,7 +122,8 @@ class WasmInterpreterRuntime {
       Isolate* isolate, DirectHandle<WasmInstanceObject> instance,
       uint32_t table_index, uint32_t entry_index);
 
-  static void UpdateMemoryAddress(DirectHandle<WasmInstanceObject> instance,
+  static void UpdateMemoryAddress(Isolate* isolate,
+                                  DirectHandle<WasmInstanceObject> instance,
                                   uint32_t memory_index);
 
   inline void DataDrop(uint32_t index);
@@ -383,6 +385,16 @@ class WasmInterpreterRuntime {
   // runtime never observes it between entries.
   IndirectHandle<WasmInstanceObject> current_instance_;
 
+  // The WasmTrustedInstanceData that belongs to {current_instance_}, read and
+  // validated exactly once when the active InstanceScope is entered and kept
+  // off-cage and GC-rooted. All trusted-data accesses (see
+  // wasm_trusted_instance_data()) use this value instead of re-loading the
+  // in-cage WasmInstanceObject::trusted_data_ IndirectPointerHandle on every
+  // call. This prevents a sandbox attacker from same-tag swapping trusted_data_
+  // to point at another instance's trusted data. It is set/restored together
+  // with {current_instance_} by InstanceScope.
+  IndirectHandle<WasmTrustedInstanceData> current_trusted_data_;
+
   WasmInterpreter::CodeMap* codemap_;
 
   uint32_t start_function_index_;
@@ -593,7 +605,8 @@ class V8_EXPORT_PRIVATE InterpreterHandle {
   InterpreterHandle(const InterpreterHandle&) = delete;
   InterpreterHandle& operator=(const InterpreterHandle&) = delete;
 
-  static ModuleWireBytes GetBytes(Tagged<Tuple2> interpreter_object);
+  static ModuleWireBytes GetBytes(Isolate* isolate,
+                                  Tagged<Tuple2> interpreter_object);
 
   inline WasmInterpreterThread::State RunExecutionLoop(
       WasmInterpreterThread* thread, bool called_from_js);

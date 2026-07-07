@@ -305,7 +305,8 @@ GetOrCreateInterpreterHandle(Isolate* isolate,
 // WasmDispatchTable::kInvalidFunctionIndex otherwise.
 class IndirectFunctionTableEntry {
  public:
-  inline IndirectFunctionTableEntry(DirectHandle<WasmInstanceObject>,
+  inline IndirectFunctionTableEntry(Isolate* isolate,
+                                    DirectHandle<WasmTrustedInstanceData>,
                                     int table_index, int entry_index);
 
   inline Tagged<Object> implicit_arg() const {
@@ -322,36 +323,82 @@ class IndirectFunctionTableEntry {
   int const index_;
 };
 
+namespace {
+// Reads the trusted (out-of-cage) WasmDispatchTable for {table_index} from
+// {trusted_data}, bounds-checking {table_index} first. {table_index} comes
+// from module metadata, but the dispatch tables live in trusted space, so a
+// table-count desync must not be able to drive an out-of-bounds read of the
+// trusted dispatch-table array. {trusted_data} is the current, validated
+// trusted data (see wasm_trusted_instance_data()), not a fresh load of the
+// in-cage WasmInstanceObject::trusted_data_ handle.
+DirectHandle<WasmDispatchTable> GetCheckedDispatchTable(
+    Isolate* isolate, DirectHandle<WasmTrustedInstanceData> trusted_data,
+    int table_index) {
+  SBXCHECK_GE(table_index, 0);
+  if (table_index == 0) {
+    return direct_handle(
+        TrustedCast<WasmDispatchTable>(trusted_data->dispatch_table0()),
+        isolate);
+  }
+  auto dispatch_tables = trusted_data->dispatch_tables();
+  SBXCHECK_LT(static_cast<uint32_t>(table_index),
+              dispatch_tables->length().value());
+  return direct_handle(
+      TrustedCast<WasmDispatchTable>(dispatch_tables->get(table_index)),
+      isolate);
+}
+}  // namespace
+
 IndirectFunctionTableEntry::IndirectFunctionTableEntry(
-    DirectHandle<WasmInstanceObject> instance, int table_index, int entry_index)
-    : table_(table_index != 0
-                 ? direct_handle(TrustedCast<WasmDispatchTable>(
-                                     instance->trusted_data(Isolate::Current())
-                                         ->dispatch_tables()
-                                         ->get(table_index)),
-                                 Isolate::Current())
-                 : direct_handle(TrustedCast<WasmDispatchTable>(
-                                     instance->trusted_data(Isolate::Current())
-                                         ->dispatch_table0()),
-                                 Isolate::Current())),
+    Isolate* isolate, DirectHandle<WasmTrustedInstanceData> trusted_data,
+    int table_index, int entry_index)
+    : table_(GetCheckedDispatchTable(isolate, trusted_data, table_index)),
       index_(entry_index) {
-  DCHECK_GE(entry_index, 0);
-  DCHECK_LT(entry_index, table_->length());
+  // Re-check the index against the trusted dispatch table length before reading
+  // from it. This prevents out-of-bounds access if cached and trusted table
+  // sizes ever diverge.
+  SBXCHECK_GE(entry_index, 0);
+  SBXCHECK_LT(entry_index, table_->length());
 }
 
 WasmInterpreterRuntime::InstanceScope::InstanceScope(
     WasmInterpreterRuntime* runtime, DirectHandle<WasmInstanceObject> instance)
-    : runtime_(runtime), previous_(runtime->current_instance_) {
+    : runtime_(runtime),
+      previous_(runtime->current_instance_),
+      previous_trusted_data_(runtime->current_trusted_data_) {
   DCHECK(!instance.is_null());
+  Isolate* isolate = runtime->isolate_;
   // Re-handlify into the current HandleScope so that GC keeps the instance
   // alive for the lifetime of this scope, independent of how the caller
   // obtained `instance`.
   runtime->current_instance_ =
-      IndirectHandle<WasmInstanceObject>(*instance, runtime->isolate_);
+      IndirectHandle<WasmInstanceObject>(*instance, isolate);
+
+  // Read the trusted data exactly once, here at scope entry, and serve every
+  // wasm_trusted_instance_data() access from this off-cage value instead of
+  // re-loading the in-cage WasmInstanceObject::trusted_data_ handle on each
+  // call. The trusted data is rooted in the caller's HandleScope, so it stays
+  // valid and consistent for the lifetime of this scope.
+  Tagged<WasmTrustedInstanceData> trusted_data =
+      instance->trusted_data(isolate);
+  // {runtime} is reached through the in-sandbox {interpreter_object} Tuple2,
+  // whose value2 slot (a Managed<InterpreterHandle>) can be swapped by an
+  // attacker with in-cage writes for another instance's handle -- it carries
+  // the same external-pointer tag, so the cast succeeds. Such a handle owns a
+  // different module, which would let the trusted-data accesses guarded by this
+  // scope run under a mismatched module (signature/type confusion, OOB). This
+  // is the single choke point that publishes an instance before any
+  // wasm_trusted_instance_data() access, so bind the two here: require the
+  // trusted_data's module to match this runtime's module, failing closed on any
+  // handle/instance desync.
+  SBXCHECK_EQ(trusted_data->module(), runtime->module_);
+  runtime->current_trusted_data_ =
+      IndirectHandle<WasmTrustedInstanceData>(trusted_data, isolate);
 }
 
 WasmInterpreterRuntime::InstanceScope::~InstanceScope() {
   runtime_->current_instance_ = previous_;
+  runtime_->current_trusted_data_ = previous_trusted_data_;
 }
 
 WasmInterpreterRuntime::WasmInterpreterRuntime(
@@ -397,8 +444,8 @@ WasmInterpreterRuntime::WasmInterpreterRuntime(
 
 // static
 void WasmInterpreterRuntime::UpdateMemoryAddress(
-    DirectHandle<WasmInstanceObject> instance, uint32_t memory_index) {
-  Isolate* isolate = Isolate::Current();
+    Isolate* isolate, DirectHandle<WasmInstanceObject> instance,
+    uint32_t memory_index) {
   DirectHandle<Tuple2> interpreter_object =
       WasmTrustedInstanceData::GetOrCreateInterpreterObject(instance);
   DirectHandle<Managed<InterpreterHandle>> handle =
@@ -488,7 +535,7 @@ void WasmInterpreterRuntime::TableInit(const uint8_t*& current_code,
 
   std::optional<MessageTemplate> msg_template =
       WasmTrustedInstanceData::InitTableEntries(
-          Isolate::Current(), trusted_data, trusted_data, table_index,
+          isolate_, trusted_data, trusted_data, table_index,
           element_segment_index, dst, src, size);
   // See WasmInstanceObject::InitTableEntries.
   if (msg_template == MessageTemplate::kWasmTrapTableOutOfBounds) {
@@ -1925,8 +1972,8 @@ void WasmInterpreterRuntime::ExecuteIndirectCall(
   if (!table[entry_index]) {
     HandleScope handle_scope(isolate_);  // Avoid leaking handles.
 
-    IndirectFunctionTableEntry entry(current_instance_, table_index,
-                                     entry_index);
+    IndirectFunctionTableEntry entry(isolate_, wasm_trusted_instance_data(),
+                                     table_index, entry_index);
 
     DirectHandle<Object> object_implicit_arg(entry.implicit_arg(), isolate_);
     if (Is<WasmTrustedInstanceData>(*object_implicit_arg)) {
@@ -2000,8 +2047,8 @@ void WasmInterpreterRuntime::ExecuteIndirectCall(
         ref_stack_fp_offset);
 
     // TODO(paolosev@microsoft.com): Optimize this code.
-    IndirectFunctionTableEntry entry(current_instance_, table_index,
-                                     entry_index);
+    IndirectFunctionTableEntry entry(isolate_, wasm_trusted_instance_data(),
+                                     table_index, entry_index);
     DirectHandle<Object> object_implicit_arg(entry.implicit_arg(), isolate_);
 
     // The reference stack was populated according to the callsite signature,
@@ -2079,6 +2126,12 @@ void WasmInterpreterRuntime::ExecuteCallRef(
     const uint8_t*& current_code, WasmRef func_ref, uint32_t sig_index,
     uint32_t stack_pos, uint32_t* sp, uint32_t ref_stack_fp_offset,
     uint32_t slot_offset, uint32_t return_slot_offset, bool is_tail_call) {
+  // {func_ref} is read from the in-cage reference stack and can be replaced by
+  // an attacker with any non-null in-cage object. The cast below is unchecked
+  // in release builds, so verify the type before dereferencing its (trusted-
+  // pointer) internal function. Null is already trapped by the s2s_CallRef /
+  // s2s_ReturnCallRef handlers before we get here.
+  SBXCHECK(Is<WasmFuncRef>(*func_ref));
   DirectHandle<WasmFuncRef> wasm_func_ref = Cast<WasmFuncRef>(func_ref);
   Tagged<WasmInternalFunction> internal = wasm_func_ref->internal(isolate_);
   DirectHandle<Object> object_implicit_arg{internal->implicit_arg(), isolate_};
@@ -3212,11 +3265,15 @@ void WasmInterpreterRuntime::Trace(const char* format, ...) {
 #endif  // V8_ENABLE_DRUMBRAKE_TRACING
 
 // static
-ModuleWireBytes InterpreterHandle::GetBytes(Tagged<Tuple2> interpreter_object) {
+ModuleWireBytes InterpreterHandle::GetBytes(Isolate* isolate,
+                                            Tagged<Tuple2> interpreter_object) {
   Tagged<WasmInstanceObject> wasm_instance =
       WasmInterpreterObject::get_wasm_instance(interpreter_object);
-  Managed<NativeModule>::Ptr native_module =
-      wasm_instance->module_object()->native_module();
+  Tagged<WasmTrustedInstanceData> trusted_data =
+      wasm_instance->trusted_data(isolate);
+  SBXCHECK(trusted_data->has_instance_object() &&
+           trusted_data->instance_object() == wasm_instance);
+  wasm::NativeModule* native_module = trusted_data->native_module();
   return ModuleWireBytes{native_module->wire_bytes()};
 }
 
@@ -3226,7 +3283,7 @@ InterpreterHandle::InterpreterHandle(Isolate* isolate,
       module_(WasmInterpreterObject::get_wasm_instance(*interpreter_object)
                   ->trusted_data(isolate)
                   ->module()),
-      interpreter_(isolate, module_, GetBytes(*interpreter_object),
+      interpreter_(isolate, module_, GetBytes(isolate, *interpreter_object),
                    direct_handle(WasmInterpreterObject::get_wasm_instance(
                                      *interpreter_object),
                                  isolate)) {}
@@ -3278,10 +3335,10 @@ V8_EXPORT_PRIVATE bool InterpreterHandle::Execute(
     WasmInterpreterThread* thread, Address frame_pointer, uint32_t func_index,
     const std::vector<WasmValue>& argument_values,
     std::vector<WasmValue>& return_values) {
-  DCHECK_GT(module()->functions.size(), func_index);
+  SBXCHECK_GT(module()->functions.size(), func_index);
   const FunctionSig* sig = module()->functions[func_index].sig;
-  DCHECK_EQ(sig->parameter_count(), argument_values.size());
-  DCHECK_EQ(sig->return_count(), return_values.size());
+  SBXCHECK_EQ(sig->parameter_count(), argument_values.size());
+  SBXCHECK_EQ(sig->return_count(), return_values.size());
 
   thread->StartExecutionTimer();
   interpreter_.BeginExecution(thread, func_index, frame_pointer,
@@ -3316,7 +3373,7 @@ V8_EXPORT_PRIVATE bool InterpreterHandle::Execute(
 bool InterpreterHandle::Execute(WasmInterpreterThread* thread,
                                 Address frame_pointer, uint32_t func_index,
                                 uint8_t* interpreter_fp) {
-  DCHECK_GT(module()->functions.size(), func_index);
+  SBXCHECK_GT(module()->functions.size(), func_index);
 
   interpreter_.BeginExecution(thread, func_index, frame_pointer,
                               interpreter_fp);

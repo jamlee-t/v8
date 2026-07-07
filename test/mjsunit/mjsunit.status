@@ -684,6 +684,10 @@
   # This sandbox regression test forces --wasm-jitless to exercise the DrumBrake
   # interpreter's JS-to-Wasm wrapper.
   'sandbox/regress-522294322': [SKIP],
+  # These sandbox regression tests force --wasm-jitless to exercise the
+  # DrumBrake interpreter's InterpreterHandle handling.
+  'sandbox/regress-527689557-1': [SKIP],
+  'sandbox/regress-527689557-2': [SKIP],
 }],  # not has_wasm_interpreter
 
 ['has_wasm_interpreter and variant == jitless', {
@@ -876,6 +880,7 @@
   'regress/wasm/regress-518229528': [SKIP],
   'regress/wasm/regress-518872404': [SKIP],
   'regress/wasm/regress-521064735': [SKIP],
+  'regress/wasm/regress-524830496': [SKIP],
   'wasm/shared-everything/*': [SKIP],
   'wasm/subtyping-invalid': [SKIP],
 
@@ -939,6 +944,7 @@
   'regress/wasm/regress-452541294': [SKIP],
   'regress/wasm/regress-457106696': [SKIP],
   'regress/wasm/regress-513063392': [SKIP],
+  'regress/wasm/regress-525437482': [SKIP],
   'wasm/custom-descriptors*': [SKIP],
   'wasm/exact-types': [SKIP],
 
@@ -950,6 +956,9 @@
   'regress/wasm/regress-516102112-1': [SKIP],
   'regress/wasm/regress-simd-520944504': [SKIP],
   'wasm/wide-arithmetic': [SKIP],
+
+  # --experimental-wasm-imported-strings-utf8
+  'regress/wasm/regress-525472599': [SKIP],
 
   # --wasm-deopt
   'regress/wasm/regress-363826217': [SKIP],
@@ -1024,6 +1033,8 @@
   'regress/wasm/regress-518697709': [SKIP],
   'regress/wasm/regress-crbug-1507751': [SKIP],
   'regress/wasm/regress-simd-518058891': [SKIP],
+  'regress/wasm/regress-simd-526303929': [SKIP],
+  'regress/wasm/regress-simd-528884838': [SKIP],
   'wasm/bit-shift-right': [SKIP],
   'wasm/bounds-check-turbofan': [SKIP],
   'wasm/enter-and-leave-debug-state': [SKIP],
@@ -1033,6 +1044,9 @@
   'wasm/nan-constant': [SKIP],
   'wasm/recognize-imports': [SKIP],
   'wasm/regress-471363817': [SKIP],
+  'wasm/regress-526041421': [SKIP],
+  'wasm/regress-529842414': [SKIP],
+  'wasm/regress-531123009': [SKIP],
   'wasm/simd-relaxed-lane-select': [SKIP],
   'wasm/speculative-inlining': [SKIP],
   'wasm/stringrefs-regressions': [SKIP],

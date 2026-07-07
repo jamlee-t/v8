@@ -779,6 +779,7 @@ void SetInstanceMemory(Tagged<WasmTrustedInstanceData> trusted_instance_data,
     Isolate* isolate = Isolate::Current();
     HandleScope scope(isolate);
     wasm::WasmInterpreterRuntime::UpdateMemoryAddress(
+        isolate,
         direct_handle(trusted_instance_data->instance_object(), isolate),
         memory_index);
   }
