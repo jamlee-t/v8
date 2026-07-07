@@ -872,10 +872,10 @@ class MaglevReducer {
   VirtualObject* CreateAsyncResumeTask(ValueNode* generator, ValueNode* value,
                                        ValueNode* kind);
 
-  ReduceResult BuildLoadTaggedField(ValueNode* object, uint32_t offset,
-                                    NodeType type = NodeType::kUnknown,
-                                    bool is_const = false,
-                                    PropertyKey key = PropertyKey::None());
+  ReduceResult BuildLoadTaggedField(
+      ValueNode* object, uint32_t offset, NodeType type = NodeType::kUnknown,
+      bool is_const = false, PropertyKey key = PropertyKey::None(),
+      IsArrayLength is_array_length = IsArrayLength::kNo);
 
   ReduceResult BuildLoadFixedDoubleArrayElement(ValueNode* elements,
                                                 ValueNode* index);

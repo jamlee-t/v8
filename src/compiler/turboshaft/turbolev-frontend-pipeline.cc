@@ -266,6 +266,29 @@ struct PostOptimizerPhase {
     maglev::MaglevGraphOptimizer optimizer(graph, kna_processor, ranges);
     maglev::GraphMultiProcessor<maglev::MaglevGraphOptimizer&,
                                 maglev::ReachableExceptionHandlerTracker&,
+                                maglev::RecomputeKnownNodeAspectsProcessor&>
+        optimization_pass(optimizer, exception_handler_tracker, kna_processor);
+    optimization_pass.ProcessGraph(graph);
+
+    // Remove unreachable blocks if we have any.
+    if (graph->may_have_unreachable_blocks()) {
+      graph->RemoveUnreachableBlocks();
+    }
+    return true;
+  }
+};
+
+struct PrePhiUntaggingPhase {
+  DECL_TURBOLEV_PHASE_CONSTANTS(PrePhiUntagging)
+
+  bool Run(maglev::Graph* graph) {
+    maglev::ReachableExceptionHandlerTracker exception_handler_tracker(graph);
+    maglev::RecomputeKnownNodeAspectsProcessor kna_processor(
+        graph, exception_handler_tracker);
+    maglev::MaglevGraphOptimizer optimizer(graph, kna_processor,
+                                           /*ranges=*/nullptr);
+    maglev::GraphMultiProcessor<maglev::MaglevGraphOptimizer&,
+                                maglev::ReachableExceptionHandlerTracker&,
                                 maglev::RecomputeKnownNodeAspectsProcessor&,
                                 maglev::RecomputePhiUseHintsProcessor,
                                 maglev::BoundsCheckEliminationProcessor>
@@ -357,12 +380,10 @@ std::optional<maglev::Graph*> TurbolevFrontendPipeline::Run() {
   if (v8_flags.maglev_truncation && graph_->may_have_truncation()) {
     Run<TruncationPhase>();
   }
-  if (graph_->compilation_info()->flags().enable_truncated_int32_phis) {
-    // This only needs to run unless we have accurate usage hints.
-    // TODO(turbolev): sort out perf problems blocking
-    // https://chromium-review.git.corp.google.com/c/v8/v8/+/7595239 from
-    // landing.
-    Run<PostOptimizerPhase>(nullptr);
+  // TODO(turbolev): sort out perf problems blocking
+  // https://chromium-review.git.corp.google.com/c/v8/v8/+/7595239 from landing.
+  if (v8_flags.turbolev_untagged_phis) {
+    Run<PrePhiUntaggingPhase>();
   }
   graph_->UnwrapDeoptFrames();
   if (v8_flags.turbolev_untagged_phis) {

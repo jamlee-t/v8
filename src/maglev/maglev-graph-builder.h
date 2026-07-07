@@ -1215,11 +1215,12 @@ class MaglevGraphBuilder {
       ValueNode* elements, int index);
   bool TryElideWriteBarrierForAllocation(ValueNode* object, ValueNode* value);
 
-  ReduceResult BuildLoadTaggedField(ValueNode* object, uint32_t offset,
-                                    NodeType type = NodeType::kUnknown,
-                                    bool is_const = false,
-                                    PropertyKey key = PropertyKey::None()) {
-    return reducer_.BuildLoadTaggedField(object, offset, type, is_const, key);
+  ReduceResult BuildLoadTaggedField(
+      ValueNode* object, uint32_t offset, NodeType type = NodeType::kUnknown,
+      bool is_const = false, PropertyKey key = PropertyKey::None(),
+      IsArrayLength is_array_length = IsArrayLength::kNo) {
+    return reducer_.BuildLoadTaggedField(object, offset, type, is_const, key,
+                                         is_array_length);
   }
 
   ReduceResult BuildStoreTaggedField(

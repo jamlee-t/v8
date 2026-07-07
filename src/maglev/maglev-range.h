@@ -61,6 +61,7 @@ class Range {
   V(All, kInfMin, kInfMax)               \
   V(Empty, kInfMax, kInfMin)             \
   V(Smi, Smi::kMinValue, Smi::kMaxValue) \
+  V(NonNegativeSmi, 0, Smi::kMaxValue)   \
   V(Int32, INT32_MIN, INT32_MAX)         \
   V(Uint32, 0, UINT32_MAX)               \
   V(SafeInt, kMinSafeInteger, kMaxSafeInteger)

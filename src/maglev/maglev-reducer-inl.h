@@ -498,18 +498,17 @@ std::optional<ValueNode*> MaglevReducer<BaseT>::TryGetConstantAlternative(
 }
 
 template <typename BaseT>
-ReduceResult MaglevReducer<BaseT>::BuildLoadTaggedField(ValueNode* object,
-                                                        uint32_t offset,
-                                                        NodeType type,
-                                                        bool is_const,
-                                                        PropertyKey key) {
+ReduceResult MaglevReducer<BaseT>::BuildLoadTaggedField(
+    ValueNode* object, uint32_t offset, NodeType type, bool is_const,
+    PropertyKey key, IsArrayLength is_array_length) {
   if constexpr (ReducerBaseWithAllocationTracking<BaseT>) {
     if (std::optional<ValueNode*> val =
             base_->TryBuildLoadTaggedFieldFromAllocation(object, offset)) {
       return *val;
     }
   }
-  return AddNewNode<LoadTaggedField>({object}, offset, type, is_const, key);
+  return AddNewNode<LoadTaggedField>({object}, offset, type, is_const, key,
+                                     is_array_length);
 }
 
 template <typename BaseT>
@@ -2106,7 +2105,7 @@ MaglevReducer<BaseT>::TryBuildLoadFixedArrayElementConstantIndex(
   int offset = FixedArray::OffsetOfElementAt(index);
   return AddNewNodeNoInputConversion<LoadTaggedField>(
       {elements}, offset, NodeTypeFromLoadType(type), false,
-      PropertyKey::None());
+      PropertyKey::None(), IsArrayLength::kNo);
 }
 
 template <typename BaseT>

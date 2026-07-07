@@ -4593,10 +4593,11 @@ ReduceResult MaglevGraphBuilder::BuildLoadField(
   // Do the load.
   if (field_index.is_double()) {
     ValueNode* heap_number;
-    GET_VALUE_OR_ABORT(heap_number,
-                       AddNewNode<LoadTaggedField>(
-                           {load_source}, field_index.offset(),
-                           NodeType::kHeapNumber, false, PropertyKey::None()));
+    GET_VALUE_OR_ABORT(
+        heap_number,
+        AddNewNode<LoadTaggedField>({load_source}, field_index.offset(),
+                                    NodeType::kHeapNumber, false,
+                                    PropertyKey::None(), IsArrayLength::kNo));
     return AddNewNode<LoadFloat64>(
         {heap_number}, static_cast<int>(offsetof(HeapNumber, value_)));
   }
@@ -4652,9 +4653,9 @@ ReduceResult MaglevGraphBuilder::BuildLoadJSArrayLength(ValueNode* js_array,
 
   ValueNode* length;
   GET_VALUE_OR_ABORT(
-      length,
-      BuildLoadTaggedField(js_array, offsetof(JSArray, length_), length_type,
-                           false, broker()->length_string()));
+      length, BuildLoadTaggedField(
+                  js_array, offsetof(JSArray, length_), length_type, false,
+                  broker()->length_string(), IsArrayLength::kYes));
   reducer_.RecordKnownProperty(js_array, broker()->length_string(), length,
                                false, compiler::AccessMode::kLoad);
   return length;
@@ -4809,9 +4810,10 @@ MaybeReduceResult MaglevGraphBuilder::TryBuildStoreField(
     } else {
       ValueNode* heap_number;
       GET_VALUE_OR_ABORT(
-          heap_number, AddNewNode<LoadTaggedField>(
-                           {store_target}, field_index.offset(),
-                           NodeType::kHeapNumber, false, PropertyKey::None()));
+          heap_number,
+          AddNewNode<LoadTaggedField>({store_target}, field_index.offset(),
+                                      NodeType::kHeapNumber, false,
+                                      PropertyKey::None(), IsArrayLength::kNo));
       return AddNewNode<StoreFloat64>(
           {heap_number, value}, static_cast<int>(offsetof(HeapNumber, value_)));
     }
@@ -13425,7 +13427,7 @@ ReduceResult MaglevGraphBuilder::VisitArrayDestructure() {
   for (uint32_t i = 0; i < count; ++i) {
     ValueNode* element = AddNewNodeNoInputConversion<LoadTaggedField>(
         {result}, FixedArray::OffsetOfElementAt(i), NodeType::kUnknown, false,
-        PropertyKey::None());
+        PropertyKey::None(), IsArrayLength::kNo);
     StoreRegister(outputs[i], element);
   }
   return ReduceResult::Done();

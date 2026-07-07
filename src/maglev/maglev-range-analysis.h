@@ -359,7 +359,9 @@ class RangeProcessor {
   }
   ProcessResult Process(LoadTaggedField* node, const ProcessingState&) {
     if (node->type() == NodeType::kSmi) {
-      UnionUpdate(node, Range::Smi());
+      UnionUpdate(node, node->is_array_length() == IsArrayLength::kYes
+                            ? Range::NonNegativeSmi()
+                            : Range::Smi());
     }
     return ProcessResult::kContinue;
   }

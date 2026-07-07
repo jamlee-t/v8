@@ -8622,11 +8622,16 @@ inline std::ostream& operator<<(std::ostream& os, PropertyKey key) {
   return os;
 }
 
+enum class IsArrayLength { kNo, kYes };
+
 class LoadTaggedField : public FixedInputValueNodeT<1, LoadTaggedField> {
  public:
   explicit LoadTaggedField(uint64_t bitfield, const int offset, NodeType type,
-                           bool is_const, PropertyKey property_key)
-      : Base(bitfield | IsConstantLoadField::encode(is_const)),
+                           bool is_const, PropertyKey property_key,
+                           IsArrayLength is_array_length)
+      : Base(
+            bitfield | IsConstantLoadField::encode(is_const) |
+            IsArrayLengthField::encode(is_array_length == IsArrayLength::kYes)),
         offset_(offset),
         type_(type),
         property_key_(property_key) {}
@@ -8638,14 +8643,18 @@ class LoadTaggedField : public FixedInputValueNodeT<1, LoadTaggedField> {
   NodeType type() const { return type_; }
   bool is_const() const { return IsConstantLoadField::decode(bitfield()); }
   PropertyKey property_key() const { return property_key_; }
-
+  IsArrayLength is_array_length() const {
+    return IsArrayLengthField::decode(bitfield()) ? IsArrayLength::kYes
+                                                  : IsArrayLength::kNo;
+  }
 
   void SetValueLocationConstraints();
   void GenerateCode(MaglevAssembler*, const ProcessingState&);
   void PrintParams(std::ostream&) const;
 
   auto options() const {
-    return std::tuple{offset(), type(), is_const(), property_key()};
+    return std::tuple{offset(), type(), is_const(), property_key(),
+                      is_array_length()};
   }
 
  private:
@@ -8653,6 +8662,7 @@ class LoadTaggedField : public FixedInputValueNodeT<1, LoadTaggedField> {
   const NodeType type_;
   PropertyKey property_key_;
   using IsConstantLoadField = NextBitField<bool, 1>;
+  using IsArrayLengthField = IsConstantLoadField::Next<bool, 1>;
 };
 
 class LoadContextSlotNoCells

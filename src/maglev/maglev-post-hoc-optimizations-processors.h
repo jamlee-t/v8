@@ -645,10 +645,18 @@ class ReachableExceptionHandlerTracker {
   ZoneAbslFlatHashSet<BasicBlock*> reachable_exception_handlers_;
 };
 
+// TODO(victorgomes): This eliminator is block-local -- it clears its state at
+// every basic-block boundary (PreProcessBasicBlock), so a bounds check only
+// subsumes redundant checks, and only certifies Smi-safe indices, within the
+// same block. Extend it to a dominator-tree / whole-graph walk so a check in a
+// dominating block can eliminate checks (and fold Smi-size artifacts) in
+// dominated successor blocks.
 class BoundsCheckEliminationProcessor {
  public:
   explicit BoundsCheckEliminationProcessor(Graph* graph)
-      : graph_(graph), current_block_bounds_checks_(graph->zone()) {}
+      : graph_(graph),
+        current_block_bounds_checks_(graph->zone()),
+        current_block_smi_safe_(graph->zone()) {}
 
   void PreProcessGraph(Graph* graph) {}
   void PostProcessGraph(Graph* graph) {}
@@ -660,6 +668,7 @@ class BoundsCheckEliminationProcessor {
   BlockProcessResult PreProcessBasicBlock(BasicBlock* block) {
     current_block_ = block;
     current_block_bounds_checks_.clear();
+    current_block_smi_safe_.clear();
     scanned_current_block_ = false;
     return BlockProcessResult::kContinue;
   }
@@ -674,7 +683,23 @@ class BoundsCheckEliminationProcessor {
 
   ProcessResult Process(CheckInt32Condition* node,
                         const ProcessingState& state) {
+    RecordIfSmiSafeIndex(node);
     if (TryElide(node, state)) {
+      return ProcessResult::kRemove;
+    }
+    return ProcessResult::kContinue;
+  }
+
+  ProcessResult Process(CheckInt32IsSmi* node, const ProcessingState&) {
+    if (IsKnownSmiSafe(node->input_node(0))) {
+      return ProcessResult::kRemove;
+    }
+    return ProcessResult::kContinue;
+  }
+
+  ProcessResult Process(CheckedSmiSizedInt32* node, const ProcessingState&) {
+    if (IsKnownSmiSafe(node->input_node(0))) {
+      node->OverwriteWithIdentityTo(node->input_node(0));
       return ProcessResult::kRemove;
     }
     return ProcessResult::kContinue;
@@ -818,9 +843,35 @@ class BoundsCheckEliminationProcessor {
     }
   }
 
+  void RecordIfSmiSafeIndex(CheckInt32Condition* node) {
+    if (node->condition() != AssertCondition::kUnsignedLessThan) return;
+    if (!IsSmiBoundedLength(node->input_node(1))) return;
+    current_block_smi_safe_.insert(node->input_node(0)->UnwrapIdentities());
+  }
+
+  bool IsKnownSmiSafe(ValueNode* node) {
+    return current_block_smi_safe_.contains(node->UnwrapIdentities());
+  }
+
+  bool IsSmiBoundedLength(ValueNode* length) {
+    length = length->UnwrapIdentities();
+    while (length->Is<CheckedSmiUntag>() || length->Is<UnsafeSmiUntag>()) {
+      length = length->input_node(0)->UnwrapIdentities();
+    }
+    if (auto* load = length->TryCast<LoadTaggedField>()) {
+      return load->is_array_length() == IsArrayLength::kYes &&
+             load->type() == NodeType::kSmi;
+    }
+    if (std::optional<int32_t> c = TryGetInt32Constant(length)) {
+      return *c >= 0 && *c <= Smi::kMaxValue;
+    }
+    return false;
+  }
+
   Graph* graph_;
   BasicBlock* current_block_ = nullptr;
   ZoneMap<ValueNode*, BoundsCheckInfo> current_block_bounds_checks_;
+  ZoneAbslFlatHashSet<ValueNode*> current_block_smi_safe_;
   bool scanned_current_block_ = false;
 };
 

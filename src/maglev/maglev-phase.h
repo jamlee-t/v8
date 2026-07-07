@@ -23,6 +23,7 @@ enum MaglevPhase {
   kTruncation,
   kPostOptimizer,
   kLoopOptimization,
+  kPrePhiUntagging,
   kPhiUntagging,
   kEscapeAnalysis,
   kRangeAnalysis,
@@ -51,6 +52,8 @@ inline const char* PhaseName(MaglevPhase phase) {
       return "Post optimizer";
     case kLoopOptimization:
       return "Loop optimization (LICM)";
+    case kPrePhiUntagging:
+      return "Pre phi untagging";
     case kPhiUntagging:
       return "Phi untagging";
     case kEscapeAnalysis:
