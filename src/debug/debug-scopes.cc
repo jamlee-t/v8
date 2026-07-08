@@ -1098,7 +1098,9 @@ void ScopeIterator::VisitLocalScope(const Visitor& visitor, Mode mode,
     DirectHandle<JSObject> extension(context_->extension_object(), isolate_);
     DirectHandle<FixedArray> keys =
         KeyAccumulator::GetKeys(isolate_, extension,
-                                KeyCollectionMode::kOwnOnly, ENUMERABLE_STRINGS)
+                                KeyCollectionMode::kOwnOnly, ENUMERABLE_STRINGS,
+                                GetKeysConversion::kConvertToString, false,
+                                true)
             .ToHandleChecked();
 
     uint32_t keys_len = keys->ulength().value();
