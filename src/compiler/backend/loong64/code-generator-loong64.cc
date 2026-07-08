@@ -4840,6 +4840,7 @@ void CodeGenerator::AssembleArchSelect(Instruction* instr,
       Register temp = v_true;
       v_true = v_false;
       v_false = temp;
+      cc = ne;
     }
     UseScratchRegisterScope temps(masm());
     Register scratch1 = temps.Acquire();
