@@ -115,6 +115,9 @@
   'debugger/wasm-stepping-with-source-map': [SKIP],
   # Generic wasm-to-js wrapper must be enabled.
   'cpu-profiler/console-profile-wasm': [SKIP],
+  # https://crbug.com/518246754: Safepoint mismatch during OSR.
+  # Also check https://crrev.com/c/7979897.
+  'debugger/wasm-osr-safepoint-mismatch': [SKIP],
 }],  # 'arch == s390x or arch == ppc64'
 
 ##############################################################################
