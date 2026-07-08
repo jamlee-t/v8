@@ -462,8 +462,9 @@ void HeapAllocator::SetAllocationTimeout(int allocation_timeout) {
 
 void HeapAllocator::UpdateAllocationTimeout() {
   if (v8_flags.random_gc_interval > 0) {
-    const int new_timeout = heap_->isolate()->fuzzer_rng()->NextInt(
-        v8_flags.random_gc_interval + 1);
+    const int new_timeout =
+        heap_->isolate()->fuzzer_rng()->NextInt(v8_flags.random_gc_interval) +
+        1;
     // Reset the allocation timeout, but make sure to allow at least a few
     // allocations after a collection. The reason for this is that we have a lot
     // of allocation sequences and we assume that a garbage collection will
