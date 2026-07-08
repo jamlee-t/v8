@@ -21,69 +21,6 @@
 namespace v8 {
 namespace internal {
 
-namespace {
-
-// During serialization, puts the native context into a state understood by the
-// serializer (e.g. by clearing lists of InstructionStream objects).  After
-// serialization, the original state is restored.
-class V8_NODISCARD SanitizeNativeContextScope final {
- public:
-  SanitizeNativeContextScope(
-      Isolate* isolate, Tagged<NativeContext> native_context,
-      bool allow_active_isolate_for_testing,
-      const DisallowGarbageCollection& no_gc V8_LIFETIME_BOUND)
-      : native_context_(native_context), no_gc_(no_gc) {
-#ifdef DEBUG
-    if (!allow_active_isolate_for_testing) {
-      // Microtasks.
-      MicrotaskQueue* microtask_queue = native_context_->microtask_queue();
-      DCHECK_EQ(0, microtask_queue->size());
-      DCHECK(!microtask_queue->HasMicrotasksSuppressions());
-      DCHECK_EQ(0, microtask_queue->GetMicrotasksScopeDepth());
-      DCHECK(microtask_queue->DebugMicrotasksScopeDepthIsZero());
-    }
-#endif
-#ifdef V8_CPPGC_MICROTASK_QUEUE
-    microtask_queue_pointer_ =
-        native_context
-            ->RawCppHeapPointerField(NativeContext::kMicrotaskQueueOffset)
-            .GetAndClearContentForSerialization(no_gc);
-#else
-    microtask_queue_external_pointer_ =
-        native_context
-            ->RawExternalPointerField(NativeContext::kMicrotaskQueueOffset,
-                                      kNativeContextMicrotaskQueueTag)
-            .GetAndClearContentForSerialization(no_gc);
-#endif  // V8_CPPGC_MICROTASK_QUEUE
-  }
-
-  ~SanitizeNativeContextScope() {
-    // Restore saved fields.
-#ifdef V8_CPPGC_MICROTASK_QUEUE
-    native_context_
-        ->RawCppHeapPointerField(NativeContext::kMicrotaskQueueOffset)
-        .RestoreContentAfterSerialization(microtask_queue_pointer_, no_gc_);
-#else
-    native_context_
-        ->RawExternalPointerField(NativeContext::kMicrotaskQueueOffset,
-                                  kNativeContextMicrotaskQueueTag)
-        .RestoreContentAfterSerialization(microtask_queue_external_pointer_,
-                                          no_gc_);
-#endif  // V8_CPPGC_MICROTASK_QUEUE
-  }
-
- private:
-  Tagged<NativeContext> native_context_;
-#ifdef V8_CPPGC_MICROTASK_QUEUE
-  CppHeapPointerSlot::RawContent microtask_queue_pointer_;
-#else
-  ExternalPointerSlot::RawContent microtask_queue_external_pointer_;
-#endif  // V8_CPPGC_MICROTASK_QUEUE
-  const DisallowGarbageCollection& no_gc_;
-};
-
-}  // namespace
-
 ContextSerializer::ContextSerializer(Isolate* isolate,
                                      Snapshot::SerializerFlags flags,
                                      StartupSerializer* startup_serializer,
@@ -113,9 +50,17 @@ void ContextSerializer::Serialize(Tagged<Context>* o,
   // Reset math random cache to get fresh random numbers.
   MathRandom::ResetContext(context_);
 
-  SanitizeNativeContextScope sanitize_native_context(
-      isolate(), context_->native_context(), allow_active_isolate_for_testing(),
-      no_gc);
+#ifdef DEBUG
+  if (!allow_active_isolate_for_testing()) {
+    // Microtasks.
+    MicrotaskQueue* microtask_queue =
+        context_->native_context()->microtask_queue();
+    DCHECK_EQ(0, microtask_queue->size());
+    DCHECK(!microtask_queue->HasMicrotasksSuppressions());
+    DCHECK_EQ(0, microtask_queue->GetMicrotasksScopeDepth());
+    DCHECK(microtask_queue->DebugMicrotasksScopeDepthIsZero());
+  }
+#endif  // DEBUG
 
   VisitRootPointer(Root::kStartupObjectCache, nullptr, FullObjectSlot(o));
   SerializeDeferredObjects();
@@ -369,7 +314,6 @@ void ContextSerializer::SerializeObjectWithEmbedderFields(
   // 3) Serialize the object. References from embedder fields to heap objects or
   //    smis are serialized regularly.
   {
-    AllowGarbageCollection allow_gc;
     ObjectSerializer(this, data_holder, &sink_).Serialize(SlotType::kAnySlot);
     // Reload raw pointer.
     raw_obj = *data_holder;
