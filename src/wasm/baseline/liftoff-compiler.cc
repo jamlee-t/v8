@@ -1656,7 +1656,12 @@ class LiftoffCompiler {
     stack_value_types_for_debugging_ = GetStackValueTypesForDebugging(decoder);
 
     if (V8_UNLIKELY(max_steps_ != nullptr)) {
-      CheckMaxSteps(decoder, GetOpcodeCost(opcode));
+      WasmOpcode full_opcode =
+          WasmOpcodes::IsPrefixOpcode(opcode)
+              ? decoder->read_prefixed_opcode<ValidationTag>(decoder->pc())
+                    .first
+              : opcode;
+      CheckMaxSteps(decoder, GetOpcodeCost(full_opcode));
     }
 
     if (!WasmOpcodes::IsBreakable(opcode)) return;

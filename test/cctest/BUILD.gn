@@ -285,6 +285,7 @@ v8_cluster_source_set("cctest_sources") {
       "wasm/test-backing-store.cc",
       "wasm/test-c-wasm-entry.cc",
       "wasm/test-compilation-cache.cc",
+      "wasm/test-fuzzer-steps.cc",
       "wasm/test-gc.cc",
       "wasm/test-grow-memory.cc",
       "wasm/test-jump-table-assembler.cc",
