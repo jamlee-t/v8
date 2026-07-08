@@ -2229,8 +2229,8 @@ WasmCodeManager::WasmCodeManager()
 {
   // Check that --wasm-max-code-space-size-mb is not set bigger than the default
   // value. Otherwise we run into DCHECKs or other crashes later.
-  CHECK_GE(kDefaultMaxWasmCodeSpaceSizeMb,
-           v8_flags.wasm_max_code_space_size_mb);
+  CHECK_NO_SECURITY_IMPACT(kDefaultMaxWasmCodeSpaceSizeMb >=
+                           v8_flags.wasm_max_code_space_size_mb);
 }
 
 WasmCodeManager::~WasmCodeManager() {
