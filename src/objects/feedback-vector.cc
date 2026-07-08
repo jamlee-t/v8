@@ -287,8 +287,11 @@ Handle<FeedbackVector> FeedbackVector::New(
       case FeedbackSlotKind::kLoadGlobalNotInsideTypeof:
       case FeedbackSlotKind::kStoreGlobalSloppy:
       case FeedbackSlotKind::kStoreGlobalStrict:
+        vector->Set(slot, kClearedWeakValue, SKIP_WRITE_BARRIER);
+        break;
       case FeedbackSlotKind::kJumpLoop:
         vector->Set(slot, kClearedWeakValue, SKIP_WRITE_BARRIER);
+        extra_value = Smi::zero();
         break;
       case FeedbackSlotKind::kForIn:
       case FeedbackSlotKind::kCompareOp:
@@ -561,7 +564,8 @@ void FeedbackNexus::ConfigureUninitialized() {
                   UninitializedSentinel(), SKIP_WRITE_BARRIER);
       break;
     case FeedbackSlotKind::kJumpLoop:
-      SetFeedback(kClearedWeakValue, SKIP_WRITE_BARRIER);
+      SetFeedback(kClearedWeakValue, SKIP_WRITE_BARRIER, Smi::zero(),
+                  SKIP_WRITE_BARRIER);
       break;
     default:
       UNREACHABLE();
@@ -1062,7 +1066,7 @@ int FeedbackNexus::GetCallCount() {
 }
 
 void FeedbackNexus::SetSpeculationMode(SpeculationMode mode) {
-  DCHECK(IsCallICKind(kind()));
+  DCHECK(IsCallICKind(kind()) || kind() == FeedbackSlotKind::kJumpLoop);
 
   Tagged<Object> call_count = Cast<Object>(GetFeedbackExtra());
   CHECK(IsSmi(call_count));
@@ -1085,7 +1089,7 @@ void FeedbackNexus::NextSpeculationMode(SpeculationMode mode) {
 }
 
 SpeculationMode FeedbackNexus::GetSpeculationMode() {
-  DCHECK(IsCallICKind(kind()));
+  DCHECK(IsCallICKind(kind()) || kind() == FeedbackSlotKind::kJumpLoop);
 
   Tagged<Object> call_count = Cast<Object>(GetFeedbackExtra());
   CHECK(IsSmi(call_count));

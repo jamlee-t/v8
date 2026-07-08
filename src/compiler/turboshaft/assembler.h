@@ -1578,8 +1578,9 @@ class AssemblerOpInterface : public Next {
     return ReduceIfReachableTypeHint(input, type);
   }
 
-  void PrepareForLoop(V<EagerFrameState> frame_state) {
-    ReduceIfReachablePrepareForLoop(frame_state);
+  void PrepareForLoop(V<EagerFrameState> frame_state,
+                      FeedbackSource feedback = FeedbackSource()) {
+    ReduceIfReachablePrepareForLoop(frame_state, feedback);
   }
 
   V<Word32> TypeHintUint32(V<Word32> input) {

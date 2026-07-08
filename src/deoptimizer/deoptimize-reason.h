@@ -59,6 +59,7 @@ namespace internal {
   V(InsufficientTypeFeedbackForUnaryOperation,                                 \
     "Insufficient type feedback for unary operation")                          \
   V(KeyedAccessChanged, "unexpected name in keyed access")                     \
+  V(LoopSpeculationFailed, "loop speculation failed")                          \
   V(LostPrecision, "lost precision")                                           \
   V(LostPrecisionOrNaN, "lost precision or NaN")                               \
   V(MinusZero, "minus zero")                                                   \

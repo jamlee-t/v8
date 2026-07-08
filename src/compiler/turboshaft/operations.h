@@ -4166,6 +4166,8 @@ struct DeoptimizeIfOp : FixedArityOperationT<2, DeoptimizeIfOp> {
   void PrintOptions(std::ostream& os) const;
 };
 struct PrepareForLoopOp : FixedArityOperationT<1, PrepareForLoopOp> {
+  FeedbackSource feedback;
+
   static constexpr OpEffects effects = OpEffects().RequiredWhenUnused();
   base::Vector<const RegisterRepresentation> outputs_rep() const { return {}; }
 
@@ -4176,12 +4178,13 @@ struct PrepareForLoopOp : FixedArityOperationT<1, PrepareForLoopOp> {
 
   V<EagerFrameState> frame_state() const { return input<EagerFrameState>(0); }
 
-  PrepareForLoopOp(V<EagerFrameState> frame_state) : Base(frame_state) {}
+  PrepareForLoopOp(V<EagerFrameState> frame_state, FeedbackSource feedback)
+      : Base(frame_state), feedback(feedback) {}
 
   void Validate(const Graph& graph) const {
     DCHECK(Get(graph, frame_state()).Is<FrameStateOp>());
   }
-  auto options() const { return std::tuple{}; }
+  auto options() const { return std::tuple{feedback}; }
 };
 
 #if V8_ENABLE_WEBASSEMBLY

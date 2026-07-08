@@ -1814,6 +1814,8 @@ DEFINE_BOOL(turboshaft_load_elimination, true,
             "enable Turboshaft's low-level load elimination for JS")
 DEFINE_BOOL(turboshaft_loop_unrolling, true,
             "enable Turboshaft's loop unrolling")
+DEFINE_EXPERIMENTAL_FEATURE(turboshaft_loop_optimization,
+                            "enable Turboshaft's loop optimization phase")
 DEFINE_EXPERIMENTAL_FEATURE(turboshaft_random_rescheduling,
                             "enable Turboshaft's random rescheduling phase")
 DEFINE_BOOL(turboshaft_string_concat_escape_analysis, true,

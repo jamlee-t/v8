@@ -21,6 +21,7 @@
 #include "src/compiler/turboshaft/decompression-optimization-phase.h"
 #include "src/compiler/turboshaft/instruction-selection-phase.h"
 #include "src/compiler/turboshaft/load-elimination-phase.h"
+#include "src/compiler/turboshaft/loop-optimization-phase.h"
 #include "src/compiler/turboshaft/loop-peeling-phase.h"
 #include "src/compiler/turboshaft/loop-unrolling-phase.h"
 #include "src/compiler/turboshaft/machine-lowering-phase.h"
@@ -217,6 +218,10 @@ class V8_EXPORT_PRIVATE Pipeline {
       }
     }
 #endif  // !V8_ENABLE_WEBASSEMBLY
+
+    if (V8_UNLIKELY(v8_flags.turboshaft_loop_optimization)) {
+      RUN_MAYBE_ABORT(turboshaft::LoopOptimizationPhase);
+    }
 
     RUN_MAYBE_ABORT(turboshaft::MachineLoweringPhase);
 

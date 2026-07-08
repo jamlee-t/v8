@@ -21,6 +21,7 @@
 #include "src/compiler/common-operator.h"
 #include "src/compiler/compiler-source-position-table.h"
 #include "src/compiler/fast-api-calls.h"
+#include "src/compiler/feedback-source.h"
 #include "src/compiler/js-heap-broker.h"
 #include "src/compiler/machine-operator.h"
 #include "src/compiler/node-aux-data.h"
@@ -29,6 +30,7 @@
 #include "src/compiler/node-properties.h"
 #include "src/compiler/opcodes.h"
 #include "src/compiler/operator.h"
+#include "src/compiler/pipeline-data-inl.h"
 #include "src/compiler/schedule.h"
 #include "src/compiler/simplified-operator.h"
 #include "src/compiler/state-values-utils.h"
@@ -231,6 +233,12 @@ struct GraphBuilder {
     }
   }
 
+  FeedbackSource GetLoopFeedback(BasicBlock* loop_header_block) {
+    Node* loop_node = loop_header_block->front();
+    DCHECK_EQ(loop_node->opcode(), IrOpcode::kLoop);
+    return OpParameter<FeedbackSource>(loop_node->op());
+  }
+
   std::tuple<OpIndex, MemoryRepresentation, WriteBarrierKind>
   TurnTaggedSignedInputIntoSmi(OpIndex value, MemoryRepresentation rep,
                                WriteBarrierKind write_barrier);
@@ -339,11 +347,13 @@ std::optional<BailoutReason> GraphBuilder::Run() {
     switch (block->control()) {
       case BasicBlock::kGoto: {
         DCHECK_EQ(block->SuccessorCount(), 1);
-        Block* destination = Map(block->SuccessorAt(0));
+        BasicBlock* successor_block = block->SuccessorAt(0);
+        Block* destination = Map(successor_block);
         if (destination->IsLoop() &&
             destination->index() > target_block->index() &&
             dominating_frame_state.valid()) {
-          __ PrepareForLoop(dominating_frame_state);
+          FeedbackSource feedback = GetLoopFeedback(successor_block);
+          __ PrepareForLoop(dominating_frame_state, feedback);
         }
         __ Goto(destination);
         if (destination->IsBound()) {

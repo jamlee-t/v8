@@ -4456,7 +4456,8 @@ class MachineLoweringReducer : public Next {
   }
 #endif  // V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA
 
-  V<None> REDUCE(PrepareForLoop)(V<EagerFrameState> frame_state) {
+  V<None> REDUCE(PrepareForLoop)(V<EagerFrameState> frame_state,
+                                 FeedbackSource feedback) {
     // This has no effect other than holding onto a FrameState for optimizations
     // earlier in the pipeline.
     return V<None>::Invalid();
