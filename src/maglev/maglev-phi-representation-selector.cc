@@ -1118,6 +1118,22 @@ ProcessResult MaglevPhiRepresentationSelector::UpdateUntaggingOfPhi(
     return ProcessResult::kContinue;
   }
 
+  if (old_untagging->Is<TruncateUnsafeNumberAsSafeIntToInt32>() ||
+      old_untagging->Is<TruncateCheckedNumberAsSafeIntToInt32>()) {
+    // These conversions truncate to Int32 but must keep the
+    // AdditiveSafeInteger range check: the truncation pass turned
+    // Float64SpeculateSafeAdd chains into Int32 operations, which is only
+    // value-equivalent as long as inputs stay in the safe integer range.
+    // Using a fully checked Float64->Int32 conversion here instead would
+    // deopt for any value outside Int32 range and cause deopt loops.
+    if (from_repr == ValueRepresentation::kFloat64) {
+      old_untagging->OverwriteWith<TruncateFloat64AsSafeIntToInt32>();
+      return ProcessResult::kContinue;
+    }
+    // For HoleyFloat64 there is no hole-checking SafeInt truncation node;
+    // fall through to the generic (checked) conversion.
+  }
+
   // To be safe, GetOpcodeForConversion (called below) always return a
   // conversion that deopts when converting a non-int32 float64 to int32 (eg,
   // when attempting to convert 3.35 to int32). However, some Float64->Int32 and
