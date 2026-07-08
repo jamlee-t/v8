@@ -4421,6 +4421,12 @@ DEFINE_NOT_EXPLICITLY_SET_IMPLICATION(disallow_unsafe_flags &&
                                           !sandbox_testing && !sandbox_fuzzing,
                                       expose_memory_corruption_api)
 
+// Flags which trigger a breakpoint on purpose.
+DEFINE_NEG_IMPLICATION(disallow_unsafe_flags, maglev_break_on_entry)
+#ifdef USE_SIMULATOR
+DEFINE_NOT_EXPLICITLY_SET_IMPLICATION(disallow_unsafe_flags, stop_sim_at)
+#endif
+
 // Runs a program as security POC. This mode is used to determine whether a bug
 // in a program is a security problem. V8 supports many different configurations
 // and modes that are sometimes incomplete or incompatible. The flag aims at
