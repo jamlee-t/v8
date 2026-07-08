@@ -5142,6 +5142,7 @@ void Heap::RecordStats(HeapStats* stats) {
   stats->memory_allocator_capacity =
       ByteSize(memory_allocator_size + memory_allocator()->Available());
   stats->isolate_count = isolate_->isolate_group()->GetIsolateCount();
+  stats->native_context_count = NumberOfNativeContexts();
   stats->last_os_error = base::OS::GetLastError();
   const size_t allocator_memory =
       isolate_->allocator()->GetCurrentMemoryUsage() +

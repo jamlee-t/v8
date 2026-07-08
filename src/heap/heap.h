@@ -2601,6 +2601,7 @@ using TraceRingBuffer = char[Heap::kTraceRingBufferSize + 1];
   V(ByteSize, malloced_memory)              \
   V(ByteSize, malloced_peak_memory)         \
   V(size_t, isolate_count)                  \
+  V(size_t, native_context_count)           \
   V(size_t, last_os_error)                  \
   V(bool, is_main_isolate)                  \
   V(CageStats, main_cage)                   \
