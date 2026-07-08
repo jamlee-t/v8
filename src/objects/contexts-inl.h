@@ -13,6 +13,7 @@
 #include "src/heap/heap-write-barrier.h"
 #include "src/objects/casting.h"
 #include "src/objects/fixed-array-inl.h"
+#include "src/objects/heap-object-field-inl.h"
 #include "src/objects/js-function-inl.h"
 #include "src/objects/js-objects-inl.h"
 #include "src/objects/map-inl.h"

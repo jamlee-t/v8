@@ -11,6 +11,7 @@
 #include "src/heap/heap-write-barrier-inl.h"
 #include "src/heap/heap-write-barrier.h"
 #include "src/objects/foreign-inl.h"
+#include "src/objects/heap-object-field-inl.h"
 #include "src/objects/js-objects-inl.h"
 #include "src/objects/name.h"
 #include "src/objects/oddball.h"

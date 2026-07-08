@@ -14,6 +14,7 @@
 #include "src/heap/read-only-spaces.h"
 #include "src/heap/visit-object.h"
 #include "src/objects/code-inl.h"
+#include "src/objects/heap-object-field-inl.h"
 #include "src/objects/heap-object-inl.h"
 #include "src/objects/objects-inl.h"
 #include "src/sandbox/external-pointer-table.h"

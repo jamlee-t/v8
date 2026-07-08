@@ -56,6 +56,7 @@
 #include "src/objects/fixed-primitive-array-inl.h"
 #include "src/objects/foreign-inl.h"
 #include "src/objects/hash-seed-wrapper.h"
+#include "src/objects/heap-object-field-inl.h"
 #include "src/objects/heap-object-set-map-inl.h"
 #include "src/objects/heap-object.h"
 #include "src/objects/instance-type-inl.h"

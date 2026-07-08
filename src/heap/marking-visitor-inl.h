@@ -22,6 +22,7 @@
 #include "src/objects/casting.h"
 #include "src/objects/compressed-slots.h"
 #include "src/objects/descriptor-array.h"
+#include "src/objects/heap-object-field-inl.h"
 #include "src/objects/heap-object.h"
 #include "src/objects/js-objects.h"
 #include "src/objects/objects.h"

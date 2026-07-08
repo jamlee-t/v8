@@ -14,6 +14,7 @@
 #include "src/builtins/builtins.h"
 #include "src/handles/global-handles-inl.h"
 #include "src/heap/heap-write-barrier.h"
+#include "src/objects/heap-object-field-inl.h"
 #include "src/snapshot/embedded/embedded-data-inl.h"
 #include "src/wasm/canonical-types.h"
 #include "src/wasm/decoder.h"

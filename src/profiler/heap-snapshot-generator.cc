@@ -31,6 +31,7 @@
 #include "src/objects/fixed-array-base-inl.h"
 #include "src/objects/fixed-array-inl.h"
 #include "src/objects/hash-table-inl.h"
+#include "src/objects/heap-object-field-inl.h"
 #include "src/objects/heap-object-inl.h"
 #include "src/objects/heap-object-set-map-inl.h"
 #include "src/objects/instance-type-inl.h"

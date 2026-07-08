@@ -23,6 +23,7 @@
 #include "src/objects/fixed-primitive-array-inl.h"
 #include "src/objects/foreign.h"
 #include "src/objects/heap-number-inl.h"
+#include "src/objects/heap-object-field-inl.h"
 #include "src/objects/heap-object.h"
 #include "src/objects/managed.h"
 #include "src/objects/object-predicates-inl.h"

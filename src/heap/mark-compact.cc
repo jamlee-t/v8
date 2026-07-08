@@ -74,6 +74,7 @@
 #include "src/objects/embedder-data-array-inl.h"
 #include "src/objects/foreign.h"
 #include "src/objects/hash-table-inl.h"
+#include "src/objects/heap-object-field-inl.h"
 #include "src/objects/heap-object-inl.h"
 #include "src/objects/heap-object-set-map-inl.h"
 #include "src/objects/instance-type.h"

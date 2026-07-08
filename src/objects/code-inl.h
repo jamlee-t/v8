@@ -14,6 +14,7 @@
 #include "src/heap/heap-layout-inl.h"
 #include "src/heap/heap-write-barrier-inl.h"
 #include "src/objects/deoptimization-data-inl.h"
+#include "src/objects/heap-object-field-inl.h"
 #include "src/objects/instance-type-inl.h"
 #include "src/objects/instruction-stream-inl.h"
 #include "src/objects/trusted-object-inl.h"
