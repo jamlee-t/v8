@@ -2550,6 +2550,12 @@
   'wasm/shared-memory-resizable-buffer-array-slice': [SKIP],
 }],  # variant == slow_path
 
+##############################################################################
+['variant == instruction_scheduling', {
+  # https://crbug.com/532192480
+  'regress/regress-crbug-724153': [SKIP],
+}],  # variant == instruction_scheduling
+
 ['(arch == mips64el or arch == mips64) and not simd_mips', {
   # Requires scalar lowering for 64x2 SIMD instructions, which are not
   # implemented yet.
