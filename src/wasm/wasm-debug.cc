@@ -640,6 +640,7 @@ class DebugInfoImpl {
     }
 
     if (value->is_register()) {
+      if (debug_break_fp == kNullAddress) return {};
       auto reg = LiftoffRegister::from_liftoff_code(value->reg_code);
       auto gp_addr = [debug_break_fp](Register reg) {
         return debug_break_fp +
