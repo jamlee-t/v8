@@ -1786,6 +1786,7 @@ void GCTracer::ReportFullCycleToRecorder() {
   event.global_consumed.bytes_max = current_.max_global_memory;
   // External memory Bytes
   event.external_memory_bytes = current_.external_memory_bytes;
+  event.found_js_global_proxies = current_.found_js_global_proxies;
   // Collection Rate:
   if (event.objects.bytes_before == 0) {
     event.collection_rate_in_percent = 0;
