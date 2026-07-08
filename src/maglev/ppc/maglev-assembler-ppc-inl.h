@@ -644,7 +644,7 @@ inline void MaglevAssembler::MakeWeak(Register dst, Register src) {
 inline void MaglevAssembler::EmitEnterExitFrame(int extra_slots,
                                                 StackFrame::Type frame_type,
                                                 Register scratch) {
-  EnterExitFrame(scratch, extra_slots, frame_type);
+  EnterExitFrame(extra_slots, frame_type);
 }
 
 inline void MaglevAssembler::Move(StackSlot dst, Register src) {

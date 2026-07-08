@@ -1492,11 +1492,10 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
 
   // Enter exit frame.
   // stack_space - extra stack space, used for parameters before call to C.
-  void EnterExitFrame(Register scratch, int stack_space,
-                      StackFrame::Type frame_type);
+  void EnterExitFrame(int stack_space, StackFrame::Type frame_type);
 
   // Leave the current exit frame.
-  void LeaveExitFrame(Register scratch);
+  void LeaveExitFrame();
 
   // Load the global proxy from the current context.
   void LoadGlobalProxy(Register dst) {

@@ -4367,9 +4367,9 @@ void Builtins::Generate_CEntry(MacroAssembler* masm, int result_size,
     arg_stack_space += result_size;
   }
 
-  __ EnterExitFrame(
-      scratch, arg_stack_space,
-      builtin_exit_frame ? StackFrame::BUILTIN_EXIT : StackFrame::EXIT);
+  __ EnterExitFrame(arg_stack_space, builtin_exit_frame
+                                         ? StackFrame::BUILTIN_EXIT
+                                         : StackFrame::EXIT);
 
   // Store a copy of argc in callee-saved registers for later.
   __ mr(argc_sav, argc_input);
@@ -4451,7 +4451,7 @@ void Builtins::Generate_CEntry(MacroAssembler* masm, int result_size,
   // sp: stack pointer
   // fp: frame pointer
   // r14: still holds argc (C caller-saved).
-  __ LeaveExitFrame(scratch);
+  __ LeaveExitFrame();
   if (argv_mode == ArgvMode::kStack) {
     DCHECK(!AreAliased(scratch, argc_sav));
     __ ShiftLeftU64(scratch, argc_sav, Operand(kSystemPointerSizeLog2));
@@ -4758,7 +4758,7 @@ void Builtins::Generate_CallApiCallbackImpl(MacroAssembler* masm,
         api_function_address,
         FieldMemOperand(func_templ, offsetof(FunctionTemplateInfo, callback_)));
   }
-  __ EnterExitFrame(scratch, FC::getExtraSlotsCountFrom<ExitFrameConstants>(),
+  __ EnterExitFrame(FC::getExtraSlotsCountFrom<ExitFrameConstants>(),
                     StackFrame::API_CALLBACK_EXIT);
 
   MemOperand argc_operand = MemOperand(fp, FC::kFCIArgcOffset);
@@ -4871,7 +4871,7 @@ void Builtins::Generate_CallApiAccessorImpl(MacroAssembler* masm,
           scratch);  // kIsolateIndex
 
   FrameScope frame_scope(masm, StackFrame::MANUAL);
-  __ EnterExitFrame(scratch, FC::getExtraSlotsCountFrom<ExitFrameConstants>(),
+  __ EnterExitFrame(FC::getExtraSlotsCountFrom<ExitFrameConstants>(),
                     StackFrame::API_NAMED_ACCESSOR_EXIT);
 
   {

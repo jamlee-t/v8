@@ -1270,7 +1270,7 @@ int MacroAssembler::LeaveFrame(StackFrame::Type type, int stack_adjustment) {
 // in the fp register (r31)
 // Then - we buy a new frame
 
-void MacroAssembler::EnterExitFrame(Register scratch, int stack_space,
+void MacroAssembler::EnterExitFrame(int stack_space,
                                     StackFrame::Type frame_type) {
   DCHECK(frame_type == StackFrame::EXIT ||
          frame_type == StackFrame::BUILTIN_EXIT ||
@@ -1286,6 +1286,8 @@ void MacroAssembler::EnterExitFrame(Register scratch, int stack_space,
   // all of the pushes that have happened inside of V8
   // since we were called from C code
 
+  UseScratchRegisterScope temps(this);
+  Register scratch = temps.Acquire();
   mov(scratch, Operand(StackFrame::TypeToMarker(frame_type)));
   PushCommonFrame(scratch);
   // Reserve room for saved entry sp.
@@ -1340,12 +1342,14 @@ int MacroAssembler::ActivationFrameAlignment() {
 #endif
 }
 
-void MacroAssembler::LeaveExitFrame(Register scratch) {
+void MacroAssembler::LeaveExitFrame() {
   ConstantPoolUnavailableScope constant_pool_unavailable(this);
 
   // Restore current context from top and clear it in debug mode.
   LoadU64(cp, AsMemOperand(IsolateFieldId::kContext));
 
+  UseScratchRegisterScope temps(this);
+  Register scratch = temps.Acquire();
 #ifdef DEBUG
   mov(scratch, Operand(Context::kNoContext));
   StoreU64(scratch, AsMemOperand(IsolateFieldId::kContext));
@@ -5129,7 +5133,7 @@ void CallApiFunctionAndReturn(MacroAssembler* masm, bool with_profiling,
     // Load the number of stack slots to drop before LeaveExitFrame modifies sp.
     __ LoadU64(argc_reg, *argc_operand);
   }
-  __ LeaveExitFrame(scratch);
+  __ LeaveExitFrame();
 
   {
     ASM_CODE_COMMENT_STRING(masm,
