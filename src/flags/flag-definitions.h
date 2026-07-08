@@ -3719,6 +3719,14 @@ DEFINE_BOOL_READONLY(
     "is detected.")
 #endif
 
+#ifdef V8_ENABLE_GENERATED_CODE_VALIDATOR
+DEFINE_EXPERIMENTAL_FEATURE(validate_generated_code,
+                            "Enable generated code verifier")
+#else
+DEFINE_BOOL_READONLY(validate_generated_code, false,
+                     "Enable generated code verifier")
+#endif
+
 #ifdef V8_ENABLE_MEMORY_CORRUPTION_API
 // Sandbox fuzzing mode requires the memory corruption API.
 //
