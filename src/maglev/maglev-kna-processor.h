@@ -366,6 +366,15 @@ class RecomputeKnownNodeAspectsProcessor {
     return ProcessResult::kContinue;
   }
 
+  ProcessResult ProcessNode(LoadTypedArrayLength* node) {
+    if (!IsRabGsabTypedArrayElementsKind(node->elements_kind())) {
+      auto& props_for_key = known_node_aspects().GetLoadedPropertiesForKey(
+          zone(), true, PropertyKey::TypedArrayLength());
+      props_for_key[node->ValueInput().node()] = node;
+    }
+    return ProcessResult::kContinue;
+  }
+
   void ProcessStoreContextSlot(ValueNode* context, ValueNode* value, int offset,
                                MaybeAssignedFlag maybe_assigned) {
     known_node_aspects().RecordContextSlotStore(graph_, context, offset, value,

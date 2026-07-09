@@ -1863,7 +1863,11 @@ ProcessResult MaglevGraphOptimizer::VisitLoadDoubleDataViewElement(
 
 ProcessResult MaglevGraphOptimizer::VisitLoadTypedArrayLength(
     LoadTypedArrayLength* node, const ProcessingState& state) {
-  // TODO(b/424157317): Optimize.
+  if (!IsRabGsabTypedArrayElementsKind(node->elements_kind())) {
+    REPLACE_AND_RETURN_IF_DONE(
+        known_node_aspects().TryFindLoadedConstantProperty(
+            node->ValueInput().node(), PropertyKey::TypedArrayLength()));
+  }
   return ProcessResult::kContinue;
 }
 
