@@ -1369,24 +1369,9 @@ class MaglevReducer {
       return;
     }
 
-    switch (node->value_representation()) {
-      case ValueRepresentation::kTagged:
-        AddNewNodeNoInputConversion<AssumeTaggedType>({node}, type);
-        break;
-      case ValueRepresentation::kInt32:
-        AddNewNodeNoInputConversion<AssumeInt32Type>({node}, type);
-        break;
-      case ValueRepresentation::kUint32:
-        AddNewNodeNoInputConversion<AssumeUint32Type>({node}, type);
-        break;
-      case ValueRepresentation::kFloat64:
-        AddNewNodeNoInputConversion<AssumeFloat64Type>({node}, type);
-        break;
-      default:
-        // If you ever run into the UNREACHABLE below, you might need to add a
-        // new `Assume` operation.
-        UNREACHABLE();
-    }
+    auto* assume_node = NodeBase::New<AssumeType>(zone(), 1, type);
+    assume_node->set_input(0, node);
+    AttachExtraInfoAndAddToGraph(assume_node);
   }
 
   bool IsEmptyNodeType(NodeType type) {

@@ -1300,31 +1300,9 @@ ProcessResult MaglevPhiRepresentationSelector::UpdateNodePhiInput(
 }
 
 ProcessResult MaglevPhiRepresentationSelector::UpdateNodePhiInput(
-    AssumeTaggedType* node, Phi* phi, int input_index,
-    const ProcessingState* state) {
+    AssumeType* node, Phi* phi, int input_index, const ProcessingState* state) {
   DCHECK_EQ(input_index, 0);
-  NodeType asserted_type = node->asserted_type();
-  switch (phi->value_representation()) {
-    case ValueRepresentation::kTagged:
-      // {phi} wasn't untagged, so we don't need to do anything.
-      return ProcessResult::kContinue;
-    case ValueRepresentation::kInt32:
-      node->OverwriteWith<AssumeInt32Type>(asserted_type);
-      return ProcessResult::kContinue;
-    case ValueRepresentation::kFloat64:
-      node->OverwriteWith<AssumeFloat64Type>(asserted_type);
-      return ProcessResult::kContinue;
-    case ValueRepresentation::kHoleyFloat64:
-      // There is no HoleyFloat64 assume node; rather than retagging the phi
-      // just to keep the assumption, drop it.
-      return ProcessResult::kRemove;
-    case ValueRepresentation::kUint32:
-    case ValueRepresentation::kIntPtr:
-    case ValueRepresentation::kRawPtr:
-    case ValueRepresentation::kNone:
-      UNREACHABLE();
-  }
-  UNREACHABLE();
+  return ProcessResult::kContinue;
 }
 
 BlockProcessResult MaglevPhiRepresentationSelector::PostProcessBasicBlock(

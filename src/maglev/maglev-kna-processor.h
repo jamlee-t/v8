@@ -474,8 +474,7 @@ class RecomputeKnownNodeAspectsProcessor {
     return ProcessResult::kContinue;
   }
 
-  template <typename Derived>
-  ProcessResult ProcessNode(AssumeTypeT<Derived>* node) {
+  ProcessResult ProcessNode(AssumeType* node) {
     RecordType(node->input_node(0), node->asserted_type());
     return ProcessResult::kContinue;
   }

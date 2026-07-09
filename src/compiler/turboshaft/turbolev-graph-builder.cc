@@ -5667,8 +5667,7 @@ class GraphBuildingNodeProcessor {
     return maglev::ProcessResult::kContinue;
   }
 
-  template <typename Derived>
-  maglev::ProcessResult Process(maglev::AssumeTypeT<Derived>* node,
+  maglev::ProcessResult Process(maglev::AssumeType* node,
                                 const maglev::ProcessingState&) {
     // Turboshaft doesn't track node types.
     return maglev::ProcessResult::kContinue;

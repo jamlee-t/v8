@@ -158,8 +158,7 @@ class RecomputePhiUseHintsProcessor {
   }
 
   template <typename Derived>
-  ProcessResult Process(AssumeTypeT<Derived>* node,
-                        const ProcessingState& state) {
+  ProcessResult Process(AssumeType* node, const ProcessingState& state) {
     return ProcessResult::kContinue;
   }
 
