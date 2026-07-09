@@ -184,7 +184,7 @@ bool LoopHeaderCompatibleWithBackEdge(const NodeInfo& loop_header,
     return false;
   }
   if (loop_header.possible_maps_are_known() &&
-      loop_header.any_map_or_node_type_is_unstable()) {
+      loop_header.any_map_is_unstable()) {
     if (!backedge.possible_maps_are_known()) {
       return false;
     }
@@ -615,8 +615,7 @@ KnownNodeAspects::KnownNodeAspects(const KnownNodeAspects& other,
     node_infos_ = other.node_infos_;
 #ifdef DEBUG
     for (const auto& it : node_infos_) {
-      DCHECK(!it.second.any_map_or_node_type_is_unstable() ||
-             it.second.maps_are_stale());
+      DCHECK(!it.second.any_map_is_unstable() || it.second.maps_are_stale());
     }
 #endif
   } else if (optimistic_initial_state &&
@@ -877,7 +876,7 @@ void KnownNodeAspects::Print(std::ostream& os) const {
           os << " " << kRed << "[stale]" << kReset;
         }
       }
-      if (info.any_map_or_node_type_is_unstable()) {
+      if (info.any_map_is_unstable()) {
         os << " " << kRed << "[unstable]" << kReset;
       }
       if (!info.alternative().has_none()) {

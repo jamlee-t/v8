@@ -4312,21 +4312,6 @@ void CheckString::GenerateCode(MaglevAssembler* masm,
                      __ GetDeoptLabel(this, DeoptimizeReason::kNotAString));
 }
 
-void CheckSeqOneByteString::SetValueLocationConstraints() {
-  UseRegister(ReceiverInput());
-}
-void CheckSeqOneByteString::GenerateCode(MaglevAssembler* masm,
-                                         const ProcessingState& state) {
-  Register object = ToRegister(ReceiverInput());
-  if (check_type() == CheckType::kOmitHeapObjectCheck) {
-    __ AssertNotSmi(object);
-  } else {
-    __ EmitEagerDeoptIfSmi(this, object,
-                           DeoptimizeReason::kNotASeqOneByteString);
-  }
-  __ JumpIfNotSeqOneByteString(
-      object, __ GetDeoptLabel(this, DeoptimizeReason::kNotASeqOneByteString));
-}
 
 void CheckStringOrStringWrapper::SetValueLocationConstraints() {
   UseRegister(ReceiverInput());
@@ -5866,24 +5851,6 @@ void StringAt::GenerateCode(MaglevAssembler* masm,
                         MaglevAssembler::CharCodeMaskMode::kValueIsInRange);
 }
 
-void SeqOneByteStringAt::SetValueLocationConstraints() {
-  UseRegister(StringInput());
-  UseRegister(IndexInput());
-  DefineAsRegister(this);
-  set_temporaries_needed(1);
-}
-void SeqOneByteStringAt::GenerateCode(MaglevAssembler* masm,
-                                      const ProcessingState& state) {
-  MaglevAssembler::TemporaryRegisterScope temps(masm);
-  Register scratch = temps.Acquire();
-  Register result_string = ToRegister(result());
-  Register string = ToRegister(StringInput());
-  Register index = ToRegister(IndexInput());
-  Register char_code = result_string;
-
-  __ SeqOneByteStringCharCodeAt(char_code, string, index);
-  __ LoadSingleCharacterString(result_string, char_code, scratch);
-}
 
 int BuiltinStringPrototypeCharCodeOrCodePointAt::MaxCallStackArgs() const {
   DCHECK_EQ(Runtime::FunctionForId(Runtime::kStringCharCodeAt)->nargs, 2);
@@ -5917,17 +5884,6 @@ void BuiltinStringPrototypeCharCodeOrCodePointAt::GenerateCode(
   __ bind(*done);
 }
 
-void BuiltinSeqOneByteStringCharCodeAt::SetValueLocationConstraints() {
-  UseRegister(StringInput());
-  UseRegister(IndexInput());
-  DefineAsRegister(this);
-}
-void BuiltinSeqOneByteStringCharCodeAt::GenerateCode(
-    MaglevAssembler* masm, const ProcessingState& state) {
-  Register string = ToRegister(StringInput());
-  Register index = ToRegister(IndexInput());
-  __ SeqOneByteStringCharCodeAt(ToRegister(result()), string, index);
-}
 
 void StringLength::SetValueLocationConstraints() {
   UseRegister(StringInput());

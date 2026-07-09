@@ -202,10 +202,9 @@ class ExceptionHandlerInfo;
 // LINT.ThenChange(/src/maglev/maglev-graph-processor.h:maglev_constant_nodes, /src/maglev/maglev-regalloc.cc:maglev_constant_nodes)
 // clang-format on
 
-#define INLINE_BUILTIN_NODE_LIST(V)              \
-  V(BuiltinStringFromCharCode)                   \
-  V(BuiltinStringPrototypeCharCodeOrCodePointAt) \
-  V(BuiltinSeqOneByteStringCharCodeAt)
+#define INLINE_BUILTIN_NODE_LIST(V) \
+  V(BuiltinStringFromCharCode)      \
+  V(BuiltinStringPrototypeCharCodeOrCodePointAt)
 
 #define TURBOLEV_VALUE_NODE_LIST(V) \
   V(CreateFastArrayElements)        \
@@ -387,7 +386,6 @@ class ExceptionHandlerInfo;
   V(StringConcat)                                                     \
   V(StringIndexOf)                                                    \
   IF_INTL(V, StringLocaleCompareIntl)                                 \
-  V(SeqOneByteStringAt)                                               \
   V(ConsStringMap)                                                    \
   V(UnwrapStringWrapper)                                              \
   V(ToBoolean)                                                        \
@@ -456,7 +454,6 @@ class ExceptionHandlerInfo;
   V(CheckNumber)                              \
   V(CheckSmi)                                 \
   V(CheckString)                              \
-  V(CheckSeqOneByteString)                    \
   V(CheckStringOrStringWrapper)               \
   V(CheckStringOrOddball)                     \
   V(CheckSymbol)                              \
@@ -7412,25 +7409,6 @@ class CheckString : public FixedInputNodeT<1, CheckString> {
   using CheckTypeBitField = NextBitField<CheckType, 1>;
 };
 
-class CheckSeqOneByteString : public FixedInputNodeT<1, CheckSeqOneByteString> {
- public:
-  explicit CheckSeqOneByteString(uint64_t bitfield, CheckType check_type)
-      : Base(CheckTypeBitField::update(bitfield, check_type)) {}
-
-  static constexpr OpProperties kProperties = OpProperties::EagerDeopt();
-  DECLARE_INPUTS(Receiver)
-  DECLARE_INPUT_TYPES(Tagged)
-
-  CheckType check_type() const { return CheckTypeBitField::decode(bitfield()); }
-
-  void SetValueLocationConstraints();
-  void GenerateCode(MaglevAssembler*, const ProcessingState&);
-
-  auto options() const { return std::tuple{check_type()}; }
-
- private:
-  using CheckTypeBitField = NextBitField<CheckType, 1>;
-};
 
 class CheckStringOrStringWrapper
     : public FixedInputNodeT<1, CheckStringOrStringWrapper> {
@@ -8019,22 +7997,6 @@ class BuiltinStringPrototypeCharCodeOrCodePointAt
   using ModeField = NextBitField<Mode, 1>;
 };
 
-class BuiltinSeqOneByteStringCharCodeAt
-    : public FixedInputValueNodeT<2, BuiltinSeqOneByteStringCharCodeAt> {
- public:
-  explicit BuiltinSeqOneByteStringCharCodeAt(uint64_t bitfield)
-      : Base(bitfield) {}
-
-  static constexpr OpProperties kProperties =
-      OpProperties::CanRead() | OpProperties::Int32();
-  DECLARE_INPUTS(String, Index)
-  DECLARE_INPUT_TYPES(Tagged, Int32)
-
-  void SetValueLocationConstraints();
-  void GenerateCode(MaglevAssembler*, const ProcessingState&);
-
-  NodeType type() const { return NodeType::kNumber; }
-};
 
 class MapPrototypeGet : public FixedInputValueNodeT<2, MapPrototypeGet> {
  public:
@@ -9829,19 +9791,6 @@ class StringAt : public FixedInputValueNodeT<2, StringAt> {
   NodeType type() const { return NodeType::kString; }
 };
 
-class SeqOneByteStringAt : public FixedInputValueNodeT<2, SeqOneByteStringAt> {
- public:
-  explicit SeqOneByteStringAt(uint64_t bitfield) : Base(bitfield) {}
-
-  static constexpr OpProperties kProperties = OpProperties::CanRead();
-  DECLARE_INPUTS(String, Index)
-  DECLARE_INPUT_TYPES(Tagged, Int32)
-
-  void SetValueLocationConstraints();
-  void GenerateCode(MaglevAssembler*, const ProcessingState&);
-
-  NodeType type() const { return NodeType::kInternalizedString; }
-};
 
 class StringLength : public FixedInputValueNodeT<1, StringLength> {
  public:

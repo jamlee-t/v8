@@ -1142,7 +1142,6 @@ class MaglevGraphBuilder {
   ReduceResult BuildCheckJSFunction(ValueNode* object);
   ReduceResult BuildCheckJSReceiver(ValueNode* object);
   ReduceResult BuildCheckJSReceiverOrNullOrUndefined(ValueNode* object);
-  ReduceResult BuildCheckSeqOneByteString(ValueNode* object);
   ReduceResult BuildCheckString(ValueNode* object);
   ReduceResult BuildCheckStringOrStringWrapper(ValueNode* object);
   ReduceResult BuildCheckStringOrOddball(ValueNode* object);

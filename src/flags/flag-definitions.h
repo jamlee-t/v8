@@ -886,10 +886,6 @@ DEFINE_BOOL(maglev_function_context_specialization, true,
 DEFINE_WEAK_IMPLICATION(future, flush_baseline_code)
 #endif
 
-DEFINE_EXPERIMENTAL_FEATURE(
-    specialize_code_for_one_byte_seq_strings,
-    "Specialize maglev code for feedback with only one-byte sequential "
-    "strings.")
 
 #ifdef V8_TARGET_ARCH_64_BIT
 DEFINE_BOOL(additive_safe_int_feedback, true,

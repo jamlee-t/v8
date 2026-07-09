@@ -899,7 +899,6 @@ ProcessResult MaglevGraphOptimizer::VisitCheckHoleyFloat64NotHoleOrUndefined(
 VISIT_CHECK(Smi)
 VISIT_CHECK(Number)
 VISIT_CHECK(String)
-VISIT_CHECK(SeqOneByteString)
 VISIT_CHECK(StringOrStringWrapper)
 VISIT_CHECK(StringOrOddball)
 VISIT_CHECK(Symbol)
@@ -2551,12 +2550,6 @@ ProcessResult MaglevGraphOptimizer::VisitStringConcat(
   return ProcessResult::kContinue;
 }
 
-ProcessResult MaglevGraphOptimizer::VisitSeqOneByteStringAt(
-    SeqOneByteStringAt* node, const ProcessingState& state) {
-  // TODO(b/424157317): Optimize.
-  return ProcessResult::kContinue;
-}
-
 ProcessResult MaglevGraphOptimizer::VisitConsStringMap(
     ConsStringMap* node, const ProcessingState& state) {
   // TODO(b/424157317): Optimize.
@@ -3246,12 +3239,6 @@ ProcessResult
 MaglevGraphOptimizer::VisitBuiltinStringPrototypeCharCodeOrCodePointAt(
     BuiltinStringPrototypeCharCodeOrCodePointAt* node,
     const ProcessingState& state) {
-  // TODO(b/424157317): Optimize.
-  return ProcessResult::kContinue;
-}
-
-ProcessResult MaglevGraphOptimizer::VisitBuiltinSeqOneByteStringCharCodeAt(
-    BuiltinSeqOneByteStringCharCodeAt* node, const ProcessingState& state) {
   // TODO(b/424157317): Optimize.
   return ProcessResult::kContinue;
 }

@@ -269,7 +269,6 @@ class RecomputeKnownNodeAspectsProcessor {
   }
   PROCESS_CHECK(Smi)
   PROCESS_CHECK(String)
-  PROCESS_CHECK(SeqOneByteString)
   PROCESS_CHECK(StringOrStringWrapper)
   PROCESS_CHECK(StringOrOddball)
   PROCESS_CHECK(Symbol)

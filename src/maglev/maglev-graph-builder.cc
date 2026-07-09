@@ -3766,20 +3766,6 @@ ReduceResult MaglevGraphBuilder::BuildCheckHeapObject(ValueNode* object) {
   return AddNewNodeNoInputConversion<CheckHeapObject>({object});
 }
 
-ReduceResult MaglevGraphBuilder::BuildCheckSeqOneByteString(ValueNode* object) {
-  NodeType known_type;
-  // Check for the empty type first so that we catch the case where
-  // GetType(object) is already empty.
-  if (IsEmptyNodeType(
-          IntersectType(GetType(object), NodeType::kSeqOneByteString))) {
-    return reducer_.EmitUnconditionalDeopt(
-        DeoptimizeReason::kNotASeqOneByteString);
-  }
-  if (reducer_.EnsureType(object, NodeType::kSeqOneByteString, &known_type)) {
-    return ReduceResult::Done();
-  }
-  return AddNewNode<CheckSeqOneByteString>({object}, GetCheckType(known_type));
-}
 
 ReduceResult MaglevGraphBuilder::BuildCheckString(ValueNode* object) {
   NodeType known_type;
@@ -5033,14 +5019,7 @@ MaybeReduceResult MaglevGraphBuilder::TryBuildNamedAccess(
       // Check for string maps before checking if we need to do an access
       // check. Primitive strings always get the prototype from the native
       // context they're operated on, so they don't need the access check.
-      if (v8_flags.specialize_code_for_one_byte_seq_strings &&
-          base::all_of(maps, [](compiler::MapRef map) {
-            return map.IsSeqStringMap() && map.IsOneByteStringMap();
-          })) {
-        RETURN_IF_ABORT(BuildCheckSeqOneByteString(lookup_start_object));
-      } else {
-        RETURN_IF_ABORT(BuildCheckString(lookup_start_object));
-      }
+      RETURN_IF_ABORT(BuildCheckString(lookup_start_object));
     } else if (HasOnlyNumberMaps(maps)) {
       RETURN_IF_ABORT(BuildCheckNumber(lookup_start_object));
     } else {
@@ -5185,29 +5164,14 @@ MaybeReduceResult MaglevGraphBuilder::TryBuildElementAccessOnString(
                                            StringAtOOBMode::kElement));
 
   // Ensure that {object} is actually a String.
-  bool is_one_byte_seq_string =
-      v8_flags.specialize_code_for_one_byte_seq_strings &&
-      base::all_of(access_feedback.transition_groups(), [](const auto& group) {
-        return base::all_of(group, [](compiler::MapRef map) {
-          return map.IsSeqStringMap() && map.IsOneByteStringMap();
-        });
-      });
-  if (is_one_byte_seq_string) {
-    RETURN_IF_ABORT(BuildCheckSeqOneByteString(object));
-  } else {
-    RETURN_IF_ABORT(BuildCheckString(object));
-  }
+  RETURN_IF_ABORT(BuildCheckString(object));
 
   ValueNode* length;
   GET_VALUE_OR_ABORT(length, BuildLoadStringLength(object));
   ValueNode* index;
   GET_VALUE_OR_ABORT(index, GetInt32ElementIndex(index_object));
   auto emit_load = [&]() -> ReduceResult {
-    if (is_one_byte_seq_string) {
-      return AddNewNode<SeqOneByteStringAt>({object, index});
-    } else {
-      return AddNewNode<StringAt>({object, index});
-    }
+    return AddNewNode<StringAt>({object, index});
   };
 
   if (LoadModeHandlesOOB(keyed_mode.load_mode()) &&
@@ -8372,7 +8336,7 @@ MaybeReduceResult MaglevGraphBuilder::TryReduceArrayIteratingBuiltin(
   bool receiver_maps_were_unstable = false;
   auto node_info = known_node_aspects().TryGetInfoFor(receiver);
   if (node_info) {
-    receiver_maps_were_unstable = node_info->possible_maps_are_unstable();
+    receiver_maps_were_unstable = node_info->any_map_is_unstable();
   }
   PossibleMaps receiver_maps_before_loop(*possible_maps);
 
@@ -9106,14 +9070,7 @@ MaybeReduceResult MaglevGraphBuilder::TryReduceStringPrototypeCharAt(
   GET_VALUE_OR_ABORT(length, BuildLoadStringLength(receiver));
 
   auto GetCharAt = [&]() -> ReduceResult {
-    bool is_seq_one_byte =
-        v8_flags.specialize_code_for_one_byte_seq_strings &&
-        NodeTypeIs(GetType(receiver), NodeType::kSeqOneByteString);
-    if (is_seq_one_byte) {
-      return AddNewNode<SeqOneByteStringAt>({receiver, index});
-    } else {
-      return AddNewNode<StringAt>({receiver, index});
-    }
+    return AddNewNode<StringAt>({receiver, index});
   };
   if (reducer_.current_speculation_mode() ==
       SpeculationMode::kDisallowBoundsCheckSpeculation) {
@@ -9225,18 +9182,9 @@ MaybeReduceResult MaglevGraphBuilder::TryReduceStringPrototypeCodePointAt(
   GET_VALUE_OR_ABORT(length, BuildLoadStringLength(receiver));
 
   auto GetCodePointAt = [&]() -> ReduceResult {
-    bool is_seq_one_byte =
-        v8_flags.specialize_code_for_one_byte_seq_strings &&
-        NodeTypeIs(GetType(receiver), NodeType::kSeqOneByteString);
-    if (is_seq_one_byte) {
-      // For one-byte strings, codePointAt == charCodeAt, since there are no
-      // surrogate pairs.
-      return AddNewNode<BuiltinSeqOneByteStringCharCodeAt>({receiver, index});
-    } else {
-      return AddNewNode<BuiltinStringPrototypeCharCodeOrCodePointAt>(
-          {receiver, index},
-          BuiltinStringPrototypeCharCodeOrCodePointAt::kCodePointAt);
-    }
+    return AddNewNode<BuiltinStringPrototypeCharCodeOrCodePointAt>(
+        {receiver, index},
+        BuiltinStringPrototypeCharCodeOrCodePointAt::kCodePointAt);
   };
 
   if (reducer_.current_speculation_mode() ==
@@ -9947,7 +9895,7 @@ MaybeReduceResult MaglevGraphBuilder::TryReduceArrayPrototypeSort(
   bool receiver_maps_were_unstable = false;
   auto* node_info = known_node_aspects().TryGetInfoFor(receiver);
   if (node_info) {
-    receiver_maps_were_unstable = node_info->possible_maps_are_unstable();
+    receiver_maps_were_unstable = node_info->any_map_is_unstable();
   }
   PossibleMaps receiver_maps_before_loop(*possible_maps);
 
@@ -17619,16 +17567,9 @@ ReduceResult MaglevGraphBuilder::BuildSmiUntag(ValueNode* node) {
 
 ReduceResult MaglevGraphBuilder::BuildGetCharCodeAt(ValueNode* string,
                                                     ValueNode* index) {
-  bool is_seq_one_byte =
-      v8_flags.specialize_code_for_one_byte_seq_strings &&
-      NodeTypeIs(GetType(string), NodeType::kSeqOneByteString);
-  if (is_seq_one_byte) {
-    return AddNewNode<BuiltinSeqOneByteStringCharCodeAt>({string, index});
-  } else {
-    return AddNewNode<BuiltinStringPrototypeCharCodeOrCodePointAt>(
-        {string, index},
-        BuiltinStringPrototypeCharCodeOrCodePointAt::kCharCodeAt);
-  }
+  return AddNewNode<BuiltinStringPrototypeCharCodeOrCodePointAt>(
+      {string, index},
+      BuiltinStringPrototypeCharCodeOrCodePointAt::kCharCodeAt);
 }
 
 #undef TRACE

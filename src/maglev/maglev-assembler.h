@@ -581,15 +581,10 @@ class V8_EXPORT_PRIVATE MaglevAssembler : public MacroAssembler {
   inline void JumpIfStringMap(Register map, Label* target,
                               Label::Distance distance = Label::kFar,
                               bool jump_if_true = true);
-  inline void JumpIfSeqOneByteStringMap(Register map, Label* target,
-                                        Label::Distance distance = Label::kFar,
-                                        bool jump_if_true = true);
   inline void JumpIfString(Register heap_object, Label* target,
                            Label::Distance distance = Label::kFar);
   inline void JumpIfNotString(Register heap_object, Label* target,
                               Label::Distance distance = Label::kFar);
-  inline void JumpIfNotSeqOneByteString(Register heap_object, Label* target,
-                                        Label::Distance distance = Label::kFar);
   inline void CheckJSAnyIsStringAndBranch(Register heap_object, Label* if_true,
                                           Label::Distance true_distance,
                                           bool fallthrough_when_true,
