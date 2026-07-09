@@ -1505,6 +1505,17 @@ void WasmInterpreterRuntime::ExecuteImportedFunction(
   // For tail calls, the caller's frame is being replaced, so its
   // caught_exceptions_ GlobalHandle must be freed now to avoid leaking it.
   if (is_tail_call) current_frame_.DisposeCaughtExceptionsArray(isolate_);
+
+  // The imported function may reenter the interpreter, which saves and restores
+  // the caller's frame through a non-owning bookmark that cannot carry
+  // caught_exceptions_ (see SetCurrentFrame). Hold the caller's caught
+  // exceptions on the C++ stack across the call and reattach them to the
+  // resumed frame afterwards, so a later rethrow still finds them. The handle
+  // is a global handle, so it stays valid across the call.
+  Handle<FixedArray> caller_caught_exceptions =
+      current_frame_.caught_exceptions_;
+  current_frame_.caught_exceptions_ = Handle<FixedArray>::null();
+
   thread->SetCurrentFrame(current_frame_);
   thread->SetCurrentActivationFrame(
       reinterpret_cast<uint32_t*>(current_frame_.current_sp_ + slot_offset),
@@ -1516,6 +1527,9 @@ void WasmInterpreterRuntime::ExecuteImportedFunction(
       code, func_index,
       reinterpret_cast<uint32_t*>(current_frame_.current_sp_ + slot_offset),
       current_stack_size, ref_stack_fp_offset, slot_offset);
+
+  // Reattach the caller's caught exceptions to the now-resumed current frame.
+  current_frame_.caught_exceptions_ = caller_caught_exceptions;
 
   if (result == ExternalCallResult::EXTERNAL_EXCEPTION) {
     if (is_tail_call) {
@@ -2040,6 +2054,13 @@ void WasmInterpreterRuntime::ExecuteIndirectCall(
     // For tail calls, the caller's frame is being replaced, so its
     // caught_exceptions_ GlobalHandle must be freed now to avoid leaking it.
     if (is_tail_call) current_frame_.DisposeCaughtExceptionsArray(isolate_);
+
+    // Preserve the caller's caught_exceptions_ across the reentrant call; see
+    // ExecuteImportedFunction for the rationale.
+    Handle<FixedArray> caller_caught_exceptions =
+        current_frame_.caught_exceptions_;
+    current_frame_.caught_exceptions_ = Handle<FixedArray>::null();
+
     thread->SetCurrentFrame(current_frame_);
     thread->SetCurrentActivationFrame(
         sp, slot_offset, stack_pos,
@@ -2062,6 +2083,8 @@ void WasmInterpreterRuntime::ExecuteIndirectCall(
           entry.function_index(), object_implicit_arg, callsite_signature,
           sp + slot_offset / kSlotSize, return_slot_offset,
           ref_stack_fp_offset);
+      // Reattach the caller's caught exceptions to the now-resumed frame.
+      current_frame_.caught_exceptions_ = caller_caught_exceptions;
       if (result == ExternalCallResult::EXTERNAL_EXCEPTION) {
         thread->Stop();
         RedirectCodeToUnwindHandler(current_code);
@@ -2092,6 +2115,8 @@ void WasmInterpreterRuntime::ExecuteIndirectCall(
       ExternalCallResult result = CallExternalJSFunction(
           current_code, module_, object_implicit_arg, callsite_signature,
           sp + slot_offset / kSlotSize, slot_offset, callee_canonical_sig);
+      // Reattach the caller's caught exceptions to the now-resumed frame.
+      current_frame_.caught_exceptions_ = caller_caught_exceptions;
       if (result == ExternalCallResult::EXTERNAL_RETURNED) {
         StoreRefResultsIntoRefStack(fp, ref_stack_fp_offset,
                                     callsite_signature);
@@ -2181,6 +2206,13 @@ void WasmInterpreterRuntime::ExecuteCallRef(
   // For tail calls, the caller's frame is being replaced, so its
   // caught_exceptions_ GlobalHandle must be freed now to avoid leaking it.
   if (is_tail_call) current_frame_.DisposeCaughtExceptionsArray(isolate_);
+
+  // Preserve the caller's caught_exceptions_ across the reentrant call; see
+  // ExecuteImportedFunction for the rationale.
+  Handle<FixedArray> caller_caught_exceptions =
+      current_frame_.caught_exceptions_;
+  current_frame_.caught_exceptions_ = Handle<FixedArray>::null();
+
   thread->SetCurrentFrame(current_frame_);
   thread->SetCurrentActivationFrame(
       sp, slot_offset, stack_pos,
@@ -2192,6 +2224,8 @@ void WasmInterpreterRuntime::ExecuteCallRef(
     ExternalCallResult result = CallExternalWasmFunction(
         function_index, object_implicit_arg, signature,
         sp + slot_offset / kSlotSize, return_slot_offset, ref_stack_fp_offset);
+    // Reattach the caller's caught exceptions to the now-resumed frame.
+    current_frame_.caught_exceptions_ = caller_caught_exceptions;
     if (result == ExternalCallResult::EXTERNAL_EXCEPTION) {
       thread->Stop();
       RedirectCodeToUnwindHandler(current_code);
@@ -2220,6 +2254,8 @@ void WasmInterpreterRuntime::ExecuteCallRef(
     ExternalCallResult result = CallExternalJSFunction(
         current_code, module_, func_ref, signature,
         sp + slot_offset / kSlotSize, return_slot_offset, callee_canonical_sig);
+    // Reattach the caller's caught exceptions to the now-resumed frame.
+    current_frame_.caught_exceptions_ = caller_caught_exceptions;
     if (result == ExternalCallResult::EXTERNAL_RETURNED) {
       StoreRefResultsIntoRefStack(fp, ref_stack_fp_offset, signature);
     } else {  // ExternalCallResult::EXTERNAL_EXCEPTION

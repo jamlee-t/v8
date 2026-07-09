@@ -522,9 +522,11 @@ class V8_EXPORT_PRIVATE WasmInterpreterThread {
       current_frame_state_ = frame_state;
       // The thread's copy is a non-owning bookmark used for stack traces and
       // frame restoration on reentrant calls.  It must never hold a
-      // caught_exceptions_ GlobalHandle because the caller's live
-      // current_frame_ is the sole owner; a stale copy here would lead to a
-      // double-free if the frame is restored and then unwound.
+      // caught_exceptions_ GlobalHandle: a reentrant activation saves and
+      // restores this bookmark, and the interpreter requires that no suspended
+      // frame carries caught_exceptions_. ExecuteImportedFunction preserves the
+      // caller's caught_exceptions_ across the JS call on the C++ stack
+      // instead.
       current_frame_state_.caught_exceptions_ = Handle<FixedArray>::null();
     }
     const FrameState& GetCurrentFrame() const { return current_frame_state_; }
