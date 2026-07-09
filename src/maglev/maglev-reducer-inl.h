@@ -16,6 +16,7 @@
 #include "src/base/logging.h"
 #include "src/common/scoped-modification.h"
 #include "src/compiler/processed-feedback.h"
+#include "src/maglev/maglev-cse.h"
 #include "src/maglev/maglev-ir-inl.h"
 #include "src/maglev/maglev-map-inference.h"
 #include "src/maglev/maglev-node-type.h"
@@ -35,79 +36,6 @@
 namespace v8 {
 namespace internal {
 namespace maglev {
-
-// Some helpers for CSE
-namespace cse {
-inline size_t fast_hash_combine(size_t seed, size_t h) {
-  // Implementation from boost. Good enough for GVN.
-  return h + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-}
-
-template <typename T>
-size_t gvn_hash_value(const T& in) {
-  return base::hash_value(in);
-}
-
-inline size_t gvn_hash_value(const compiler::MapRef& map) {
-  return map.hash_value();
-}
-
-inline size_t gvn_hash_value(const interpreter::Register& reg) {
-  return base::hash_value(reg.index());
-}
-
-inline size_t gvn_hash_value(const Representation& rep) {
-  return base::hash_value(rep.kind());
-}
-
-inline size_t gvn_hash_value(const ExternalReference& ref) {
-  return base::hash_value(ref.address());
-}
-
-inline size_t gvn_hash_value(const PolymorphicAccessInfo& access_info) {
-  return access_info.hash_value();
-}
-
-inline size_t gvn_hash_value(const PropertyKey& key) {
-  return base::hash_value(key.data());
-}
-
-template <typename T>
-size_t gvn_hash_value(const v8::internal::ZoneCompactSet<T>& vector) {
-  size_t hash = base::hash_value(vector.size());
-  for (auto e : vector) {
-    hash = fast_hash_combine(hash, gvn_hash_value(e));
-  }
-  return hash;
-}
-
-template <typename T>
-size_t gvn_hash_value(const v8::internal::ZoneVector<T>& vector) {
-  size_t hash = base::hash_value(vector.size());
-  for (auto e : vector) {
-    hash = fast_hash_combine(hash, gvn_hash_value(e));
-  }
-  return hash;
-}
-
-template <typename... Args>
-size_t fast_hash_combine(size_t seed, Args&&... args) {
-  size_t hash = seed;
-  ([&] { hash = cse::fast_hash_combine(hash, cse::gvn_hash_value(args)); }(),
-   ...);
-  return hash;
-}
-
-template <size_t kInputCount, typename... Args>
-size_t fast_hash_combine(size_t seed,
-                         std::array<ValueNode*, kInputCount>& inputs) {
-  size_t hash = seed;
-  for (const auto& inp : inputs) {
-    hash = cse::fast_hash_combine(hash, base::hash_value(inp));
-  }
-  return hash;
-}
-}  // namespace cse
 
 template <typename BaseT>
 template <typename NodeT, typename Function, typename... Args>
@@ -227,13 +155,7 @@ ReduceResult MaglevReducer<BaseT>::AddNewNodeOrGetEquivalent(
       }
       i++;
     }
-    if constexpr (IsCommutativeNode(Node::opcode_of<NodeT>)) {
-      static_assert(NodeT::kInputCount == 2);
-      if ((IsConstantNode(inputs[0]->opcode()) || inputs[0] > inputs[1]) &&
-          !IsConstantNode(inputs[1]->opcode())) {
-        std::swap(inputs[0], inputs[1]);
-      }
-    }
+    cse::CanonicalizeCommutative<NodeT>(inputs);
   }
 
   uint32_t hash = static_cast<uint32_t>(cse::fast_hash_combine(

@@ -9,12 +9,14 @@
 
 #include "src/compiler/heap-refs.h"
 #include "src/maglev/maglev-compilation-info.h"
+#include "src/maglev/maglev-cse.h"
 #include "src/maglev/maglev-deopt-frame-visitor.h"
 #include "src/maglev/maglev-graph-printer.h"
 #include "src/maglev/maglev-graph-processor.h"
 #include "src/maglev/maglev-graph.h"
 #include "src/maglev/maglev-interpreter-frame-state.h"
 #include "src/maglev/maglev-ir.h"
+#include "src/maglev/maglev-known-node-aspects.h"
 #include "src/numbers/conversions.h"
 #include "src/zone/zone-containers.h"
 
@@ -681,6 +683,73 @@ class ReachableExceptionHandlerTracker {
 
   Graph* graph_;
   ZoneAbslFlatHashSet<BasicBlock*> reachable_exception_handlers_;
+};
+
+template <typename KnaProvider>
+class CommonSubexpressionEliminationProcessor {
+ public:
+  explicit CommonSubexpressionEliminationProcessor(KnaProvider& kna_provider)
+      : kna_provider_(kna_provider) {}
+
+  void PreProcessGraph(Graph* graph) {}
+  void PostProcessGraph(Graph* graph) {}
+  void PostPhiProcessing() {}
+  BlockProcessResult PreProcessBasicBlock(BasicBlock* block) {
+    return BlockProcessResult::kContinue;
+  }
+  BlockProcessResult PostProcessBasicBlock(BasicBlock* block) {
+    return BlockProcessResult::kContinue;
+  }
+
+  template <typename NodeT>
+  ProcessResult Process(NodeT* node, const ProcessingState& state) {
+    if constexpr (ShouldCSE(Node::opcode_of<NodeT>) &&
+                  IsFixedInputNode<NodeT>()) {
+      return TryCSE(node);
+    }
+    return ProcessResult::kContinue;
+  }
+
+ private:
+  static constexpr bool ShouldCSE(Opcode op) {
+    return Node::participate_in_cse(op) && !Node::needs_epoch_check(op);
+  }
+
+  KnownNodeAspects& known_node_aspects() {
+    return kna_provider_.known_node_aspects();
+  }
+
+  template <typename NodeT>
+  ProcessResult TryCSE(NodeT* node) {
+    static_assert(IsFixedInputNode<NodeT>());
+    static_assert(Node::participate_in_cse(Node::opcode_of<NodeT>));
+    static_assert(!Node::needs_epoch_check(Node::opcode_of<NodeT>));
+    std::array<ValueNode*, NodeT::kInputCount> inputs;
+    int i = 0;
+    for (ValueNode*& input : inputs) {
+      input = node->input_node(i++)->UnwrapIdentities();
+    }
+    cse::CanonicalizeCommutative<NodeT>(inputs);
+    uint32_t hash = cse::HashNode(node, inputs);
+    NodeT* equivalent = std::apply(
+        [&](const auto&... opts) {
+          return known_node_aspects().template FindExpression<NodeT>(
+              hash, inputs, opts...);
+        },
+        node->options());
+    if (equivalent) {
+      // Value nodes forward their uses to the equivalent via an Identity;
+      // checks have no result, so a plain removal suffices.
+      if constexpr (std::is_base_of_v<ValueNode, NodeT>) {
+        node->OverwriteWithIdentityTo(equivalent);
+      }
+      return ProcessResult::kRemove;
+    }
+    known_node_aspects().AddExpression(hash, node);
+    return ProcessResult::kContinue;
+  }
+
+  KnaProvider& kna_provider_;
 };
 
 // TODO(victorgomes): This eliminator is block-local -- it clears its state at

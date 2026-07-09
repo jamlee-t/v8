@@ -264,10 +264,17 @@ struct PostOptimizerPhase {
     maglev::RecomputeKnownNodeAspectsProcessor kna_processor(
         graph, exception_handler_tracker);
     maglev::MaglevGraphOptimizer optimizer(graph, kna_processor, ranges);
-    maglev::GraphMultiProcessor<maglev::MaglevGraphOptimizer&,
-                                maglev::ReachableExceptionHandlerTracker&,
-                                maglev::RecomputeKnownNodeAspectsProcessor&>
-        optimization_pass(optimizer, exception_handler_tracker, kna_processor);
+    maglev::CommonSubexpressionEliminationProcessor<
+        maglev::RecomputeKnownNodeAspectsProcessor>
+        cse(kna_processor);
+    maglev::GraphMultiProcessor<
+        maglev::MaglevGraphOptimizer&,
+        maglev::CommonSubexpressionEliminationProcessor<
+            maglev::RecomputeKnownNodeAspectsProcessor>&,
+        maglev::ReachableExceptionHandlerTracker&,
+        maglev::RecomputeKnownNodeAspectsProcessor&>
+        optimization_pass(optimizer, cse, exception_handler_tracker,
+                          kna_processor);
     optimization_pass.ProcessGraph(graph);
 
     // Remove unreachable blocks if we have any.

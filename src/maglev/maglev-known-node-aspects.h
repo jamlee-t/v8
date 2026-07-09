@@ -670,7 +670,8 @@ class KnownNodeAspects {
           std::forward_as_tuple(std::forward<Args>(args)...)) {
         int i = 0;
         for (const auto& inp : inputs) {
-          if (inp != candidate->input(i).node()) {
+          if (inp->UnwrapIdentities() !=
+              candidate->input(i).node()->UnwrapIdentities()) {
             break;
           }
           i++;

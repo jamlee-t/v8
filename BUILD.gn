@@ -4805,6 +4805,7 @@ v8_header_set("v8_internal_headers") {
       "src/maglev/maglev-compilation-unit.h",
       "src/maglev/maglev-compiler.h",
       "src/maglev/maglev-concurrent-dispatcher.h",
+      "src/maglev/maglev-cse.h",
       "src/maglev/maglev-deopt-frame-visitor.h",
       "src/maglev/maglev-graph-builder.h",
       "src/maglev/maglev-graph-labeller.h",
