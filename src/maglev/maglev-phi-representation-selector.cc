@@ -1130,8 +1130,15 @@ ProcessResult MaglevPhiRepresentationSelector::UpdateUntaggingOfPhi(
       old_untagging->OverwriteWith<TruncateFloat64AsSafeIntToInt32>();
       return ProcessResult::kContinue;
     }
-    // For HoleyFloat64 there is no hole-checking SafeInt truncation node;
-    // fall through to the generic (checked) conversion.
+    // A phi with a SafeInt truncation use never untags to HoleyFloat64:
+    // TruncateChecked... keeps its CheckedNumberToFloat64 alive (it can deopt,
+    // so it is required-when-unused), which pins a Float64 use hint on the phi;
+    // TruncateUnsafe... only exists for provably-Number phis. If this fires the
+    // invariant broke: handle HoleyFloat64 with a new
+    // TruncateHoleyFloat64AsSafeIntToInt32 (mirror the Float64 lowering) rather
+    // than falling through to the generic CheckedHoleyFloat64ToInt32, which
+    // deopt-loops on safe integers outside Int32 range.
+    DCHECK_NE(from_repr, ValueRepresentation::kHoleyFloat64);
   }
 
   // To be safe, GetOpcodeForConversion (called below) always return a
