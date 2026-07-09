@@ -3501,7 +3501,7 @@ void Generate_WasmDebugBreakOrTrap(MacroAssembler* masm, DebugBreakKind kind) {
       // So [fp+8]=saved lr, [fp+0]=saved fp, [fp-8]=type, [fp-16]=instance.
       // Our Push(reason, xzr) was BEFORE EnterFrame.
       // So [fp+24]=reason, [fp+16]=xzr.
-      __ Ldr(x0, MemOperand(fp, 24));
+      __ Ldr(x0, MemOperand(fp, 3 * kSystemPointerSize));
       __ PushArgument(x0);
       __ CallRuntime(Runtime::kThrowWasmError, 1);
       __ Unreachable();
