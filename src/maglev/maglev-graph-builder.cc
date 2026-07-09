@@ -8675,6 +8675,175 @@ MaybeReduceResult MaglevGraphBuilder::TryReduceArrayIteratingBuiltin(
   return ReduceResult::Done();
 }
 
+MaybeReduceResult MaglevGraphBuilder::TryReduceGeneratorPrototypeNext(
+    compiler::JSFunctionRef target, CallArguments& args) {
+  if (!CanSpeculateCall()) return {};
+
+  ValueNode* receiver = args.receiver();
+  if (!receiver) return {};
+
+  RETURN_IF_ABORT(BuildCheckInstanceType(receiver, NodeType::kUnknown,
+                                         JS_GENERATOR_OBJECT_TYPE,
+                                         JS_GENERATOR_OBJECT_TYPE));
+
+  ValueNode* continuation;
+  GET_VALUE_OR_ABORT(continuation,
+                     BuildLoadTaggedField(
+                         receiver, offsetof(JSGeneratorObject, continuation_)));
+
+  MaglevSubGraphBuilder subgraph(this, 1);
+  MaglevSubGraphBuilder::Variable ret_value(0);
+
+  ValueNode* closed_constant =
+      GetSmiConstant(JSGeneratorObject::kGeneratorClosed);
+  ValueNode* executing_constant =
+      GetSmiConstant(JSGeneratorObject::kGeneratorExecuting);
+
+  MaglevSubGraphBuilder::Label generator_already_closed(&subgraph, 1);
+  MaglevSubGraphBuilder::Label generator_finished(&subgraph, 1);
+  MaglevSubGraphBuilder::Label allocation_not_skipped(&subgraph, 1);
+  MaglevSubGraphBuilder::Label done(&subgraph, 4, {&ret_value});
+
+  RETURN_IF_ABORT(subgraph.GotoIfTrue<BranchIfReferenceEqual>(
+      &generator_already_closed, {continuation, closed_constant}));
+
+  // Generator was not closed.
+  ValueNode* continuation_int32;
+  GET_VALUE_OR_ABORT(continuation_int32, BuildSmiUntag(continuation));
+
+  // Deopt if we're calling into the generator recursively.
+  RETURN_IF_ABORT(TryBuildCheckInt32Condition(
+      continuation_int32,
+      GetInt32Constant(JSGeneratorObject::kGeneratorExecuting),
+      AssertCondition::kNotEqual, DeoptimizeReason::kWrongValue));
+
+  CHECK(BuildStoreTaggedFieldNoWriteBarrier(
+            receiver, GetSmiConstant(JSGeneratorObject::kNext),
+            offsetof(JSGeneratorObject, resume_mode_),
+            StoreTaggedMode::kDefault)
+            .IsDoneWithoutAbort());
+
+  // Tell the generator to skip allocating the result object (if
+  // possible).
+  CHECK(BuildStoreTaggedFieldNoWriteBarrier(
+            receiver, GetRootConstant(RootIndex::kTheHoleValue),
+            offsetof(JSGeneratorObject, yielded_value_),
+            StoreTaggedMode::kDefault)
+            .IsDoneWithoutAbort());
+
+  ValueNode* result;
+  {
+    LazyDeoptFrameScope lazy_deopt_scope(
+        this, Builtin::kGeneratorPrototypeNextLazyDeoptContinuation, target,
+        base::VectorOf<ValueNode*>(
+            {GetRootConstant(RootIndex::kUndefinedValue), receiver,
+             GetRootConstant(RootIndex::kTheHoleValue)}));
+    // Generators can accept an optional value when resumed (e.g.
+    // g.next("val")). This value becomes the result of the `yield`
+    // expression inside the generator.
+    ValueNode* value = GetValueOrUndefined(args[0]);
+    GET_VALUE_OR_ABORT(
+        result,
+        BuildCallBuiltinWithTaggedInputs<
+            Builtin::kResumeGeneratorTrampoline_WithCatch>({value, receiver}));
+  }
+
+  ValueNode* result_continuation;
+  GET_VALUE(result_continuation,
+            BuildLoadTaggedField(receiver,
+                                 offsetof(JSGeneratorObject, continuation_)));
+
+  ValueNode* yielded_value;
+  GET_VALUE(yielded_value,
+            BuildLoadTaggedField(receiver,
+                                 offsetof(JSGeneratorObject, yielded_value_)));
+  // We unconditionally clear yielded_value_ here. If the generator did
+  // not hit the GeneratorYieldResult intrinsic (if it suspended via
+  // yield*), yielded_value_ would still hold TheHole. If it leaked to JS
+  // space (e.g., on a subsequent unoptimized next() call), it could cause
+  // a crash when JS attempts to access its properties.
+  CHECK(BuildStoreTaggedFieldNoWriteBarrier(
+            receiver, GetRootConstant(RootIndex::kUndefinedValue),
+            offsetof(JSGeneratorObject, yielded_value_),
+            StoreTaggedMode::kDefault)
+            .IsDoneWithoutAbort());
+
+  CHECK(subgraph
+            .GotoIfTrue<BranchIfReferenceEqual>(
+                &generator_finished, {result_continuation, executing_constant})
+            .IsDoneWithoutAbort());
+
+  // The generator is not yet finished.
+  // Check whether skipping allocating the result object was successful.
+  CHECK(subgraph
+            .GotoIfFalse<BranchIfRootConstant>(
+                &allocation_not_skipped, {result}, RootIndex::kTheHoleValue)
+            .IsDoneWithoutAbort());
+
+  // Was able to avoid allocating the result object. Use
+  // yielded_value from the generator object.
+  {
+    compiler::MapRef map =
+        broker()->target_native_context().iterator_result_map(broker());
+    VirtualObject* iter_result = reducer_.CreateJSIteratorResult(
+        map, yielded_value, GetBooleanConstant(false));
+    ValueNode* alloc_result;
+    GET_VALUE(alloc_result, reducer_.BuildInlinedAllocation(
+                                iter_result, AllocationType::kYoung));
+    subgraph.set(ret_value, alloc_result);
+    subgraph.Goto(&done);
+  }
+
+  subgraph.Bind(&generator_already_closed);
+  {
+    compiler::MapRef map =
+        broker()->target_native_context().iterator_result_map(broker());
+    VirtualObject* iter_result = reducer_.CreateJSIteratorResult(
+        map, GetRootConstant(RootIndex::kUndefinedValue),
+        GetBooleanConstant(true));
+    ValueNode* alloc_result;
+    GET_VALUE(alloc_result, reducer_.BuildInlinedAllocation(
+                                iter_result, AllocationType::kYoung));
+    subgraph.set(ret_value, alloc_result);
+    subgraph.Goto(&done);
+  }
+
+  subgraph.Bind(&generator_finished);
+  {
+    // Continuation being the executing_constant means the generator
+    // has finished.
+    CHECK(BuildStoreTaggedFieldNoWriteBarrier(
+              receiver, closed_constant,
+              offsetof(JSGeneratorObject, continuation_),
+              StoreTaggedMode::kDefault)
+              .IsDoneWithoutAbort());
+
+    // When the generator finishes, `result` holds the actual value
+    // returned by the generator function. We use it to construct the
+    // final {value: result, done: true} IteratorResult object.
+    compiler::MapRef map =
+        broker()->target_native_context().iterator_result_map(broker());
+    VirtualObject* iter_result =
+        reducer_.CreateJSIteratorResult(map, result, GetBooleanConstant(true));
+    ValueNode* alloc_result;
+    GET_VALUE(alloc_result, reducer_.BuildInlinedAllocation(
+                                iter_result, AllocationType::kYoung));
+    subgraph.set(ret_value, alloc_result);
+    subgraph.Goto(&done);
+  }
+
+  subgraph.Bind(&allocation_not_skipped);
+  {
+    // Was not able to avoid allocating the result object; use
+    // the result object as is.
+    subgraph.set(ret_value, result);
+    subgraph.Goto(&done);
+  }
+
+  subgraph.Bind(&done);
+  return subgraph.get(ret_value);
+}
+
 MaybeReduceResult MaglevGraphBuilder::TryReduceArrayIteratorPrototypeNext(
     compiler::JSFunctionRef target, CallArguments& args) {
   if (!CanSpeculateCall()) return {};
@@ -12148,6 +12317,50 @@ ReduceResult MaglevGraphBuilder::
           },
           Builtin::kCopyDataPropertiesWithExcludedProperties, tagged_context));
   SetAccumulator(call_builtin);
+  return ReduceResult::Done();
+}
+
+ReduceResult MaglevGraphBuilder::VisitIntrinsicGeneratorYieldResult(
+    interpreter::RegisterList args) {
+  DCHECK_EQ(args.register_count(), 2);
+  ValueNode* value = current_interpreter_frame_.get(args[0]);
+  ValueNode* generator = current_interpreter_frame_.get(args[1]);
+
+  compiler::MapRef map =
+      broker()->target_native_context().iterator_result_map(broker());
+
+  MaglevSubGraphBuilder sub_graph(this, 1);
+  MaglevSubGraphBuilder::Variable ret_val(0);
+  MaglevSubGraphBuilder::Label done_label(&sub_graph, 2, {&ret_val});
+  MaglevSubGraphBuilder::Label allocate_label(&sub_graph, 1);
+
+  // Check if yielded_value_ is TheHole (signaling to skip allocating the result
+  // object).
+  ValueNode* current_yielded_value;
+  GET_VALUE_OR_ABORT(current_yielded_value,
+                     BuildLoadTaggedField(generator, offsetof(JSGeneratorObject,
+                                                              yielded_value_)));
+  RETURN_IF_ABORT(sub_graph.GotoIfFalse<BranchIfRootConstant>(
+      &allocate_label, {current_yielded_value}, RootIndex::kTheHoleValue));
+
+  RETURN_IF_ABORT(BuildStoreTaggedField(
+      generator, value, offsetof(JSGeneratorObject, yielded_value_),
+      StoreTaggedMode::kDefault));
+
+  sub_graph.set(ret_val, GetRootConstant(RootIndex::kTheHoleValue));
+  sub_graph.Goto(&done_label);
+
+  sub_graph.Bind(&allocate_label);
+  VirtualObject* iter_result =
+      reducer_.CreateJSIteratorResult(map, value, GetBooleanConstant(false));
+  ValueNode* alloc_result;
+  GET_VALUE_OR_ABORT(alloc_result, reducer_.BuildInlinedAllocation(
+                                       iter_result, AllocationType::kYoung));
+  sub_graph.set(ret_val, alloc_result);
+  sub_graph.Goto(&done_label);
+
+  sub_graph.Bind(&done_label);
+  SetAccumulator(sub_graph.get(ret_val));
   return ReduceResult::Done();
 }
 

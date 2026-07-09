@@ -309,6 +309,7 @@ constexpr int kGearboxGenericBuiltinIdOffset = -2;
   /* Construct a JSValue. */                                                   \
   ASM(JSConstructEntryTrampoline, JSEntry)                                     \
   ASM(ResumeGeneratorTrampoline, ResumeGenerator)                              \
+  TFC(ResumeGeneratorTrampoline_WithCatch, ResumeGenerator)                    \
                                                                                \
   /* String helpers */                                                         \
   IF_TSA(TFC_TSA, TFC, StringFromCodePointAt, StringAtAsString)                \

@@ -849,6 +849,7 @@ class MaglevGraphBuilder {
   V(ArrayConstructor)                            \
   V(ArrayForEach)                                \
   V(ArrayIteratorPrototypeNext)                  \
+  V(GeneratorPrototypeNext)                      \
   V(ArrayMap)                                    \
   V(ArrayPrototypeSlice)                         \
   V(ArrayPrototypePush)                          \

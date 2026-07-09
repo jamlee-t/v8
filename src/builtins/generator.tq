@@ -34,9 +34,16 @@ transitioning javascript builtin GeneratorPrototypeNextLazyDeoptContinuation(
   // continuation is now kGeneratorExecuting; close it and wrap the result.
   // Otherwise (yielded), return the result as-is.
   if (gen.continuation == SmiConstant(kGeneratorExecuting)) {
+    dcheck(result != TheHole);
     gen.continuation = SmiConstant(kGeneratorClosed);
     return AllocateJSIteratorResult(result, True);
   }
+
+  // Allocating the iterator result object was skipped; allocate it here.
+  if (result == TheHole) {
+    return AllocateJSIteratorResult(gen.yielded_value, False);
+  }
+
   return result;
 }
 

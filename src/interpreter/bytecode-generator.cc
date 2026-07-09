@@ -6124,10 +6124,9 @@ void BytecodeGenerator::VisitYield(Yield* expr) {
       RegisterAllocationScope register_scope(this);
       RegisterList args = register_allocator()->NewRegisterList(2);
       builder()
-          ->StoreAccumulatorInRegister(args[0])  // value
-          .LoadFalse()
-          .StoreAccumulatorInRegister(args[1])  // done
-          .CallRuntime(Runtime::kInlineCreateIterResultObject, args);
+          ->StoreAccumulatorInRegister(args[0])       // value
+          .MoveRegister(generator_object(), args[1])  // generator
+          .CallRuntime(Runtime::kInlineGeneratorYieldResult, args);
     }
   }
 

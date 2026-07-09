@@ -312,6 +312,35 @@ TF_BUILTIN(ResumeGeneratorBaseline, GeneratorBuiltinsAssembler) {
   Return(LoadJSGeneratorObjectInputOrDebugPos(generator));
 }
 
+TF_BUILTIN(ResumeGeneratorTrampoline_WithCatch, GeneratorBuiltinsAssembler) {
+  auto value = Parameter<Object>(Descriptor::kValue);
+  auto receiver = Parameter<JSGeneratorObject>(Descriptor::kGenerator);
+  auto context = Parameter<Context>(Descriptor::kContext);
+
+  TVARIABLE(Object, var_exception);
+  Label if_exception(this, Label::kDeferred);
+  TNode<JSAny> result;
+  {
+    compiler::ScopedExceptionHandler handler(this, &if_exception,
+                                             &var_exception);
+    result = CallBuiltin<JSAny>(Builtin::kResumeGeneratorTrampoline, context,
+                                value, receiver);
+  }
+  Return(result);
+
+  BIND(&if_exception);
+  StoreObjectFieldNoWriteBarrier(
+      receiver, offsetof(JSGeneratorObject, continuation_),
+      SmiConstant(JSGeneratorObject::kGeneratorClosed));
+  // Note: While a closed generator doesn't strictly leak yielded_value_ to JS,
+  // we clear it here as defense-in-depth to avoid leaving TheHole in the
+  // object.
+  StoreObjectFieldRoot(receiver, offsetof(JSGeneratorObject, yielded_value_),
+                       RootIndex::kUndefinedValue);
+  CallRuntime(Runtime::kReThrow, context, var_exception.value());
+  Unreachable();
+}
+
 #include "src/codegen/undef-code-stub-assembler-macros.inc"
 
 }  // namespace internal
