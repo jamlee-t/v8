@@ -341,7 +341,7 @@ deps = {
   'third_party/libunwind/src':
     Var('chromium_url') + '/external/github.com/llvm/llvm-project/libunwind.git' + '@' + '7ccfbebd65a02a0a3a2f86a61139c5f306678dfb',
   'third_party/llvm-libc/src':
-    Var('chromium_url') + '/external/github.com/llvm/llvm-project/libc.git' + '@' + '6acdd35440c04fc8b4664a59425de82aa5a800bb',
+    Var('chromium_url') + '/external/github.com/llvm/llvm-project/libc.git' + '@' + '1c2033e4ecda7cfefce1ea3aeef2aad15015cc67',
   'third_party/llvm-build/Release+Asserts': {
     'dep_type': 'gcs',
     'bucket': 'chromium-browser-clang',
@@ -521,7 +521,7 @@ deps = {
     'condition': 'not build_with_chromium',
   },
   'third_party/perfetto':
-    Var('chromium_url') + '/external/github.com/google/perfetto.git' + '@' + 'd48d7b987b4ad2e5e53805a29b7ecedf59e4ce80',
+    Var('chromium_url') + '/external/github.com/google/perfetto.git' + '@' + '3fecf819c4aa1d2237c8bd34d5dafe185302f1b8',
   'third_party/protobuf':
     Var('chromium_url') + '/chromium/src/third_party/protobuf.git' + '@' + 'f4b110307a4845dfe04c4fc5458d514eb8fc7d66',
   'third_party/re2/src':
