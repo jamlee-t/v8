@@ -411,105 +411,59 @@ class MaglevGraphBuilder::MaglevSubGraphBuilder::
   MaglevSubGraphBuilder* sub_builder_;
 };
 
-void MaglevGraphBuilder::BranchBuilder::StartFallthroughBlock(
-    BasicBlock* predecessor) {
-  switch (mode()) {
-    case kBytecodeJumpTarget: {
-      auto& data = data_.bytecode_target;
-      if (data.patch_accumulator_scope &&
-          (data.patch_accumulator_scope->node_ == builder_->GetAccumulator())) {
-        SetAccumulatorInBranch(BranchType::kBranchIfTrue);
-        builder_->MergeIntoFrameState(predecessor, data.jump_target_offset);
-        SetAccumulatorInBranch(BranchType::kBranchIfFalse);
-        builder_->StartFallthroughBlock(data.fallthrough_offset, predecessor);
-      } else {
-        builder_->MergeIntoFrameState(predecessor, data.jump_target_offset);
-        builder_->StartFallthroughBlock(data.fallthrough_offset, predecessor);
-      }
-      break;
-    }
-    case kLabelJumpTarget:
-      auto& data = data_.label_target;
-      sub_builder_->MergeIntoLabel(data.jump_label, predecessor);
-      builder_->StartNewBlock(predecessor, nullptr, data.fallthrough);
-      break;
-  }
-}
-
-void MaglevGraphBuilder::BranchBuilder::SetAccumulatorInBranch(
-    BranchType jump_type) const {
-  DCHECK_EQ(mode(), kBytecodeJumpTarget);
-  auto& data = data_.bytecode_target;
-  if (branch_specialization_mode_ == BranchSpecializationMode::kAlwaysBoolean) {
-    builder_->SetAccumulatorInBranch(builder_->GetBooleanConstant(
-        data.patch_accumulator_scope->jump_type_ == jump_type));
-  } else if (data.patch_accumulator_scope->jump_type_ == jump_type) {
-    builder_->SetAccumulatorInBranch(
-        builder_->GetRootConstant(data.patch_accumulator_scope->root_index_));
-  } else {
-    builder_->SetAccumulatorInBranch(data.patch_accumulator_scope->node_);
-  }
-}
-
-BasicBlockRef* MaglevGraphBuilder::BranchBuilder::jump_target() {
-  switch (mode()) {
-    case kBytecodeJumpTarget:
-      return &builder_->jump_targets_[data_.bytecode_target.jump_target_offset];
-    case kLabelJumpTarget:
-      return data_.label_target.jump_label->ref();
-  }
-  UNREACHABLE();
-}
-
-BasicBlockRef* MaglevGraphBuilder::BranchBuilder::fallthrough() {
-  switch (mode()) {
-    case kBytecodeJumpTarget:
-      return &builder_->jump_targets_[data_.bytecode_target.fallthrough_offset];
-    case kLabelJumpTarget:
-      return &data_.label_target.fallthrough;
-  }
-  UNREACHABLE();
-}
-
-BasicBlockRef* MaglevGraphBuilder::BranchBuilder::true_target() {
-  return jump_type_ == BranchType::kBranchIfTrue ? jump_target()
-                                                 : fallthrough();
-}
-
-BasicBlockRef* MaglevGraphBuilder::BranchBuilder::false_target() {
-  return jump_type_ == BranchType::kBranchIfFalse ? jump_target()
-                                                  : fallthrough();
-}
-
-MaglevGraphBuilder::BranchResult MaglevGraphBuilder::BranchBuilder::FromBool(
+BranchResult MaglevGraphBuilder::BytecodeBranchBuilder::FromBool(
     bool value) const {
-  switch (mode()) {
-    case kBytecodeJumpTarget: {
-      BranchType type_if_need_to_jump =
-          (value ? BranchType::kBranchIfTrue : BranchType::kBranchIfFalse);
-      builder_->MarkBranchDeadAndJumpIfNeeded(jump_type_ ==
-                                              type_if_need_to_jump);
-      return BranchResult::kDefault;
-    }
-    case kLabelJumpTarget:
-      return value ? BranchResult::kAlwaysTrue : BranchResult::kAlwaysFalse;
+  BranchType type_if_need_to_jump =
+      (value ? BranchType::kBranchIfTrue : BranchType::kBranchIfFalse);
+  builder_->MarkBranchDeadAndJumpIfNeeded(jump_type_ == type_if_need_to_jump);
+  return BranchResult::kDefault;
+}
+
+ValueNode* MaglevGraphBuilder::BytecodeBranchBuilder::PatchedAccumulator(
+    BranchType branch_type) const {
+  if (specialization_mode_ == BranchSpecializationMode::kAlwaysBoolean) {
+    return builder_->GetBooleanConstant(patch_->jump_type == branch_type);
   }
-  UNREACHABLE();
+  if (patch_->jump_type == branch_type) {
+    return builder_->GetRootConstant(patch_->root_index);
+  }
+  return patch_->node;
 }
 
 template <typename ControlNodeT, typename... Args>
-MaglevGraphBuilder::BranchResult MaglevGraphBuilder::BranchBuilder::Build(
-    std::initializer_list<ValueNode*> control_inputs, Args&&... args) {
+BranchResult MaglevGraphBuilder::BytecodeBranchBuilder::Build(
+    std::initializer_list<ValueNode*> inputs, Args&&... args) {
   static_assert(IsConditionalControlNode(Node::opcode_of<ControlNodeT>));
-  auto result = builder_->FinishBlock<ControlNodeT>(
-      control_inputs, std::forward<Args>(args)..., true_target(),
-      false_target());
-  if (!result) {
-    return Abort();
+  BasicBlockRef* jump_ref = &builder_->jump_targets_[jump_target_offset_];
+  BasicBlockRef* fallthrough_ref =
+      &builder_->jump_targets_[fallthrough_offset_];
+  BasicBlockRef* true_target;
+  BasicBlockRef* false_target;
+  if (jump_type_ == BranchType::kBranchIfTrue) {
+    true_target = jump_ref;
+    false_target = fallthrough_ref;
+  } else {
+    DCHECK_EQ(jump_type_, BranchType::kBranchIfFalse);
+    true_target = fallthrough_ref;
+    false_target = jump_ref;
   }
+
+  auto result = builder_->FinishBlock<ControlNodeT>(
+      inputs, std::forward<Args>(args)..., true_target, false_target);
+  if (!result) return BranchResult::kAbort;
   BasicBlock* block = *result;
-  DCHECK_NOT_NULL(block);
-  StartFallthroughBlock(block);
+
+  if (patch_ != nullptr && patch_->node == builder_->GetAccumulator()) {
+    builder_->SetAccumulatorInBranch(
+        PatchedAccumulator(BranchType::kBranchIfTrue));
+    builder_->MergeIntoFrameState(block, jump_target_offset_);
+    builder_->SetAccumulatorInBranch(
+        PatchedAccumulator(BranchType::kBranchIfFalse));
+    builder_->StartFallthroughBlock(fallthrough_offset_, block);
+  } else {
+    builder_->MergeIntoFrameState(block, jump_target_offset_);
+    builder_->StartFallthroughBlock(fallthrough_offset_, block);
+  }
   return BranchResult::kDefault;
 }
 
@@ -678,12 +632,12 @@ void MaglevGraphBuilder::MaglevSubGraphBuilder::Bind(Label* label) {
 }
 
 template <typename FCond, typename FTrue, typename FFalse>
-ReduceResult MaglevGraphBuilder::MaglevSubGraphBuilder::Branch(
-    std::initializer_list<MaglevSubGraphBuilder::Variable*> vars, FCond cond,
-    FTrue if_true, FFalse if_false) {
-  MaglevSubGraphBuilder::Label else_branch(this, 1);
-  BranchBuilder builder(builder_, this, BranchType::kBranchIfFalse,
-                        &else_branch);
+ReduceResult Subgraph<MaglevGraphBuilder>::Branch(
+    std::initializer_list<Variable*> vars, FCond cond, FTrue if_true,
+    FFalse if_false) {
+  Label else_branch(this, 1);
+  MaglevReducer<MaglevGraphBuilder>::BranchBuilder builder(
+      this, BranchType::kBranchIfFalse, &else_branch);
   BranchResult branch_result = cond(builder);
   switch (branch_result) {
     case BranchResult::kAlwaysTrue:
@@ -695,7 +649,7 @@ ReduceResult MaglevGraphBuilder::MaglevSubGraphBuilder::Branch(
     case BranchResult::kDefault:
       break;
   }
-  MaglevSubGraphBuilder::Label done(this, 2, vars);
+  Label done(this, 2, vars);
   MaybeReduceResult result_if_true = if_true();
   CHECK(result_if_true.IsDone());
   GotoOrTrim(&done);
@@ -722,41 +676,7 @@ ReduceResult MaglevGraphBuilder::Select(
     base::FunctionRef<BranchResult(BranchBuilder&)> cond,
     base::FunctionRef<ReduceResult()> if_true,
     base::FunctionRef<ReduceResult()> if_false) {
-  MaglevSubGraphBuilder subgraph(this, 1);
-  MaglevSubGraphBuilder::Label else_branch(&subgraph, 1);
-  BranchBuilder builder(this, &subgraph, BranchType::kBranchIfFalse,
-                        &else_branch);
-  BranchResult branch_result = cond(builder);
-  switch (branch_result) {
-    case BranchResult::kAlwaysTrue:
-      return if_true();
-    case BranchResult::kAlwaysFalse:
-      return if_false();
-    case BranchResult::kAbort:
-      return ReduceResult::DoneWithAbort();
-    case BranchResult::kDefault:
-      break;
-  }
-  MaglevSubGraphBuilder::Variable ret_val(0);
-  MaglevSubGraphBuilder::Label done(&subgraph, 2, {&ret_val});
-  ReduceResult result_if_true = if_true();
-  CHECK(result_if_true.IsDone());
-  if (result_if_true.IsDoneWithValue()) {
-    subgraph.set(ret_val, result_if_true.value());
-  }
-  subgraph.GotoOrTrim(&done);
-  subgraph.Bind(&else_branch);
-  ReduceResult result_if_false = if_false();
-  CHECK(result_if_false.IsDone());
-  if (result_if_true.IsDoneWithAbort() && result_if_false.IsDoneWithAbort()) {
-    return ReduceResult::DoneWithAbort();
-  }
-  if (result_if_false.IsDoneWithValue()) {
-    subgraph.set(ret_val, result_if_false.value());
-  }
-  subgraph.GotoOrTrim(&done);
-  subgraph.Bind(&done);
-  return subgraph.get(ret_val);
+  return reducer_.Select(cond, if_true, if_false);
 }
 
 // Known node aspects for the pseudo frame are null aside from when merging --
@@ -3290,8 +3210,9 @@ ReduceResult MaglevGraphBuilder::BuildTestUndetectable(ValueNode* value) {
   return AddNewNode<TestUndetectable>({value}, type);
 }
 
+template <typename BranchBuilderT>
 MaglevGraphBuilder::BranchResult MaglevGraphBuilder::BuildBranchIfUndetectable(
-    BranchBuilder& builder, ValueNode* value) {
+    BranchBuilderT& builder, ValueNode* value) {
   ReduceResult test_result = BuildTestUndetectable(value);
   if (test_result.IsDoneWithAbort()) {
     return builder.Abort();
@@ -3310,16 +3231,16 @@ MaglevGraphBuilder::BranchResult MaglevGraphBuilder::BuildBranchIfUndetectable(
       }
 #ifdef V8_ENABLE_UNDEFINED_DOUBLE
     case Opcode::kHoleyFloat64IsUndefinedOrHole:
-      return BuildBranchIfFloat64IsUndefinedOrHole(
+      return reducer_.BuildBranchIfFloat64IsUndefinedOrHole(
           builder,
           result->Cast<HoleyFloat64IsUndefinedOrHole>()->ValueInput().node());
 #else
     case Opcode::kHoleyFloat64IsHole:
-      return BuildBranchIfFloat64IsHole(
+      return reducer_.BuildBranchIfFloat64IsHole(
           builder, result->Cast<HoleyFloat64IsHole>()->ValueInput().node());
 #endif  // V8_ENABLE_UNDEFINED_DOUBLE
     case Opcode::kTestUndetectable:
-      return builder.Build<BranchIfUndetectable>(
+      return builder.template Build<BranchIfUndetectable>(
           {result->Cast<TestUndetectable>()->ValueInput().node()},
           result->Cast<TestUndetectable>()->check_type());
     default:
@@ -5614,7 +5535,8 @@ MaybeReduceResult MaglevGraphBuilder::TryBuildElementAccessOnTypedArray(
       if (is_load_handling_oob) {
         return Select(
             [&](BranchBuilder& builder) {
-              return builder.Build<BranchIfTypedArrayBounds>({index, length});
+              return builder.template Build<BranchIfTypedArrayBounds>(
+                  {index, length});
             },
             emit_load,
             [&] { return GetRootConstant(RootIndex::kUndefinedValue); });
@@ -8930,9 +8852,9 @@ MaybeReduceResult MaglevGraphBuilder::TryReduceArrayIteratorPrototypeNext(
   GET_VALUE_OR_ABORT(uint32_length, GetUint32ElementIndex(length));
 
   // Check next index is below length
-  MaglevSubGraphBuilder subgraph(this, 2);
-  MaglevSubGraphBuilder::Variable is_done(0);
-  MaglevSubGraphBuilder::Variable ret_value(1);
+  Subgraph<MaglevGraphBuilder> subgraph(&reducer_, 2);
+  Subgraph<MaglevGraphBuilder>::Variable is_done(0);
+  Subgraph<MaglevGraphBuilder>::Variable ret_value(1);
   RETURN_IF_ABORT(subgraph.Branch(
       {&is_done, &ret_value},
       [&](BranchBuilder& builder) {
@@ -11780,7 +11702,7 @@ MaglevGraphBuilder::TryReduceFunctionPrototypeApplyCallWithReceiver(
   }
   return Select(
       [&](BranchBuilder& builder) {
-        return BuildBranchIfUndefinedOrNull(builder, args[1]);
+        return reducer_.BuildBranchIfUndefinedOrNull(builder, args[1]);
       },
       build_call_only_with_new_receiver, build_call_with_array_like);
 }
@@ -13696,9 +13618,9 @@ ReduceResult MaglevGraphBuilder::VisitArrayDestructure() {
   ValueNode* true_node = GetBooleanConstant(true);
   ValueNode* false_node = GetBooleanConstant(false);
 
-  MaglevSubGraphBuilder subgraph(this, 2);
-  MaglevSubGraphBuilder::Variable var_iterator_is_done(0);
-  MaglevSubGraphBuilder::Variable var_element(1);
+  Subgraph<MaglevGraphBuilder> subgraph(&reducer_, 2);
+  Subgraph<MaglevGraphBuilder>::Variable var_iterator_is_done(0);
+  Subgraph<MaglevGraphBuilder>::Variable var_element(1);
   subgraph.set(var_iterator_is_done, false_node);
 
   for (uint32_t i = 0; i < count; ++i) {
@@ -13706,10 +13628,10 @@ ReduceResult MaglevGraphBuilder::VisitArrayDestructure() {
     subgraph.set(var_element, undefined);
     ValueNode* current_is_done = subgraph.get(var_iterator_is_done);
 
-    MaglevSubGraphBuilder::Label iterator_is_done(
+    Subgraph<MaglevGraphBuilder>::Label iterator_is_done(
         &subgraph, i == 0 ? 1 : 2, {&var_iterator_is_done, &var_element});
-    MaglevSubGraphBuilder::Label next(&subgraph, 2,
-                                      {&var_iterator_is_done, &var_element});
+    Subgraph<MaglevGraphBuilder>::Label next(
+        &subgraph, 2, {&var_iterator_is_done, &var_element});
 
     if (i == 0) {
       // On the first iteration we know the iterator isn't already done.
@@ -14938,15 +14860,18 @@ void MaglevGraphBuilder::MergeIntoInlinedReturnFrameStateForSuspendGenerator(
   }
 }
 
+template <typename BranchBuilderT>
 MaglevGraphBuilder::BranchResult
-MaglevGraphBuilder::BuildBranchIfReferenceEqual(BranchBuilder& builder,
+MaglevGraphBuilder::BuildBranchIfReferenceEqual(BranchBuilderT& builder,
                                                 ValueNode* lhs,
                                                 ValueNode* rhs) {
   if (RootConstant* root_constant = rhs->TryCast<RootConstant>()) {
-    return builder.Build<BranchIfRootConstant>({lhs}, root_constant->index());
+    return builder.template Build<BranchIfRootConstant>({lhs},
+                                                        root_constant->index());
   }
   if (RootConstant* root_constant = lhs->TryCast<RootConstant>()) {
-    return builder.Build<BranchIfRootConstant>({rhs}, root_constant->index());
+    return builder.template Build<BranchIfRootConstant>({rhs},
+                                                        root_constant->index());
   }
   if (InlinedAllocation* alloc_lhs = lhs->TryCast<InlinedAllocation>()) {
     if (InlinedAllocation* alloc_rhs = rhs->TryCast<InlinedAllocation>()) {
@@ -14954,7 +14879,7 @@ MaglevGraphBuilder::BuildBranchIfReferenceEqual(BranchBuilder& builder,
     }
   }
 
-  return builder.Build<BranchIfReferenceEqual>({lhs, rhs});
+  return builder.template Build<BranchIfReferenceEqual>({lhs, rhs});
 }
 
 void MaglevGraphBuilder::MarkBranchDeadAndJumpIfNeeded(bool is_jump_taken) {
@@ -14985,22 +14910,24 @@ bool IsNumberRootConstant(RootIndex root_index) {
 }  // namespace
 #endif
 
+template <typename BranchBuilderT>
 MaglevGraphBuilder::BranchResult MaglevGraphBuilder::BuildBranchIfRootConstant(
-    BranchBuilder& builder, ValueNode* node, RootIndex root_index) {
+    BranchBuilderT& builder, ValueNode* node, RootIndex root_index) {
   // We assume that Maglev never emits a comparison to a root number.
   DCHECK(!IsNumberRootConstant(root_index));
 
   // If the node we're checking is in the accumulator, swap it in the branch
   // with the checked value. Cache whether we want to swap, since after we've
   // swapped the accumulator isn't the original node anymore.
-  BranchBuilder::PatchAccumulatorInBranchScope scope(builder, node, root_index);
+  typename BranchBuilderT::PatchAccumulatorInBranchScope scope(builder, node,
+                                                               root_index);
 
   if (node->is_holey_float64()) {
     if (root_index == RootIndex::kUndefinedValue) {
 #ifdef V8_ENABLE_UNDEFINED_DOUBLE
-      return builder.Build<BranchIfFloat64IsUndefinedOrHole>({node});
+      return builder.template Build<BranchIfFloat64IsUndefinedOrHole>({node});
 #else
-      return builder.Build<BranchIfFloat64IsHole>({node});
+      return builder.template Build<BranchIfFloat64IsHole>({node});
 #endif  // V8_ENABLE_UNDEFINED_DOUBLE
     }
     return builder.AlwaysFalse();
@@ -15042,7 +14969,7 @@ MaglevGraphBuilder::BranchResult MaglevGraphBuilder::BuildBranchIfRootConstant(
 
   if (root_index != RootIndex::kTrueValue &&
       root_index != RootIndex::kFalseValue) {
-    return builder.Build<BranchIfRootConstant>({node}, root_index);
+    return builder.template Build<BranchIfRootConstant>({node}, root_index);
   }
   if (root_index == RootIndex::kFalseValue) {
     builder.SwapTargets();
@@ -15059,12 +14986,12 @@ MaglevGraphBuilder::BranchResult MaglevGraphBuilder::BuildBranchIfRootConstant(
           builder, node->Cast<TaggedNotEqual>()->LeftInput().node(),
           node->Cast<TaggedNotEqual>()->RightInput().node());
     case Opcode::kInt32Compare:
-      return builder.Build<BranchIfInt32Compare>(
+      return builder.template Build<BranchIfInt32Compare>(
           {node->Cast<Int32Compare>()->LeftInput().node(),
            node->Cast<Int32Compare>()->RightInput().node()},
           node->Cast<Int32Compare>()->operation());
     case Opcode::kFloat64Compare:
-      return builder.Build<BranchIfFloat64Compare>(
+      return builder.template Build<BranchIfFloat64Compare>(
           {node->Cast<Float64Compare>()->LeftInput().node(),
            node->Cast<Float64Compare>()->RightInput().node()},
           node->Cast<Float64Compare>()->operation());
@@ -15072,80 +14999,61 @@ MaglevGraphBuilder::BranchResult MaglevGraphBuilder::BuildBranchIfRootConstant(
       if (node->Cast<Int32ToBoolean>()->flip()) {
         builder.SwapTargets();
       }
-      return builder.Build<BranchIfInt32ToBooleanTrue>(
+      return builder.template Build<BranchIfInt32ToBooleanTrue>(
           {node->Cast<Int32ToBoolean>()->ValueInput().node()});
     case Opcode::kIntPtrToBoolean:
       if (node->Cast<IntPtrToBoolean>()->flip()) {
         builder.SwapTargets();
       }
-      return builder.Build<BranchIfIntPtrToBooleanTrue>(
+      return builder.template Build<BranchIfIntPtrToBooleanTrue>(
           {node->Cast<IntPtrToBoolean>()->ValueInput().node()});
     case Opcode::kFloat64ToBoolean:
       if (node->Cast<Float64ToBoolean>()->flip()) {
         builder.SwapTargets();
       }
-      return builder.Build<BranchIfFloat64ToBooleanTrue>(
+      return builder.template Build<BranchIfFloat64ToBooleanTrue>(
           {node->Cast<Float64ToBoolean>()->ValueInput().node()});
     case Opcode::kTestUndetectable:
-      return builder.Build<BranchIfUndetectable>(
+      return builder.template Build<BranchIfUndetectable>(
           {node->Cast<TestUndetectable>()->ValueInput().node()},
           node->Cast<TestUndetectable>()->check_type());
 #ifdef V8_ENABLE_UNDEFINED_DOUBLE
     case Opcode::kHoleyFloat64IsUndefinedOrHole:
-      return builder.Build<BranchIfFloat64IsUndefinedOrHole>(
+      return builder.template Build<BranchIfFloat64IsUndefinedOrHole>(
           {node->Cast<HoleyFloat64IsUndefinedOrHole>()->ValueInput().node()});
 #else
     case Opcode::kHoleyFloat64IsHole:
-      return builder.Build<BranchIfFloat64IsHole>(
+      return builder.template Build<BranchIfFloat64IsHole>(
           {node->Cast<HoleyFloat64IsHole>()->ValueInput().node()});
 #endif  // V8_ENABLE_UNDEFINED_DOUBLE
     default:
-      return builder.Build<BranchIfRootConstant>({node}, RootIndex::kTrueValue);
+      return builder.template Build<BranchIfRootConstant>(
+          {node}, RootIndex::kTrueValue);
   }
 }
 
+template <typename BranchBuilderT>
 MaglevGraphBuilder::BranchResult MaglevGraphBuilder::BuildBranchIfTrue(
-    BranchBuilder& builder, ValueNode* node) {
+    BranchBuilderT& builder, ValueNode* node) {
   builder.SetBranchSpecializationMode(BranchSpecializationMode::kAlwaysBoolean);
   return BuildBranchIfRootConstant(builder, node, RootIndex::kTrueValue);
 }
 
+template <typename BranchBuilderT>
 MaglevGraphBuilder::BranchResult MaglevGraphBuilder::BuildBranchIfNull(
-    BranchBuilder& builder, ValueNode* node) {
+    BranchBuilderT& builder, ValueNode* node) {
   return BuildBranchIfRootConstant(builder, node, RootIndex::kNullValue);
 }
 
+template <typename BranchBuilderT>
 MaglevGraphBuilder::BranchResult MaglevGraphBuilder::BuildBranchIfUndefined(
-    BranchBuilder& builder, ValueNode* node) {
+    BranchBuilderT& builder, ValueNode* node) {
   return BuildBranchIfRootConstant(builder, node, RootIndex::kUndefinedValue);
 }
 
-MaglevGraphBuilder::BranchResult
-MaglevGraphBuilder::BuildBranchIfUndefinedOrNull(BranchBuilder& builder,
-                                                 ValueNode* node) {
-  compiler::OptionalHeapObjectRef maybe_constant =
-      TryGetConstant<HeapObject>(node);
-  if (maybe_constant.has_value()) {
-    return builder.FromBool(maybe_constant->IsNullOrUndefined());
-  }
-  if (!node->is_tagged()) {
-    if (node->is_holey_float64()) {
-#ifdef V8_ENABLE_UNDEFINED_DOUBLE
-      return BuildBranchIfFloat64IsUndefinedOrHole(builder, node);
-#else
-      return BuildBranchIfFloat64IsHole(builder, node);
-#endif  // V8_ENABLE_UNDEFINED_DOUBLE
-    }
-    return builder.AlwaysFalse();
-  }
-  if (HasDisjointType(node, NodeType::kOddball)) {
-    return builder.AlwaysFalse();
-  }
-  return builder.Build<BranchIfUndefinedOrNull>({node});
-}
-
+template <typename BranchBuilderT>
 MaglevGraphBuilder::BranchResult MaglevGraphBuilder::BuildBranchIfToBooleanTrue(
-    BranchBuilder& builder, ValueNode* node) {
+    BranchBuilderT& builder, ValueNode* node) {
   // If this is a known boolean, use the non-ToBoolean version.
   if (CheckType(node, NodeType::kBoolean)) {
     return BuildBranchIfTrue(builder, node);
@@ -15203,10 +15111,10 @@ MaglevGraphBuilder::BranchResult MaglevGraphBuilder::BuildBranchIfToBooleanTrue(
     // The ToBoolean of both the_hole and NaN is false, so we can use the
     // same operation for HoleyFloat64 and Float64.
     case ValueRepresentation::kFloat64:
-      return BuildBranchIfFloat64ToBooleanTrue(builder, node);
+      return reducer_.BuildBranchIfFloat64ToBooleanTrue(builder, node);
 
     case ValueRepresentation::kHoleyFloat64:
-      return BuildBranchIfHoleyFloat64ToBooleanTrue(builder, node);
+      return reducer_.BuildBranchIfHoleyFloat64ToBooleanTrue(builder, node);
 
     case ValueRepresentation::kUint32:
       // Uint32 has the same logic as Int32 when converting ToBoolean, namely
@@ -15214,10 +15122,10 @@ MaglevGraphBuilder::BranchResult MaglevGraphBuilder::BuildBranchIfToBooleanTrue(
       node = AddNewNodeNoInputConversion<TruncateUint32ToInt32>({node});
       [[fallthrough]];
     case ValueRepresentation::kInt32:
-      return BuildBranchIfInt32ToBooleanTrue(builder, node);
+      return reducer_.BuildBranchIfInt32ToBooleanTrue(builder, node);
 
     case ValueRepresentation::kIntPtr:
-      return BuildBranchIfIntPtrToBooleanTrue(builder, node);
+      return reducer_.BuildBranchIfIntPtrToBooleanTrue(builder, node);
 
     case ValueRepresentation::kTagged:
       break;
@@ -15229,76 +15137,37 @@ MaglevGraphBuilder::BranchResult MaglevGraphBuilder::BuildBranchIfToBooleanTrue(
   NodeInfo* node_info = known_node_aspects().TryGetInfoFor(node);
   if (node_info) {
     if (ValueNode* as_int32 = node_info->alternative().int32()) {
-      return BuildBranchIfInt32ToBooleanTrue(builder, as_int32);
+      return reducer_.BuildBranchIfInt32ToBooleanTrue(builder, as_int32);
     }
     if (ValueNode* as_float64 = node_info->alternative().float64()) {
-      return BuildBranchIfFloat64ToBooleanTrue(builder, as_float64);
+      return reducer_.BuildBranchIfFloat64ToBooleanTrue(builder, as_float64);
     }
     if (ValueNode* as_holey_float64 =
             node_info->alternative().holey_float64()) {
-      return BuildBranchIfHoleyFloat64ToBooleanTrue(builder, as_holey_float64);
+      return reducer_.BuildBranchIfHoleyFloat64ToBooleanTrue(builder,
+                                                             as_holey_float64);
     }
   }
 
   NodeType old_type;
   if (CheckType(node, NodeType::kBoolean, &old_type)) {
-    return builder.Build<BranchIfRootConstant>({node}, RootIndex::kTrueValue);
+    return builder.template Build<BranchIfRootConstant>({node},
+                                                        RootIndex::kTrueValue);
   }
   if (CheckType(node, NodeType::kSmi)) {
     builder.SwapTargets();
-    return builder.Build<BranchIfReferenceEqual>({node, GetSmiConstant(0)});
+    return builder.template Build<BranchIfReferenceEqual>(
+        {node, GetSmiConstant(0)});
   }
   if (CheckType(node, NodeType::kString)) {
     builder.SwapTargets();
-    return builder.Build<BranchIfRootConstant>({node},
-                                               RootIndex::kempty_string);
+    return builder.template Build<BranchIfRootConstant>(
+        {node}, RootIndex::kempty_string);
   }
   // TODO(verwaest): Number or oddball.
-  return builder.Build<BranchIfToBooleanTrue>({node}, GetCheckType(old_type));
+  return builder.template Build<BranchIfToBooleanTrue>({node},
+                                                       GetCheckType(old_type));
 }
-
-MaglevGraphBuilder::BranchResult
-MaglevGraphBuilder::BuildBranchIfInt32ToBooleanTrue(BranchBuilder& builder,
-                                                    ValueNode* node) {
-  // TODO(victorgomes): Optimize.
-  return builder.Build<BranchIfInt32ToBooleanTrue>({node});
-}
-
-MaglevGraphBuilder::BranchResult
-MaglevGraphBuilder::BuildBranchIfIntPtrToBooleanTrue(BranchBuilder& builder,
-                                                     ValueNode* node) {
-  // TODO(victorgomes): Optimize.
-  return builder.Build<BranchIfIntPtrToBooleanTrue>({node});
-}
-
-MaglevGraphBuilder::BranchResult
-MaglevGraphBuilder::BuildBranchIfFloat64ToBooleanTrue(BranchBuilder& builder,
-                                                      ValueNode* node) {
-  // TODO(victorgomes): Optimize.
-  return builder.Build<BranchIfFloat64ToBooleanTrue>({node});
-}
-
-MaglevGraphBuilder::BranchResult
-MaglevGraphBuilder::BuildBranchIfHoleyFloat64ToBooleanTrue(
-    BranchBuilder& builder, ValueNode* node) {
-  // TODO(victorgomes): Optimize.
-  return builder.Build<BranchIfHoleyFloat64ToBooleanTrue>({node});
-}
-
-MaglevGraphBuilder::BranchResult MaglevGraphBuilder::BuildBranchIfFloat64IsHole(
-    BranchBuilder& builder, ValueNode* node) {
-  // TODO(victorgomes): Optimize.
-  return builder.Build<BranchIfFloat64IsHole>({node});
-}
-
-#ifdef V8_ENABLE_UNDEFINED_DOUBLE
-MaglevGraphBuilder::BranchResult
-MaglevGraphBuilder::BuildBranchIfFloat64IsUndefinedOrHole(
-    BranchBuilder& builder, ValueNode* node) {
-  // TODO(victorgomes): Optimize.
-  return builder.Build<BranchIfFloat64IsUndefinedOrHole>({node});
-}
-#endif  // V8_ENABLE_UNDEFINED_DOUBLE
 
 ReduceResult MaglevGraphBuilder::VisitJumpIfToBooleanTrue() {
   auto branch_builder = CreateBranchBuilder(BranchType::kBranchIfTrue);
@@ -15342,25 +15211,19 @@ ReduceResult MaglevGraphBuilder::VisitJumpIfNotUndefined() {
 }
 ReduceResult MaglevGraphBuilder::VisitJumpIfUndefinedOrNull() {
   auto branch_builder = CreateBranchBuilder();
-  BuildBranchIfUndefinedOrNull(branch_builder, GetAccumulator());
+  reducer_.BuildBranchIfUndefinedOrNull(branch_builder, GetAccumulator());
   return ReduceResult::Done();
 }
 
+template <typename BranchBuilderT>
 MaglevGraphBuilder::BranchResult MaglevGraphBuilder::BuildBranchIfJSReceiver(
-    BranchBuilder& builder, ValueNode* value) {
-  if (!value->is_tagged() && !value->is_holey_float64()) {
-    return builder.AlwaysFalse();
-  }
-  if (CheckType(value, NodeType::kJSReceiver)) {
-    return builder.AlwaysTrue();
-  } else if (HasDisjointType(value, NodeType::kJSReceiver)) {
-    return builder.AlwaysFalse();
-  }
-  return builder.Build<BranchIfJSReceiver>({value});
+    BranchBuilderT& builder, ValueNode* value) {
+  return reducer_.BuildBranchIfJSReceiver(builder, value);
 }
 
+template <typename BranchBuilderT>
 MaglevGraphBuilder::BranchResult MaglevGraphBuilder::BuildBranchIfInt32Compare(
-    BranchBuilder& builder, Operation op, ValueNode* lhs, ValueNode* rhs) {
+    BranchBuilderT& builder, Operation op, ValueNode* lhs, ValueNode* rhs) {
   auto lhs_const = TryGetInt32Constant(lhs);
   if (lhs_const) {
     auto rhs_const = TryGetInt32Constant(rhs);
@@ -15369,11 +15232,12 @@ MaglevGraphBuilder::BranchResult MaglevGraphBuilder::BuildBranchIfInt32Compare(
           CompareInt32(lhs_const.value(), rhs_const.value(), op));
     }
   }
-  return builder.Build<BranchIfInt32Compare>({lhs, rhs}, op);
+  return builder.template Build<BranchIfInt32Compare>({lhs, rhs}, op);
 }
 
+template <typename BranchBuilderT>
 MaglevGraphBuilder::BranchResult MaglevGraphBuilder::BuildBranchIfUint32Compare(
-    BranchBuilder& builder, Operation op, ValueNode* lhs, ValueNode* rhs) {
+    BranchBuilderT& builder, Operation op, ValueNode* lhs, ValueNode* rhs) {
   auto lhs_const = TryGetUint32Constant(lhs);
   if (lhs_const) {
     auto rhs_const = TryGetUint32Constant(rhs);
@@ -15382,7 +15246,7 @@ MaglevGraphBuilder::BranchResult MaglevGraphBuilder::BuildBranchIfUint32Compare(
           CompareUint32(lhs_const.value(), rhs_const.value(), op));
     }
   }
-  return builder.Build<BranchIfUint32Compare>({lhs, rhs}, op);
+  return builder.template Build<BranchIfUint32Compare>({lhs, rhs}, op);
 }
 
 ReduceResult MaglevGraphBuilder::VisitJumpIfJSReceiver() {

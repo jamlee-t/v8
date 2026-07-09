@@ -985,9 +985,9 @@ MaybeReduceResult MaglevReducer<BaseT>::TryReduceArrayPrototypeAt(
   } else {
     GET_VALUE_OR_ABORT(index,
                        Select(
-                           [&](auto& sg, auto* label) -> BranchResult {
+                           [&](auto& branch) -> BranchResult {
                              return BuildBranchIfInt32Compare(
-                                 sg, label, Operation::kLessThan, args[0],
+                                 branch, Operation::kLessThan, args[0],
                                  GetInt32Constant(0));
                            },
                            [&]() -> ReduceResult {
@@ -1000,15 +1000,14 @@ MaybeReduceResult MaglevReducer<BaseT>::TryReduceArrayPrototypeAt(
   GET_VALUE_OR_ABORT(elements, BuildLoadElements(receiver, elements_kind));
 
   return Select(
-      [&](auto& sg, auto* label) -> BranchResult {
-        return BuildBranchIfInt32Compare(sg, label,
-                                         Operation::kGreaterThanOrEqual, index,
-                                         GetInt32Constant(0));
+      [&](auto& branch) -> BranchResult {
+        return BuildBranchIfInt32Compare(branch, Operation::kGreaterThanOrEqual,
+                                         index, GetInt32Constant(0));
       },
       [&]() {
         return Select(
-            [&](auto& sg, auto* label) -> BranchResult {
-              return BuildBranchIfInt32Compare(sg, label, Operation::kLessThan,
+            [&](auto& branch) -> BranchResult {
+              return BuildBranchIfInt32Compare(branch, Operation::kLessThan,
                                                index, length);
             },
             [&]() -> ReduceResult {
@@ -3727,7 +3726,8 @@ ReduceResult MaglevReducer<BaseT>::Select(
 
   Label else_branch(&sg, /*predecessor_count=*/1);
 
-  BranchResult br = cond(sg, &else_branch);
+  BranchBuilder builder(&sg, BranchType::kBranchIfFalse, &else_branch);
+  BranchResult br = cond(builder);
   switch (br) {
     case BranchResult::kAbort:
       return ReduceResult::DoneWithAbort();
@@ -3752,8 +3752,7 @@ ReduceResult MaglevReducer<BaseT>::Select(
   if (t.IsDoneWithAbort() && f.IsDoneWithAbort()) {
     return ReduceResult::DoneWithAbort();
   }
-  CHECK(f.IsDoneWithValue());
-  sg.set(v, f.value());
+  if (f.IsDoneWithValue()) sg.set(v, f.value());
   sg.GotoOrTrim(&done);
 
   RETURN_IF_ABORT(sg.TrimPredecessorsAndBind(&done));
@@ -3761,37 +3760,128 @@ ReduceResult MaglevReducer<BaseT>::Select(
 }
 
 template <typename BaseT>
-template <typename Sub>
-BranchResult MaglevReducer<BaseT>::BuildBranchIfInt32Compare(
-    Sub& sg, typename Sub::Label* false_target, Operation op, ValueNode* lhs,
-    ValueNode* rhs) {
-  if (auto cl = TryGetInt32Constant(lhs)) {
-    if (auto cr = TryGetInt32Constant(rhs)) {
-      return CompareInt32(*cl, *cr, op) ? BranchResult::kAlwaysTrue
-                                        : BranchResult::kAlwaysFalse;
-    }
-  }
-  ReduceResult r = sg.template GotoIfFalse<BranchIfInt32Compare>(
-      false_target, {lhs, rhs}, op);
-  if (r.IsDoneWithAbort()) return BranchResult::kAbort;
+template <typename ControlNodeT, typename... Args>
+BranchResult MaglevReducer<BaseT>::BranchBuilder::Build(
+    std::initializer_list<ValueNode*> control_inputs, Args&&... args) {
+  static_assert(IsConditionalControlNode(Node::opcode_of<ControlNodeT>));
+  ReduceResult r =
+      this->jump_type_ == BranchType::kBranchIfFalse
+          ? sub_->template GotoIfFalse<ControlNodeT>(
+                label_, control_inputs, std::forward<Args>(args)...)
+          : sub_->template GotoIfTrue<ControlNodeT>(
+                label_, control_inputs, std::forward<Args>(args)...);
+  if (r.IsDoneWithAbort()) return this->Abort();
   return BranchResult::kDefault;
 }
 
 template <typename BaseT>
-template <typename Sub>
-BranchResult MaglevReducer<BaseT>::BuildBranchIfUint32Compare(
-    Sub& sg, typename Sub::Label* false_target, Operation op, ValueNode* lhs,
-    ValueNode* rhs) {
-  if (auto cl = TryGetUint32Constant(lhs)) {
-    if (auto cr = TryGetUint32Constant(rhs)) {
-      return CompareUint32(*cl, *cr, op) ? BranchResult::kAlwaysTrue
-                                         : BranchResult::kAlwaysFalse;
+BranchResult MaglevReducer<BaseT>::BuildBranchIfInt32Compare(BranchBuilder& b,
+                                                             Operation op,
+                                                             ValueNode* lhs,
+                                                             ValueNode* rhs) {
+  if (auto cl = TryGetInt32Constant(lhs)) {
+    if (auto cr = TryGetInt32Constant(rhs)) {
+      return b.FromBool(CompareInt32(*cl, *cr, op));
     }
   }
-  ReduceResult r = sg.template GotoIfFalse<BranchIfUint32Compare>(
-      false_target, {lhs, rhs}, op);
-  if (r.IsDoneWithAbort()) return BranchResult::kAbort;
-  return BranchResult::kDefault;
+  return b.template Build<BranchIfInt32Compare>({lhs, rhs}, op);
+}
+
+template <typename BaseT>
+BranchResult MaglevReducer<BaseT>::BuildBranchIfUint32Compare(BranchBuilder& b,
+                                                              Operation op,
+                                                              ValueNode* lhs,
+                                                              ValueNode* rhs) {
+  if (auto cl = TryGetUint32Constant(lhs)) {
+    if (auto cr = TryGetUint32Constant(rhs)) {
+      return b.FromBool(CompareUint32(*cl, *cr, op));
+    }
+  }
+  return b.template Build<BranchIfUint32Compare>({lhs, rhs}, op);
+}
+
+template <typename BaseT>
+template <typename BranchBuilderT>
+BranchResult MaglevReducer<BaseT>::BuildBranchIfInt32ToBooleanTrue(
+    BranchBuilderT& b, ValueNode* node) {
+  return b.template Build<BranchIfInt32ToBooleanTrue>({node});
+}
+
+template <typename BaseT>
+template <typename BranchBuilderT>
+BranchResult MaglevReducer<BaseT>::BuildBranchIfIntPtrToBooleanTrue(
+    BranchBuilderT& b, ValueNode* node) {
+  return b.template Build<BranchIfIntPtrToBooleanTrue>({node});
+}
+
+template <typename BaseT>
+template <typename BranchBuilderT>
+BranchResult MaglevReducer<BaseT>::BuildBranchIfFloat64ToBooleanTrue(
+    BranchBuilderT& b, ValueNode* node) {
+  return b.template Build<BranchIfFloat64ToBooleanTrue>({node});
+}
+
+template <typename BaseT>
+template <typename BranchBuilderT>
+BranchResult MaglevReducer<BaseT>::BuildBranchIfHoleyFloat64ToBooleanTrue(
+    BranchBuilderT& b, ValueNode* node) {
+  return b.template Build<BranchIfHoleyFloat64ToBooleanTrue>({node});
+}
+
+template <typename BaseT>
+template <typename BranchBuilderT>
+BranchResult MaglevReducer<BaseT>::BuildBranchIfFloat64IsHole(BranchBuilderT& b,
+                                                              ValueNode* node) {
+  return b.template Build<BranchIfFloat64IsHole>({node});
+}
+
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
+template <typename BaseT>
+template <typename BranchBuilderT>
+BranchResult MaglevReducer<BaseT>::BuildBranchIfFloat64IsUndefinedOrHole(
+    BranchBuilderT& b, ValueNode* node) {
+  return b.template Build<BranchIfFloat64IsUndefinedOrHole>({node});
+}
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
+
+template <typename BaseT>
+template <typename BranchBuilderT>
+BranchResult MaglevReducer<BaseT>::BuildBranchIfJSReceiver(BranchBuilderT& b,
+                                                           ValueNode* value) {
+  if (!value->is_tagged() && !value->is_holey_float64()) {
+    return b.AlwaysFalse();
+  }
+  if (CheckType(value, NodeType::kJSReceiver)) {
+    return b.AlwaysTrue();
+  } else if (HasDisjointType(value, NodeType::kJSReceiver)) {
+    return b.AlwaysFalse();
+  }
+  return b.template Build<BranchIfJSReceiver>({value});
+}
+
+template <typename BaseT>
+template <typename BranchBuilderT>
+BranchResult MaglevReducer<BaseT>::BuildBranchIfUndefinedOrNull(
+    BranchBuilderT& b, ValueNode* node) {
+  compiler::OptionalHeapObjectRef maybe_constant =
+      TryGetConstant<HeapObject>(node);
+  if (maybe_constant.has_value()) {
+    return b.FromBool(maybe_constant->IsNullOrUndefined());
+  }
+  if (!node->is_tagged()) {
+    if (node->is_holey_float64()) {
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
+      return BuildBranchIfFloat64IsUndefinedOrHole(b, node);
+#else
+      return BuildBranchIfFloat64IsHole(b, node);
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
+    }
+    return b.AlwaysFalse();
+  }
+  if (HasDisjointType(node, NodeType::kOddball)) {
+    return b.AlwaysFalse();
+  }
+  return b.template Build<BranchIfUndefinedOrNull>({node});
 }
 
 template <typename BaseT>
@@ -3802,8 +3892,8 @@ ReduceResult MaglevReducer<BaseT>::BuildInt32Max(ValueNode* a, ValueNode* b) {
     }
   }
   return Select(
-      [&](auto& sg, auto* label) -> BranchResult {
-        return BuildBranchIfInt32Compare(sg, label, Operation::kLessThan, a, b);
+      [&](auto& branch) -> BranchResult {
+        return BuildBranchIfInt32Compare(branch, Operation::kLessThan, a, b);
       },
       [&]() -> ReduceResult { return b; }, [&]() -> ReduceResult { return a; });
 }
@@ -3816,8 +3906,8 @@ ReduceResult MaglevReducer<BaseT>::BuildInt32Min(ValueNode* a, ValueNode* b) {
     }
   }
   return Select(
-      [&](auto& sg, auto* label) -> BranchResult {
-        return BuildBranchIfInt32Compare(sg, label, Operation::kLessThan, a, b);
+      [&](auto& branch) -> BranchResult {
+        return BuildBranchIfInt32Compare(branch, Operation::kLessThan, a, b);
       },
       [&]() -> ReduceResult { return a; }, [&]() -> ReduceResult { return b; });
 }
