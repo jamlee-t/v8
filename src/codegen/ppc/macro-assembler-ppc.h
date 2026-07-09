@@ -1707,8 +1707,7 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
   // ---------------------------------------------------------------------------
   // Stack limit utilities
 
-  void StackOverflowCheck(Register num_args, Register scratch,
-                          Label* stack_overflow);
+  void StackOverflowCheck(Register num_args, Label* stack_overflow);
   void LoadStackLimit(Register destination, StackLimitKind kind);
 
   // ---------------------------------------------------------------------------

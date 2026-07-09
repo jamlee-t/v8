@@ -1380,18 +1380,21 @@ void MacroAssembler::LoadStackLimit(Register destination, StackLimitKind kind) {
   LoadU64(destination, MemOperand(kRootRegister, offset));
 }
 
-void MacroAssembler::StackOverflowCheck(Register num_args, Register scratch,
+void MacroAssembler::StackOverflowCheck(Register num_args,
                                         Label* stack_overflow) {
   // Check the stack for overflow. We are not trying to catch
   // interruptions (e.g. debug break and preemption) here, so the "real stack
   // limit" is checked.
+  UseScratchRegisterScope temps(this);
+  Register scratch = temps.Acquire();
   LoadStackLimit(scratch, StackLimitKind::kRealStackLimit);
   // Make scratch the space we have left. The stack might already be overflowed
   // here which will cause scratch to become negative.
   sub(scratch, sp, scratch);
   // Check if the arguments will overflow the stack.
-  ShiftLeftU64(r0, num_args, Operand(kSystemPointerSizeLog2));
-  CmpS64(scratch, r0);
+  Register bytes_needed = temps.Acquire();
+  ShiftLeftU64(bytes_needed, num_args, Operand(kSystemPointerSizeLog2));
+  CmpS64(scratch, bytes_needed);
   ble(stack_overflow);  // Signed comparison.
 }
 
@@ -1415,7 +1418,7 @@ void MacroAssembler::InvokePrologue(Register expected_parameter_count,
 
   Label stack_overflow;
   Register scratch = r7;
-  StackOverflowCheck(expected_parameter_count, scratch, &stack_overflow);
+  StackOverflowCheck(expected_parameter_count, &stack_overflow);
 
   // Underapplication. Move the arguments already in the stack, including the
   // receiver and the return address.

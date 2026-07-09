@@ -335,7 +335,7 @@ void Generate_JSBuiltinsConstructStubHelper(MacroAssembler* masm) {
 
   Label stack_overflow;
 
-  __ StackOverflowCheck(r3, scratch, &stack_overflow);
+  __ StackOverflowCheck(r3, &stack_overflow);
   // Enter a construct frame.
   {
     FrameAndConstantPoolScope scope(masm, StackFrame::CONSTRUCT);
@@ -572,7 +572,7 @@ void Builtins::Generate_JSConstructStubGeneric(MacroAssembler* masm) {
   __ LoadU64(r3, MemOperand(fp, ConstructFrameConstants::kLengthOffset));
 
   Label stack_overflow;
-  __ StackOverflowCheck(r3, r8, &stack_overflow);
+  __ StackOverflowCheck(r3, &stack_overflow);
 
   // Copy arguments to the expression stack.
   // r7: Pointer to start of argument.
@@ -705,7 +705,7 @@ void Builtins::Generate_ResumeGeneratorTrampoline(MacroAssembler* masm) {
               r4, offsetof(JSGeneratorObject, parameters_and_registers_)));
 
   Label stack_overflow;
-  __ StackOverflowCheck(r6, scratch, &stack_overflow);
+  __ StackOverflowCheck(r6, &stack_overflow);
 
   {
     Label done_loop, loop;
@@ -1028,7 +1028,7 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
     // Check if we have enough stack space to push all arguments.
     Label enough_stack_space, stack_overflow;
     __ mr(r3, r7);
-    __ StackOverflowCheck(r3, r9, &stack_overflow);
+    __ StackOverflowCheck(r3, &stack_overflow);
     __ b(&enough_stack_space);
     __ bind(&stack_overflow);
     __ CallRuntime(Runtime::kThrowStackOverflow);
@@ -1624,11 +1624,7 @@ void Builtins::Generate_InterpreterPushArgsThenCallImpl(
     __ mr(r6, r3);
   }
 
-  {
-    UseScratchRegisterScope temps(masm);
-    Register scratch = temps.Acquire();
-    __ StackOverflowCheck(r6, scratch, &stack_overflow);
-  }
+  __ StackOverflowCheck(r6, &stack_overflow);
 
   // Push the arguments.
   GenerateInterpreterPushArgs(masm, r6, r5, r7);
@@ -1672,7 +1668,7 @@ void Builtins::Generate_InterpreterPushArgsThenConstructImpl(
   Label stack_overflow;
   UseScratchRegisterScope temps(masm);
   Register scratch = temps.Acquire();
-  __ StackOverflowCheck(r3, scratch, &stack_overflow);
+  __ StackOverflowCheck(r3, &stack_overflow);
 
   if (mode == InterpreterPushArgsMode::kWithFinalSpread) {
     // The spread argument should not be pushed.
@@ -1745,7 +1741,7 @@ void Builtins::Generate_ConstructForwardAllArgsImpl(
 
   // Load the argument count into r3.
   __ LoadU64(r3, MemOperand(r7, StandardFrameConstants::kArgCOffset));
-  __ StackOverflowCheck(r3, scratch, &stack_overflow);
+  __ StackOverflowCheck(r3, &stack_overflow);
 
   // Point r7 to the base of the argument list to forward, excluding the
   // receiver.
@@ -1835,7 +1831,7 @@ void Builtins::Generate_InterpreterPushArgsThenFastConstructFunction(
 
   // Add a stack check before pushing arguments.
   Label stack_overflow;
-  __ StackOverflowCheck(r3, r5, &stack_overflow);
+  __ StackOverflowCheck(r3, &stack_overflow);
 
   // Enter a construct frame.
   FrameScope scope(masm, StackFrame::MANUAL);
@@ -2518,7 +2514,7 @@ void Builtins::Generate_CallOrConstructVarargs(MacroAssembler* masm,
 
   // Check for stack overflow.
   Label stack_overflow;
-  __ StackOverflowCheck(r7, scratch, &stack_overflow);
+  __ StackOverflowCheck(r7, &stack_overflow);
 
   // Move the arguments already in the stack,
   // including the receiver and the return address.
@@ -2621,7 +2617,7 @@ void Builtins::Generate_CallOrConstructForwardVarargs(MacroAssembler* masm,
     // -----------------------------------
 
     // Check for stack overflow.
-    __ StackOverflowCheck(r8, scratch, &stack_overflow);
+    __ StackOverflowCheck(r8, &stack_overflow);
 
     // Forward the arguments from the caller frame.
     // Point to the first argument to copy (skipping the receiver).
