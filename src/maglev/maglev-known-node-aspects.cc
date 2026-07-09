@@ -302,24 +302,42 @@ void KnownNodeAspects::MergeForLoop(const KnownNodeAspects& backedge,
   if (effect_epoch_ != backedge.effect_epoch_) {
     effect_epoch_ = std::max(effect_epoch_, backedge.effect_epoch_) + 1;
   }
-  DestructivelyIntersect(
-      available_expressions_, backedge.available_expressions_,
-      [&](uint32_t hash, const AvailableExpression& lhs,
-          const AvailableExpression& rhs) {
-        DCHECK_IMPLIES(lhs.node == rhs.node,
-                       lhs.effect_epoch == rhs.effect_epoch);
-        DCHECK_NE(lhs.effect_epoch, kEffectEpochOverflow);
-        DCHECK_IMPLIES(
-            !lhs.node->Is<Identity>(),
-            Node::needs_epoch_check(lhs.node->opcode()) ==
-                (lhs.effect_epoch != kEffectEpochForPureInstructions));
-        ValueNode* rhs_value = rhs.node->TryCast<ValueNode>();
-        NodeBase* rhs_node =
-            rhs_value ? rhs_value->UnwrapIdentities() : rhs.node;
-        return !lhs.node->Is<Identity>() &&
-               lhs.node->IsStructurallyEqualTo(rhs_node) &&
-               lhs.effect_epoch >= effect_epoch_;
-      });
+  // Forward entries for pure (epoch-exempt) expressions are kept even without
+  // a backedge equivalent: the forward predecessor dominates the loop body and
+  // loop effects cannot invalidate a pure expression. Other entries need a
+  // structurally equal backedge entry with a still-valid epoch.
+  for (auto it = available_expressions_.begin();
+       it != available_expressions_.end();) {
+    const AvailableExpression& lhs = it->second;
+    DCHECK_NE(lhs.effect_epoch, kEffectEpochOverflow);
+    DCHECK_IMPLIES(!lhs.node->Is<Identity>(),
+                   Node::needs_epoch_check(lhs.node->opcode()) ==
+                       (lhs.effect_epoch != kEffectEpochForPureInstructions));
+    if (lhs.node->Is<Identity>()) {
+      it = available_expressions_.erase(it);
+      continue;
+    }
+    if (lhs.effect_epoch == kEffectEpochForPureInstructions) {
+      ++it;
+      continue;
+    }
+    bool keep = false;
+    auto rhs_it = backedge.available_expressions_.find(it->first);
+    if (rhs_it != backedge.available_expressions_.end()) {
+      const AvailableExpression& rhs = rhs_it->second;
+      DCHECK_IMPLIES(lhs.node == rhs.node,
+                     lhs.effect_epoch == rhs.effect_epoch);
+      ValueNode* rhs_value = rhs.node->TryCast<ValueNode>();
+      NodeBase* rhs_node = rhs_value ? rhs_value->UnwrapIdentities() : rhs.node;
+      keep = lhs.node->IsStructurallyEqualTo(rhs_node) &&
+             lhs.effect_epoch >= effect_epoch_;
+    }
+    if (keep) {
+      ++it;
+    } else {
+      it = available_expressions_.erase(it);
+    }
+  }
 
   const bool keep_invariant_loads =
       loop_effects != nullptr && !loop_effects->unstable_aspects_cleared;
