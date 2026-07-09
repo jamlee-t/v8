@@ -133,13 +133,9 @@ void MaglevInliner::RunOptimizer() {
   RecomputeKnownNodeAspectsProcessor kna_processor(graph_,
                                                    exception_handler_tracker);
   MaglevGraphOptimizer optimizer(graph_, kna_processor);
-  GraphMultiProcessor<MaglevGraphOptimizer&, BoundsCheckEliminationProcessor,
-                      ReachableExceptionHandlerTracker&,
-                      RecomputeKnownNodeAspectsProcessor&,
-                      RecomputePhiUseHintsProcessor>
-      optimization_pass(optimizer, BoundsCheckEliminationProcessor{graph_},
-                        exception_handler_tracker, kna_processor,
-                        RecomputePhiUseHintsProcessor{graph_->zone()});
+  GraphMultiProcessor<MaglevGraphOptimizer&, ReachableExceptionHandlerTracker&,
+                      RecomputeKnownNodeAspectsProcessor&>
+      optimization_pass(optimizer, exception_handler_tracker, kna_processor);
   optimization_pass.ProcessGraph(graph_);
 
   // Remove unreachable blocks if we have any.
@@ -155,9 +151,15 @@ void MaglevInliner::RunOptimizer() {
 bool MaglevInliner::Run() {
   if (graph_->inlineable_calls().empty()) return true;
 
+  // Only the Turbolev pipeline runs the optimizer in a later phase.
+  const bool always_run_optimizer = !graph_->compilation_info()->is_turbolev();
+
   while (CanInlineCall()) {
+    returned_constant_function_ = false;
     if (!InlineCallSites()) return false;
-    RunOptimizer();
+    if (always_run_optimizer || returned_constant_function_) {
+      RunOptimizer();
+    }
   }
 
   // Clear conversion, identities and ReturnedValues uses from deopt frames.
@@ -332,6 +334,12 @@ MaglevInliner::InliningResult MaglevInliner::BuildInlineFunction(
 
   DCHECK(result.IsDoneWithValue());
   ValueNode* returned_value = result.value()->Unwrap();
+
+  if (auto constant = returned_value->TryGetConstant(broker())) {
+    if (constant->Is<JSFunction>()) {
+      returned_constant_function_ = true;
+    }
+  }
 
   // Resume execution using the final block of the inner builder.
   // Add remaining nodes to the final block and use the control flow of the

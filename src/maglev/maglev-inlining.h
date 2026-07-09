@@ -51,6 +51,8 @@ class MaglevInliner {
   Tracer tracer_;
   const CompilationFlags flags_;
 
+  bool returned_constant_function_ = false;
+
   bool IsSmallWithHeapNumberInputsOutputs(MaglevCallSiteInfo* call_site) const;
 
   compiler::JSHeapBroker* broker() const { return graph_->broker(); }
