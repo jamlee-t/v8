@@ -10357,7 +10357,7 @@ class LiftoffCompiler {
       } else {
         source_position_table_builder_.AddPosition(
             __ pc_offset(), SourcePosition(decoder->position()), true);
-        __ CallIndirect(&sig, call_descriptor, target);
+        __ CallIndirect(call_descriptor, target);
         int pc_offset = __ pc_offset_for_safepoint();
         FinishCall(decoder, &sig, call_descriptor, pc_offset);
       }
@@ -10723,7 +10723,7 @@ class LiftoffCompiler {
       } else {
         source_position_table_builder_.AddPosition(
             __ pc_offset(), SourcePosition(decoder->position()), true);
-        __ CallIndirect(&sig, call_descriptor, target);
+        __ CallIndirect(call_descriptor, target);
         int pc_offset = __ pc_offset_for_safepoint();
         FinishCall(decoder, &sig, call_descriptor, pc_offset);
       }
@@ -10879,7 +10879,7 @@ class LiftoffCompiler {
     } else {
       source_position_table_builder_.AddPosition(
           __ pc_offset(), SourcePosition(decoder->position()), true);
-      __ CallIndirect(&sig, call_descriptor, target_reg);
+      __ CallIndirect(call_descriptor, target_reg);
       int pc_offset = __ pc_offset_for_safepoint();
       FinishCall(decoder, &sig, call_descriptor, pc_offset);
     }

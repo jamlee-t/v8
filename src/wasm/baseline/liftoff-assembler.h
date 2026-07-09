@@ -610,6 +610,12 @@ class LiftoffAssembler : public MacroAssembler {
     if (size > ool_spill_space_size_) ool_spill_space_size_ = size;
   }
 
+  void RecordPushedCallArgs(int slots) {
+    if (slots > max_pushed_argument_slots_) {
+      max_pushed_argument_slots_ = slots;
+    }
+  }
+
   // Load parameters into the right registers / stack slots for the call.
   void PrepareBuiltinCall(const ValueKindSig* sig,
                           compiler::CallDescriptor* call_descriptor,
@@ -1629,9 +1635,7 @@ class LiftoffAssembler : public MacroAssembler {
 
   inline void CallNativeWasmCode(Address addr);
   inline void TailCallNativeWasmCode(Address addr);
-  // Indirect call: If {target == no_reg}, then pop the target from the stack.
-  inline void CallIndirect(const ValueKindSig* sig,
-                           compiler::CallDescriptor* call_descriptor,
+  inline void CallIndirect(compiler::CallDescriptor* call_descriptor,
                            Register target);
   inline void TailCallIndirect(compiler::CallDescriptor* call_descriptor,
                                Register target);
@@ -1706,6 +1710,8 @@ class LiftoffAssembler : public MacroAssembler {
   int max_used_spill_offset_ = StaticStackFrameSize();
   // The amount of memory needed for register spills in OOL code.
   int ool_spill_space_size_ = 0;
+  // The maximum number of stack slots used for pushed call arguments.
+  int max_pushed_argument_slots_ = 0;
   LiftoffBailoutReason bailout_reason_ = kNoReason;
   const char* bailout_detail_ = nullptr;
 };
