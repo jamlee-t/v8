@@ -946,6 +946,14 @@ Reduction JSNativeContextSpecialization::ReduceJSResolvePromise(Node* node) {
   AccessInfoFactory access_info_factory(broker(), graph()->zone());
 
   for (MapRef map : resolution_maps) {
+    // Reducing to FulfillPromise skips the SameValue(resolution, promise)
+    // self-resolution cycle check, which precedes the "then" lookup in the
+    // spec. That is only sound because a promise resolution would carry a
+    // "then" property; a JSPromise whose prototype chain was mutated to drop
+    // "then" breaks that reasoning, so refuse promise values explicitly.
+    // Instance types are immutable per object, so this needs no stability
+    // dependency.
+    if (map.IsJSPromiseMap()) return inference.NoChange();
     access_infos.push_back(broker()->GetPropertyAccessInfo(
         map, broker()->then_string(), AccessMode::kLoad));
   }

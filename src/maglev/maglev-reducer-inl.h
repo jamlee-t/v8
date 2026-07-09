@@ -5338,6 +5338,128 @@ MaybeReduceResult MaglevReducer<BaseT>::TryReducePromisePrototypeThen(
       context, {receiver, on_fulfilled, on_rejected, result_promise});
 }
 
+// Like JSNativeContextSpecialization::ReduceJSResolvePromise: returns true
+// if {value} provably has no "then" property, in which case ResolvePromise
+// can be strength-reduced to FulfillPromise.
+template <typename BaseT>
+bool MaglevReducer<BaseT>::CanElideResolvePromiseThenLookup(ValueNode* value) {
+  SmallZoneVector<compiler::MapRef, 4> maps(zone());
+  compiler::OptionalMapRef constant_stable_map;
+  if (compiler::OptionalHeapObjectRef c = TryGetConstant<HeapObject>(value)) {
+    compiler::MapRef map = c->map(broker());
+    if (!map.is_stable()) return false;
+    constant_stable_map = map;
+    maps.push_back(map);
+  } else {
+    MapInference<MaglevReducer<BaseT>> inference(
+        this, value, MapInference<MaglevReducer<BaseT>>::kOnlyFresh);
+    auto possible_maps = inference.TryGetPossibleMaps();
+    if (!possible_maps.has_value() || possible_maps->is_empty()) return false;
+    for (compiler::MapRef map : *possible_maps) {
+      maps.push_back(map);
+    }
+  }
+
+  // Callers use a successful elision to also skip identity-based spec steps
+  // (the self-resolution cycle check in ResolvePromise, PromiseResolve's
+  // identity return in Promise.resolve), reasoning that a promise resolution
+  // would have "then". That does not hold for a JSPromise whose prototype
+  // chain was mutated, so refuse promise values explicitly; instance types
+  // are immutable per object, so this needs no map stability.
+  ZoneVector<compiler::PropertyAccessInfo> access_infos(zone());
+  compiler::AccessInfoFactory access_info_factory(broker(), zone());
+  for (compiler::MapRef map : maps) {
+    if (map.IsJSPromiseMap()) return false;
+    // No map check protects us here, so a deprecated map could still show up
+    // at runtime.
+    if (map.is_deprecated()) return false;
+    access_infos.push_back(broker()->GetPropertyAccessInfo(
+        map, broker()->then_string(), compiler::AccessMode::kLoad));
+  }
+  compiler::PropertyAccessInfo access_info =
+      access_info_factory.FinalizePropertyAccessInfosAsOne(
+          access_infos, compiler::AccessMode::kLoad);
+
+  // TODO(v8:11457) Support dictionary mode prototypes here.
+  if (access_info.IsInvalid() || access_info.HasDictionaryHolder()) {
+    return false;
+  }
+  if (!access_info.IsNotFound()) return false;
+
+  if (constant_stable_map.has_value()) {
+    broker()->dependencies()->DependOnStableMap(*constant_stable_map);
+  }
+  broker()->dependencies()->DependOnStablePrototypeChains(
+      access_info.lookup_start_object_maps(), kStartAtPrototype);
+  return true;
+}
+
+template <typename BaseT>
+MaybeReduceResult MaglevReducer<BaseT>::TryReducePromiseResolveTrampoline(
+    compiler::JSFunctionRef target, CallArguments& args) {
+  // Ports JSCallReducer::ReducePromiseResolveTrampoline combined with
+  // JSNativeContextSpecialization::ReduceJSPromiseResolve: Promise.resolve
+  // on the %Promise% constructor itself, with a value that provably has no
+  // "then" property (which also rules out JSPromise values), produces a
+  // fresh fulfilled promise. Allocate it inline instead of going through
+  // the PromiseResolveTrampoline and PromiseResolve builtins.
+  if (args.mode() != CallArguments::kDefault) return {};
+  if (args.receiver_mode() == ConvertReceiverMode::kNullOrUndefined) {
+    TRACE(TraceColor::kRed << "! Failed to reduce Promise.resolve - no "
+                              "receiver");
+    return {};
+  }
+
+  // Only the %Promise% function itself: then the result gets the initial
+  // promise map without consulting @@species.
+  ValueNode* receiver = GetValueOrUndefined(args.receiver());
+  compiler::NativeContextRef native_context = broker()->target_native_context();
+  compiler::OptionalHeapObjectRef receiver_constant =
+      TryGetConstant<HeapObject>(receiver);
+  if (!receiver_constant.has_value() ||
+      !receiver_constant->equals(native_context.promise_function(broker()))) {
+    TRACE(TraceColor::kRed << "! Failed to reduce Promise.resolve - receiver "
+                              "is not the Promise function");
+    return {};
+  }
+
+  ValueNode* value;
+  if (args.count() > 0) {
+    GET_VALUE_OR_ABORT(value, GetTaggedValue(args[0]));
+  } else {
+    value = GetRootConstant(RootIndex::kUndefinedValue);
+  }
+
+  // The fast path covers values that cannot participate in the implicit
+  // "then" chaining: primitives, and objects provably without a "then"
+  // property. Thenables stay on the builtin path, and so do promises (the
+  // elision helper refuses JSPromise maps), which PromiseResolve would have
+  // to return by identity (spec step 1).
+  if (!NodeTypeIs(GetType(value), NodeType::kJSPrimitive) &&
+      !CanElideResolvePromiseThenLookup(value)) {
+    TRACE(TraceColor::kRed << "! Failed to reduce Promise.resolve - value "
+                              "could be thenable or a promise");
+    return {};
+  }
+
+  // Only now that the reduction is committed do we take the promise-hook
+  // dependency, so a bail above leaves no dead dependency. This skips the
+  // builtin's promise hook and debug notifications.
+  if (!broker()->dependencies()->DependOnPromiseHookProtector()) {
+    TRACE(TraceColor::kRed << "! Failed to reduce Promise.resolve - promise "
+                              "hook protector");
+    return {};
+  }
+
+  // Allocate the result promise directly in the fulfilled state; a fresh
+  // promise has no reactions to trigger.
+  VirtualObject* promise = CreateJSPromiseObject();
+  promise->set(offsetof(JSPromise, reactions_or_result_), value->Unwrap());
+  promise->set(offsetof(JSPromise, flags_),
+               GetSmiConstant(v8::Promise::kFulfilled));
+  return BuildInlinedAllocation(promise, AllocationType::kYoung);
+}
+
 template <typename BaseT>
 MaybeReduceResult MaglevReducer<BaseT>::TryReduceBuiltin(
     Builtin builtin_id, compiler::JSFunctionRef target, CallArguments& args,

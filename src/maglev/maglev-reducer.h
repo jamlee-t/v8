@@ -754,6 +754,7 @@ class MaglevReducer {
   MaybeReduceResult TryBuildFastInstanceOfWithFeedback(
       ValueNode* context, ValueNode* object, ValueNode* callable,
       compiler::FeedbackSource feedback_source);
+  bool CanElideResolvePromiseThenLookup(ValueNode* value);
 
   ReduceResult BuildSmiUntag(ValueNode* node);
   ReduceResult BuildCheckSmi(ValueNode* object);
@@ -1086,6 +1087,7 @@ class MaglevReducer {
   V(MathSqrt)                                  \
   V(MathTrunc)                                 \
   V(PromisePrototypeThen)                      \
+  V(PromiseResolveTrampoline)                  \
   IEEE_754_UNARY_LIST(V)                       \
   IEEE_754_BINARY_LIST(V)                      \
   IF_INTL(V, StringPrototypeLocaleCompareIntl) \

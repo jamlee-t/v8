@@ -84,4 +84,41 @@
     await assertThrowsAsync(drive(), TypeError);
     assertTrue(isMaglevved(f));
   }
+
+  // Self-resolution with a mutated prototype chain: the resolution has no
+  // "then", but the cycle check is identity-based and must still reject.
+  // The proto object is hoisted so the mutated promises share a map.
+  {
+    const proto = {constructor: Promise, marker: 1};
+    let outer;
+    async function f() {
+      await 0;
+      outer.marker;  // Establish fresh map knowledge for the resolution.
+      return outer;
+    }
+    %PrepareFunctionForOptimization(f);
+    function drive() {
+      outer = f();
+      Object.setPrototypeOf(outer, proto);
+      return outer;
+    }
+    function settled(p) {
+      return new Promise((resolve) => {
+        // p's own "then" is gone; go through Promise.prototype directly.
+        Promise.prototype.then.call(
+            p, (v) => resolve({status: "fulfilled", value: v}),
+            (e) => resolve({status: "rejected", error: e}));
+      });
+    }
+    for (let i = 0; i < 3; i++) {
+      const r = await settled(drive());
+      assertEquals("rejected", r.status);
+      assertInstanceof(r.error, TypeError);
+    }
+    %OptimizeMaglevOnNextCall(f);
+    const r = await settled(drive());
+    assertEquals("rejected", r.status);
+    assertInstanceof(r.error, TypeError);
+    assertTrue(isMaglevved(f));
+  }
 })();
