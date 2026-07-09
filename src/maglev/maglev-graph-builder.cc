@@ -12596,6 +12596,53 @@ ReduceResult MaglevGraphBuilder::VisitIntrinsicAsyncFunctionReject(
   return ReduceResult::Done();
 }
 
+// Like JSNativeContextSpecialization::ReduceJSResolvePromise: returns true
+// if {value} provably has no "then" property, in which case ResolvePromise
+// can be strength-reduced to FulfillPromise.
+bool MaglevGraphBuilder::CanElideResolvePromiseThenLookup(ValueNode* value) {
+  SmallZoneVector<compiler::MapRef, 4> maps(zone());
+  compiler::OptionalMapRef constant_stable_map;
+  if (compiler::OptionalHeapObjectRef c = TryGetConstant<HeapObject>(value)) {
+    compiler::MapRef map = c->map(broker());
+    if (!map.is_stable()) return false;
+    constant_stable_map = map;
+    maps.push_back(map);
+  } else {
+    MapInference inference(this, value, MapInference::kOnlyFresh);
+    auto possible_maps = inference.TryGetPossibleMaps();
+    if (!possible_maps.has_value() || possible_maps->is_empty()) return false;
+    for (compiler::MapRef map : *possible_maps) {
+      maps.push_back(map);
+    }
+  }
+
+  ZoneVector<compiler::PropertyAccessInfo> access_infos(zone());
+  compiler::AccessInfoFactory access_info_factory(broker(), zone());
+  for (compiler::MapRef map : maps) {
+    // No map check protects us here, so a deprecated map could still show up
+    // at runtime.
+    if (map.is_deprecated()) return false;
+    access_infos.push_back(broker()->GetPropertyAccessInfo(
+        map, broker()->then_string(), compiler::AccessMode::kLoad));
+  }
+  compiler::PropertyAccessInfo access_info =
+      access_info_factory.FinalizePropertyAccessInfosAsOne(
+          access_infos, compiler::AccessMode::kLoad);
+
+  // TODO(v8:11457) Support dictionary mode prototypes here.
+  if (access_info.IsInvalid() || access_info.HasDictionaryHolder()) {
+    return false;
+  }
+  if (!access_info.IsNotFound()) return false;
+
+  if (constant_stable_map.has_value()) {
+    broker()->dependencies()->DependOnStableMap(*constant_stable_map);
+  }
+  broker()->dependencies()->DependOnStablePrototypeChains(
+      access_info.lookup_start_object_maps(), kStartAtPrototype);
+  return true;
+}
+
 MaybeReduceResult MaglevGraphBuilder::TryReduceAsyncFunctionResolve(
     ValueNode* async_function_object, ValueNode* value) {
   if (!broker()->dependencies()->DependOnPromiseHookProtector()) return {};
@@ -12616,13 +12663,15 @@ MaybeReduceResult MaglevGraphBuilder::TryReduceAsyncFunctionResolve(
                                       NodeType::kJSReceiver));
   }
 
-  if (NodeTypeIs(GetType(value), NodeType::kJSPrimitive)) {
-    // We can strength-reduce JSResolvePromise to JSFulfillPromise  if the
-    // {resolution} is known to be a primitive, as in that case we don't perform
-    // the implicit chaining (via "then").
-    // The InlinedAllocation doesn't survive suspend/resume, so seeing it
-    // here proves no await ran and the promise has no reactions to trigger.
+  // Reduce to a direct fulfillment when the implicit "then" chaining is a
+  // no-op: {value} is primitive, or its maps provably lack "then" (which also
+  // excludes a JSPromise, so the self-resolution cycle check can't trigger).
+  if (NodeTypeIs(GetType(value), NodeType::kJSPrimitive) ||
+      CanElideResolvePromiseThenLookup(value)) {
     if (promise->Is<InlinedAllocation>()) {
+      // A fresh InlinedAllocation can't have survived suspend/resume, so the
+      // promise has no reactions to trigger; store the fulfilled state
+      // directly.
       value = value->Unwrap();
       RETURN_IF_ABORT(BuildStoreTaggedField(
           promise, value, offsetof(JSPromise, reactions_or_result_),
@@ -12642,8 +12691,6 @@ MaybeReduceResult MaglevGraphBuilder::TryReduceAsyncFunctionResolve(
         this, Builtin::kAsyncFunctionLazyDeoptContinuation, {},
         base::VectorOf<ValueNode*>({promise}));
 
-    // TODO(dmercadier): optimize-away to FulfillPromise if possible; cf
-    // JSNativeContextSpecialization::ReduceJSResolvePromise in Turboshaft.
     BuildCallBuiltin<Builtin::kResolvePromise>({promise, value});
   }
 

@@ -981,6 +981,7 @@ class MaglevGraphBuilder {
       ValueNode* async_function_object, ValueNode* reason);
   MaybeReduceResult TryReduceAsyncFunctionResolve(
       ValueNode* async_function_object, ValueNode* value);
+  bool CanElideResolvePromiseThenLookup(ValueNode* value);
   bool TargetIsCurrentCompilingUnit(compiler::JSFunctionRef target);
   bool IsTheHoleConstant(ValueNode* node);
   ReduceResult BuildCallKnownJSFunction(
