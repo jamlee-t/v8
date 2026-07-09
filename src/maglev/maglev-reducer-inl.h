@@ -2544,8 +2544,11 @@ MaybeReduceResult MaglevReducer<BaseT>::TryBuildFastInstanceOf(
           has_instance_field->AsJSFunction().shared(broker());
       if (shared.HasBuiltinId() &&
           shared.builtin_id() == Builtin::kFunctionPrototypeHasInstance) {
-        return BuildOrdinaryHasInstance(context, object, callable,
-                                        callable_node_if_not_constant);
+        // The CheckValueByReference above pinned {callable_node} to
+        // {callable}, so we can treat the callable as a compile-time constant
+        // from here on, which lets BuildOrdinaryHasInstance take its fast
+        // path instead of calling the OrdinaryHasInstance builtin.
+        return BuildOrdinaryHasInstance(context, object, callable, nullptr);
       }
     }
 
