@@ -802,9 +802,11 @@ DEFINE_BOOL(maglev_non_eager_inlining, false,
             "enable Maglev non-eager inlining")
 DEFINE_BOOL(turbolev_non_eager_inlining, true,
             "enable Turbolev non-eager inlining")
-DEFINE_WEAK_IMPLICATION(turbolev_future, turbolev_non_eager_loop_peeling)
 DEFINE_EXPERIMENTAL_FEATURE(turbolev_non_eager_loop_peeling,
                             "enable Turbolev non-eager loop peeling")
+DEFINE_BOOL(turbolev_eager_loop_peeling_osr, true,
+            "use eager loop peeling in Turbolev OSR compiles")
+DEFINE_WEAK_IMPLICATION(turbolev_future, turbolev_non_eager_loop_peeling)
 DEFINE_DEVELOPER_FLAG(turbolev_trace_loop_peeling,
                       "trace turbolev non-eager loop peeling decisions")
 

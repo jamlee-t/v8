@@ -17445,7 +17445,8 @@ void MaglevGraphBuilder::CalculatePredecessorCounts() {
           size + graph_->total_peeled_bytecode_size() <
               v8_flags.maglev_loop_peeling_max_size_cumulative) {
         if (v8_flags.turbolev_non_eager_loop_peeling &&
-            graph_->compilation_info()->is_turbolev()) {
+            graph_->compilation_info()->is_turbolev() &&
+            !(v8_flags.turbolev_eager_loop_peeling_osr && graph_->is_osr())) {
           DCHECK(!is_loop_peeling_iteration);
           graph_->peelable_loops().emplace_back(MaglevLoopPeelInfo{
               compilation_unit(), iterator.current_offset(), size});
