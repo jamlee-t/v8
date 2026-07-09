@@ -8198,7 +8198,11 @@ bool StackLimitCheck::WasmHasOverflowed(uintptr_t gap) const {
   uintptr_t sp = 0;
   uintptr_t limit = 0;
   auto fp = isolate_->thread_local_top()->c_entry_fp_;
-  if (fp != 0 && active_stack->Contains(fp)) {
+  // This must be called from a runtime function, so we must be on the central
+  // stack and the CEntry FP must be set.
+  DCHECK(isolate_->IsOnCentralStack());
+  DCHECK_NE(fp, 0);
+  if (active_stack->Contains(fp)) {
     // If wasm was running on a secondary stack, we had to switch to the central
     // stack to perform this check, and the current SP is not relevant in this
     // case. Check whether the wasm SP overflowed the wasm stack limit instead.
@@ -8215,6 +8219,20 @@ bool StackLimitCheck::WasmHasOverflowed(uintptr_t gap) const {
     sp = GetCurrentStackPosition();
     limit = stack_guard->real_climit();
   }
+  return sp - gap < limit;
+}
+
+bool StackLimitCheck::WasmGrowableStackHasOverflowed(uintptr_t gap) const {
+  // Initial stack overflow check for growable stacks.
+  // Called from a fast C call, check the current SP directly.
+  wasm::StackMemory* active_stack = isolate_->isolate_data()->active_stack();
+#ifdef USE_SIMULATOR
+  uintptr_t sp = Simulator::current(isolate_)->get_sp();
+#else
+  uintptr_t sp = GetCurrentStackPosition();
+#endif
+  DCHECK(active_stack->Contains(sp));
+  uintptr_t limit = reinterpret_cast<uintptr_t>(active_stack->jslimit());
   return sp - gap < limit;
 }
 #endif

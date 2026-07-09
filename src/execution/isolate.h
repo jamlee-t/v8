@@ -3165,6 +3165,8 @@ class StackLimitCheck {
   // it checks logical stack limit of a secondary stack stored in the isolate,
   // instead checking actual one.
   bool WasmHasOverflowed(uintptr_t gap = 0) const;
+  // Initial stack check for growable stacks. Called from a fast C call.
+  bool WasmGrowableStackHasOverflowed(uintptr_t gap) const;
 #endif
 
   // Use this to check for interrupt request in C++ code.

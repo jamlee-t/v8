@@ -1441,14 +1441,14 @@ void switch_from_the_central_stack_for_js(Isolate* isolate) {
 // frame_size includes param slots area and extra frame slots above FP.
 Address grow_stack(Isolate* isolate, void* current_sp, size_t frame_size,
                    size_t gap, Address current_fp) {
+  if (isolate->IsOnCentralStack()) {
+    // Should not grow the central stack.
+    return 0;
+  }
   // Check if this is a real stack overflow.
   StackLimitCheck check(isolate);
-  if (check.WasmHasOverflowed(gap)) {
+  if (check.WasmGrowableStackHasOverflowed(gap)) {
     wasm::StackMemory* active_stack = isolate->isolate_data()->active_stack();
-    if (isolate->IsOnCentralStack()) {
-      // Should not grow the central stack.
-      return 0;
-    }
     DCHECK(active_stack->IsActive());
     // Grow by at least the new frame size plus the stack limit margin.
     size_t min =
