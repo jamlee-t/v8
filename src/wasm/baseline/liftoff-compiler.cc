@@ -804,23 +804,22 @@ class LiftoffCompiler {
     Register cached_instance_data{no_reg};
     Register cached_mem_start{no_reg};
     int cached_mem_index{-1};
-    OutOfLineSafepointInfo* safepoint_info;
+    OutOfLineSafepointInfo* safepoint_info = nullptr;
     // These two pointers will only be used for debug code:
-    SpilledRegistersForInspection* spilled_registers;
-    DebugSideTableBuilder::EntryBuilder* debug_sidetable_entry_builder;
+    SpilledRegistersForInspection* spilled_registers = nullptr;
+    DebugSideTableBuilder::EntryBuilder* debug_sidetable_entry_builder =
+        nullptr;
 
     // Named constructors, adding the allocated object to {list}:
     static OutOfLineCode* Trap(
         Zone* zone, ZoneVector<OutOfLineCode*>* list, Builtin builtin,
-        WasmCodePosition pos, SpilledRegistersForInspection* spilled_registers,
-        OutOfLineSafepointInfo* safepoint_info,
+        WasmCodePosition pos, OutOfLineSafepointInfo* safepoint_info,
         DebugSideTableBuilder::EntryBuilder* debug_sidetable_entry_builder) {
       DCHECK_LT(0, pos);
       OutOfLineCode* ool = zone->New<OutOfLineCode>();
       ool->builtin = builtin;
       ool->position = pos;
       ool->safepoint_info = safepoint_info;
-      ool->spilled_registers = spilled_registers;
       ool->debug_sidetable_entry_builder = debug_sidetable_entry_builder;
       list->push_back(ool);
       return ool;
@@ -1169,7 +1168,9 @@ class LiftoffCompiler {
         zone_, &out_of_line_code_, position, regs_to_save,
         __ cache_state()->cached_instance_data,
         __ cache_state()->cached_mem_start, __ cache_state()->cached_mem_index,
-        spilled_regs, safepoint_info, RegisterOOLDebugSideTableEntry(decoder));
+        spilled_regs, safepoint_info,
+        RegisterOOLDebugSideTableEntry(decoder,
+                                       DebugSideTableBuilder::kAssumeSpilling));
     __ StackCheck(&ool->label);
     __ bind(&ool->continuation);
   }
@@ -1210,7 +1211,9 @@ class LiftoffCompiler {
         zone_, &out_of_line_code_, position, regs_to_save,
         __ cache_state()->cached_instance_data,
         __ cache_state()->cached_mem_start, __ cache_state()->cached_mem_index,
-        spilled_regs, safepoint_info, RegisterOOLDebugSideTableEntry(decoder));
+        spilled_regs, safepoint_info,
+        RegisterOOLDebugSideTableEntry(decoder,
+                                       DebugSideTableBuilder::kAssumeSpilling));
 
     FREEZE_STATE(tierup_check);
     __ CheckTierUp(declared_function_index(env_->module, func_index_),
@@ -1364,7 +1367,7 @@ class LiftoffCompiler {
         // the OOL code is shared).
         OutOfLineCode::Trap(zone_, &out_of_line_code_without_safepoints_,
                             Builtin::kThrowWasmTrapUnreachable,
-                            decoder->position(), nullptr, nullptr, nullptr);
+                            decoder->position(), nullptr, nullptr);
 
         // Subtract 16 steps for the function call itself (including the
         // function prologue), plus 1 for each local (including parameters). Do
@@ -1440,17 +1443,40 @@ class LiftoffCompiler {
                                             kSystemPointerSize));
     }
 
+    Builtin builtin = ool->builtin;
+    if (V8_UNLIKELY(for_debugging_)) {
+      // In debug mode, we handle traps by calling the kWasmDebugTrap builtin
+      // instead of the specific trap-throwing builtin. This allows the debugger
+      // to inspect all registers at the trap site.
+      std::optional<MessageTemplate> message =
+          GetMessageTemplateForBuiltin(builtin);
+      if (message) {
+        builtin = Builtin::kWasmDebugTrap;
+        __ PrepareDebugTrap(*message);
+      }
+    }
+
     source_position_table_builder_.AddPosition(
         __ pc_offset(), SourcePosition(ool->position), true);
-    __ CallBuiltin(ool->builtin);
+    __ CallBuiltin(builtin);
     auto pc_offset_after_call = __ pc_offset_for_safepoint();
     // It is safe to not check for existing safepoint at this address since we
     // just emitted a call.
     auto safepoint = safepoint_table_builder_.DefineSafepoint(&asm_);
-
     if (ool->safepoint_info) {
       for (auto index : ool->safepoint_info->slots) {
         safepoint.DefineTaggedStackSlot(index);
+      }
+
+      // Debug traps use a builtin that saves all registers in a
+      // WasmDebugBreakFrame. We must record which of these registers are tagged
+      // so that the GC can scan them (similar to
+      // `DefineSafepointWithCalleeSavedRegisters` in `EmitBreakpoint`, used for
+      // the WasmDebugBreak builtin).
+      if (builtin == Builtin::kWasmDebugTrap) {
+        for (auto reg : ool->safepoint_info->spills.GetGpList()) {
+          safepoint.DefineTaggedRegister(reg.code());
+        }
       }
 
       int total_frame_size = __ GetTotalFrameSize();
@@ -1685,13 +1711,7 @@ class LiftoffCompiler {
         }
       }
     }
-    if (has_breakpoint) {
-      CODE_COMMENT("breakpoint");
-      EmitBreakpoint(decoder);
-      // Once we emitted an unconditional breakpoint, we don't need to check
-      // function entry breaks any more.
-      did_function_entry_break_checks_ = true;
-    } else if (!did_function_entry_break_checks_) {
+    if (!did_function_entry_break_checks_) {
       did_function_entry_break_checks_ = true;
       CODE_COMMENT("check function entry break");
       Label do_break;
@@ -1703,15 +1723,28 @@ class LiftoffCompiler {
                           {});
       FREEZE_STATE(frozen);
       __ Load(LiftoffRegister{flag}, flag, no_reg, 0, LoadType::kI32Load8U, {});
-      __ emit_cond_jump(kNotZero, &do_break, kI32, flag, no_reg, frozen);
 
-      // Check if we should stop on "script entry".
-      LOAD_INSTANCE_FIELD(flag, BreakOnEntry, kUInt8Size, {});
-      __ emit_cond_jump(kZero, &no_break, kI32, flag, no_reg, frozen);
+      if (has_breakpoint) {
+        // We will break anyway, but keep the entry check register usage for
+        // consistency. No need for conditional jumps.
+        EmitBreakpoint(decoder);
+        has_breakpoint = false;
+      } else {
+        __ emit_cond_jump(kNotZero, &do_break, kI32, flag, no_reg, frozen);
 
-      __ bind(&do_break);
+        // Check if we should stop on "script entry".
+        LOAD_INSTANCE_FIELD(flag, BreakOnEntry, kUInt8Size, {});
+        __ emit_cond_jump(kZero, &no_break, kI32, flag, no_reg, frozen);
+
+        __ bind(&do_break);
+        EmitBreakpoint(decoder);
+        __ bind(&no_break);
+      }
+    }
+
+    if (has_breakpoint) {
+      CODE_COMMENT("breakpoint");
       EmitBreakpoint(decoder);
-      __ bind(&no_break);
     } else if (dead_breakpoint_ == decoder->position()) {
       DCHECK(!next_breakpoint_ptr_ ||
              *next_breakpoint_ptr_ != dead_breakpoint_);
@@ -3785,6 +3818,19 @@ class LiftoffCompiler {
     }
   }
 
+  static std::optional<MessageTemplate> GetMessageTemplateForBuiltin(
+      Builtin builtin) {
+    switch (builtin) {
+#define CHECK_BUILTIN(name)       \
+  case Builtin::kThrowWasm##name: \
+    return MessageTemplate::kWasm##name;
+      FOREACH_WASM_TRAPREASON(CHECK_BUILTIN)
+#undef CHECK_BUILTIN
+      default:
+        return {};
+    }
+  }
+
   void Trap(FullDecoder* decoder, TrapReason reason) {
     OolTrapLabel trap =
         AddOutOfLineTrap(decoder, GetBuiltinForTrapReason(reason));
@@ -4038,23 +4084,28 @@ class LiftoffCompiler {
     DCHECK_IMPLIES(builtin == Builtin::kThrowWasmTrapMemOutOfBounds,
                    v8_flags.wasm_bounds_checks);
     OutOfLineSafepointInfo* safepoint_info = nullptr;
-    SpilledRegistersForInspection* spilled_registers = nullptr;
     ZoneVector<OutOfLineCode*>* list = &out_of_line_code_without_safepoints_;
+    DebugSideTableBuilder::AssumeSpilling spilling =
+        DebugSideTableBuilder::kAssumeSpilling;
     // Execution does not return after a trap. Therefore we don't have to define
     // a safepoint for traps that would preserve references on the stack.
     // However, if this is debug code, then we have to preserve the references
     // so that they can be inspected.
     if (V8_UNLIKELY(for_debugging_)) {
+      DCHECK(GetMessageTemplateForBuiltin(builtin).has_value());
+      // Debug traps allow registers in the side table because the debug trap
+      // builtin saves them for inspection.
+      spilling = DebugSideTableBuilder::kAllowRegisters;
+
       safepoint_info = zone_->New<OutOfLineSafepointInfo>(zone_);
       __ cache_state() -> GetTaggedSlotsForOOLCode(
           &safepoint_info->slots, &safepoint_info->spills,
-          LiftoffAssembler::CacheState::SpillLocation::kStackSlots);
-      spilled_registers = GetSpilledRegistersForInspection();
+          LiftoffAssembler::CacheState::SpillLocation::kTopOfStack);
       list = &out_of_line_code_;
     }
     OutOfLineCode* ool = OutOfLineCode::Trap(
-        zone_, list, builtin, decoder->position(), spilled_registers,
-        safepoint_info, RegisterOOLDebugSideTableEntry(decoder));
+        zone_, list, builtin, decoder->position(), safepoint_info,
+        RegisterOOLDebugSideTableEntry(decoder, spilling));
     return OolTrapLabel(asm_, &ool->label);
   }
 
@@ -4869,12 +4920,10 @@ class LiftoffCompiler {
   }
 
   DebugSideTableBuilder::EntryBuilder* RegisterOOLDebugSideTableEntry(
-      FullDecoder* decoder) {
+      FullDecoder* decoder, DebugSideTableBuilder::AssumeSpilling spilling) {
     if (V8_LIKELY(!debug_sidetable_builder_)) return nullptr;
     return debug_sidetable_builder_->NewOOLEntry(
-        GetCurrentDebugSideTableEntries(decoder,
-                                        DebugSideTableBuilder::kAssumeSpilling)
-            .as_vector());
+        GetCurrentDebugSideTableEntries(decoder, spilling).as_vector());
   }
 
   void CallDirect(FullDecoder* decoder, const CallFunctionImmediate& imm,

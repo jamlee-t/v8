@@ -14,8 +14,10 @@ var builder = new WasmModuleBuilder();
 // 26 externref parameters to force register pressure on ARM64.
 // Liftoff uses 24 GP registers for caching. The kWithBreakpoints path
 // performs a function-entry break check which requests a register.
-// If all registers are full, this causes a spill, which is absent in
-// the kForStepping path (omitting the entry check).
+// If all registers are full, this previously caused a spill which was
+// absent in the kForStepping path.
+// This test verifies that both paths now have consistent spills and
+// GC maps.
 let num_params = 26;
 let sig = {params: Array(num_params).fill(kWasmExternRef), results: []};
 builder.addFunction('main', sig).addBody([kExprNop, kExprNop]).exportAs('main');
@@ -47,8 +49,9 @@ InspectorTest.runAsyncTestSuite([async function test() {
   InspectorTest.log('Paused at breakpoint');
 
   InspectorTest.log('Stepping into (triggers OSR to kForStepping)...');
-  // If the safepoint validation logic is active, this will hit a DCHECK
-  // on ARM64 (or other non-x64 architectures) due to the spill divergence.
+  // On architectures like ARM64 where we patch the return address, OSR
+  // requires consistent GC maps. This StepInto will trigger the OSR
+  // validation logic in UpdateReturnAddress.
   Protocol.Debugger.stepInto();
 
   await Protocol.Debugger.oncePaused();

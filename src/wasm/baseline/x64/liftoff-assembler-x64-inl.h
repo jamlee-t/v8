@@ -436,6 +436,10 @@ void LiftoffAssembler::LoadConstant(LiftoffRegister reg, WasmValue value) {
   }
 }
 
+void LiftoffAssembler::PrepareDebugTrap(MessageTemplate message) {
+  Push(Smi::FromInt(static_cast<int>(message)));
+}
+
 void LiftoffAssembler::LoadInstanceDataFromFrame(Register dst) {
   movq(dst, liftoff::kInstanceDataOperand);
 }

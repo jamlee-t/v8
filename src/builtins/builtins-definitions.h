@@ -1406,6 +1406,7 @@ constexpr int kGearboxGenericBuiltinIdOffset = -2;
   IF_WASM(ASM, WasmCompileLazy, WasmDummy)                                     \
   IF_WASM(ASM, WasmLiftoffFrameSetup, WasmDummy)                               \
   IF_WASM(ASM, WasmDebugBreak, WasmDummy)                                      \
+  IF_WASM(ASM, WasmDebugTrap, WasmDummy)                                       \
   IF_WASM(ASM, WasmOnStackReplace, WasmDummy)                                  \
   IF_WASM(ASM, WasmHandleStackOverflow, WasmHandleStackOverflow)               \
   IF_WASM(TFC, WasmFloat32ToNumber, WasmFloat32ToNumber)                       \

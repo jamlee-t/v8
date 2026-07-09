@@ -694,6 +694,8 @@ class LiftoffAssembler : public MacroAssembler {
   inline Register LoadOldFramePointer();
   inline void CheckStackShrink();
   inline void LoadConstant(LiftoffRegister, WasmValue);
+
+  inline void PrepareDebugTrap(MessageTemplate message);
   inline void LoadInstanceDataFromFrame(Register dst);
   inline void LoadMemoryStart(Register dst, Register instance_data,
                               int mem_index);

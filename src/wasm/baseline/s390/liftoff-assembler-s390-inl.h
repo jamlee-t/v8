@@ -358,6 +358,10 @@ void LiftoffAssembler::LoadConstant(LiftoffRegister reg, WasmValue value) {
   }
 }
 
+void LiftoffAssembler::PrepareDebugTrap(MessageTemplate message) {
+  UNIMPLEMENTED();
+}
+
 void LiftoffAssembler::LoadInstanceDataFromFrame(Register dst) {
   LoadU64(dst, liftoff::GetInstanceDataOperand());
 }

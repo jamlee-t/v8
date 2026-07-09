@@ -491,6 +491,10 @@ void LiftoffAssembler::LoadConstant(LiftoffRegister reg, WasmValue value) {
   }
 }
 
+void LiftoffAssembler::PrepareDebugTrap(MessageTemplate message) {
+  UNIMPLEMENTED();
+}
+
 void LiftoffAssembler::LoadInstanceDataFromFrame(Register dst) {
   Ld(dst, liftoff::GetInstanceDataOperand());
 }

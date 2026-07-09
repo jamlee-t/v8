@@ -373,9 +373,11 @@ TEST(Liftoff_debug_side_table_indirect_call) {
           {1, {Stack(0, kWasmI32)}},
           // OOL stack check, local still spilled.
           {1, {}},
-          // OOL trap (invalid index), local still spilled, stack has {kConst,
-          // kStack}.
-          {3, {Constant(1, kWasmI32, kConst), Stack(2, kWasmI32)}},
+          // OOL trap (invalid index), local 0 and stack slot 2 are in
+          // registers.
+          {3,
+           {Register(0, kWasmI32), Constant(1, kWasmI32, kConst),
+            Register(2, kWasmI32)}},
           // OOL trap (null func), stack unmodified.
           {3, {}},
           // OOL trap (sig mismatch), stack unmodified.
@@ -413,8 +415,14 @@ TEST(Liftoff_debug_side_table_trap) {
           {2, {Register(0, kWasmI32), Register(1, kWasmI32)}},
           // OOL stack check, local spilled, stack empty.
           {2, {Stack(0, kWasmI32), Stack(1, kWasmI32)}},
-          // OOL trap (div by zero), stack as before.
+#if V8_TARGET_ARCH_X64 || V8_TARGET_ARCH_IA32
+          // OOL trap (div by zero), locals are spilled because of
+          // SpillDivRegisters on x64 and ia32.
           {2, {}},
+#else
+          // OOL trap (div by zero), locals back in registers.
+          {2, {Register(0, kWasmI32), Register(1, kWasmI32)}},
+#endif
           // OOL trap (unrepresentable), stack as before.
           {2, {}},
       },

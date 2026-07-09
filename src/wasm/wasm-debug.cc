@@ -418,7 +418,21 @@ class DebugInfoImpl {
     wasm::WasmCode* code = frame->wasm_code();
     if (!code->is_liftoff()) return false;  // Cannot step in TurboFan code.
     if (IsAtReturn(frame)) return false;    // Will return after this step.
-    FloodWithBreakpoints(frame, kAfterBreakpoint);
+    ReturnLocation return_location = kAfterBreakpoint;
+    // Check if the frame above is a WasmDebugTrap builtin call.
+    StackFrameIterator it(frame->isolate());
+    Builtin last_builtin = Builtin::kNoBuiltinId;
+    while (!it.done()) {
+      if (it.frame()->id() == frame->id()) break;
+      last_builtin = it.frame()->is_wasm_debug_break()
+                         ? it.frame()->LookupCode()->builtin_id()
+                         : Builtin::kNoBuiltinId;
+      it.Advance();
+    }
+    if (last_builtin == Builtin::kWasmDebugTrap) {
+      return_location = kAfterWasmCall;
+    }
+    FloodWithBreakpoints(frame, return_location);
     return true;
   }
 
@@ -732,8 +746,11 @@ class DebugInfoImpl {
                              StackFrameId stepping_frame) {
     StackFrameIterator it(isolate);
     for (; !it.done(); it.Advance()) {
-      bool at_breakpoint = it.frame()->is_wasm_debug_break();
-      if (at_breakpoint) {
+      bool at_debug_break = it.frame()->is_wasm_debug_break();
+      bool at_trap = false;
+      if (at_debug_break) {
+        at_trap =
+            it.frame()->LookupCode()->builtin_id() == Builtin::kWasmDebugTrap;
         it.Advance();
         CHECK(!it.done());
       }
@@ -746,8 +763,9 @@ class DebugInfoImpl {
       WasmCode* code = frame->wasm_code();
       if (!code->is_liftoff() || code->index() != new_code->index()) continue;
       if (frame->id() == stepping_frame) continue;
-      UpdateReturnAddress(frame, new_code,
-                          at_breakpoint ? kAfterBreakpoint : kAfterWasmCall);
+      ReturnLocation return_location =
+          at_debug_break && !at_trap ? kAfterBreakpoint : kAfterWasmCall;
+      UpdateReturnAddress(frame, new_code, return_location);
     }
   }
 

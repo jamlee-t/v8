@@ -308,6 +308,10 @@ void LiftoffAssembler::CacheState::GetTaggedSlotsForOOLCode(
 
     slots->push_back(GetSafepointIndexForStackSlot(slot));
   }
+  if (spill_location == SpillLocation::kTopOfStack &&
+      cached_instance_data != no_reg) {
+    spills->set(LiftoffRegister{cached_instance_data});
+  }
 }
 
 void LiftoffAssembler::CacheState::DefineSafepoint(
