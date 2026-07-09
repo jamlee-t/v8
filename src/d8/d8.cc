@@ -5882,8 +5882,10 @@ class InspectorFrontend final : public v8_inspector::V8Inspector::Channel {
     Local<String> callback_name = v8::String::NewFromUtf8Literal(
         isolate_, "receive", NewStringType::kInternalized);
     Local<Context> context = context_.Get(isolate_);
-    Local<Value> callback =
-        context->Global()->Get(context, callback_name).ToLocalChecked();
+    Local<Value> callback;
+    if (!context->Global()->Get(context, callback_name).ToLocal(&callback)) {
+      return;
+    }
     if (callback->IsFunction()) {
       v8::TryCatch try_catch(isolate_);
       Local<Value> args[] = {message};
@@ -5942,8 +5944,10 @@ class InspectorClient : public v8_inspector::V8InspectorClient {
     Local<String> callback_name = v8::String::NewFromUtf8Literal(
         isolate_, "handleInspectorMessage", NewStringType::kInternalized);
     Local<Context> context = context_.Get(isolate_);
-    Local<Value> callback =
-        context->Global()->Get(context, callback_name).ToLocalChecked();
+    Local<Value> callback;
+    if (!context->Global()->Get(context, callback_name).ToLocal(&callback)) {
+      return;
+    }
     if (!callback->IsFunction()) return;
 
     // Running the message loop below may trigger the execution of a stackless
