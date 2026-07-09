@@ -72,7 +72,7 @@ Address MainAllocator::AlignTopForTesting(AllocationAlignment alignment,
                                           int offset) {
   DCHECK(top());
 
-  int filler_size = Heap::GetFillToAlign(top(), alignment);
+  int filler_size = GetFillToAlign(top(), alignment);
 
   if (filler_size + offset) {
     space_heap()->CreateFillerObjectAt(top(), filler_size + offset);
@@ -198,13 +198,13 @@ void MainAllocator::InvokeAllocationObservers(Address soon_object,
 AllocationResult MainAllocator::AllocateRawSlow(
     SafeHeapObjectSize size_in_bytes, AllocationAlignment alignment,
     AllocationOrigin origin) {
-  if (!EnsureAllocation(size_in_bytes, alignment, origin)) {
+  if (!EnsureAllocation(size_in_bytes, alignment, origin)) [[unlikely]] {
     return AllocationResult::Failure();
   }
 
   SafeHeapObjectSize max_aligned_size = SafeHeapObjectSize(
       size_in_bytes.value() +
-      static_cast<uint32_t>(Heap::GetMaximumFillToAlign(alignment)));
+      static_cast<uint32_t>(GetMaximumFillToAlign(alignment)));
   SafeHeapObjectSize aligned_size_in_bytes;
 
   AllocationResult result = AllocateFastAligned(
@@ -411,6 +411,19 @@ int MainAllocator::ObjectAlignment() const {
   }
 }
 
+int MainAllocator::GetMaximumFillToAlign(AllocationAlignment alignment) {
+  if (V8_COMPRESS_POINTERS_8GB_BOOL) return 0;
+  switch (alignment) {
+    case kTaggedAligned:
+      return 0;
+    case kDoubleAligned:
+    case kDoubleUnaligned:
+      return kDoubleSize - kTaggedSize;
+    default:
+      UNREACHABLE();
+  }
+}
+
 AllocationSpace MainAllocator::identity() const { return space_->identity(); }
 
 bool MainAllocator::is_main_thread() const {
@@ -460,7 +473,7 @@ bool SemiSpaceNewSpaceAllocatorPolicy::EnsureAllocation(
   Address start = allocation_result->first;
   Address end = allocation_result->second;
 
-  int filler_size = Heap::GetFillToAlign(start, alignment);
+  int filler_size = MainAllocator::GetFillToAlign(start, alignment);
   int aligned_size_in_bytes = size_in_bytes + filler_size;
   DCHECK_LE(start + aligned_size_in_bytes, end);
 
@@ -640,7 +653,7 @@ bool PagedSpaceAllocatorPolicy::EnsureAllocation(int size_in_bytes,
 
   // We don't know exactly how much filler we need to align until space is
   // allocated, so assume the worst case.
-  size_in_bytes += Heap::GetMaximumFillToAlign(alignment);
+  size_in_bytes += MainAllocator::GetMaximumFillToAlign(alignment);
   if (allocator_->allocation_info().top() + size_in_bytes <=
       allocator_->allocation_info().limit()) {
     return true;

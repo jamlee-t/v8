@@ -351,15 +351,6 @@ class Heap final {
 
   static size_t HeapSizeToSemiSpaceRatio(uint64_t physical_memory);
 
-  // Calculates the maximum amount of filler that could be required by the
-  // given alignment.
-  V8_EXPORT_PRIVATE static int GetMaximumFillToAlign(
-      AllocationAlignment alignment);
-  // Calculates the actual amount of filler required for a given address at the
-  // given alignment.
-  V8_EXPORT_PRIVATE static int GetFillToAlign(Address address,
-                                              AllocationAlignment alignment);
-
   // Returns the size of the initial area of a code-range, which is marked
   // writable and reserved to contain unwind information.
   static size_t GetCodeRangeReservedAreaSize();

@@ -2338,6 +2338,14 @@ void HeapObject::RehashBasedOnMap(IsolateT* isolate) {
 template void HeapObject::RehashBasedOnMap(Isolate* isolate);
 template void HeapObject::RehashBasedOnMap(LocalIsolate* isolate);
 
+bool HeapObject::CheckRequiredAlignment() const {
+  const InSharedSpace in_shared_space{HeapLayout::InWritableSharedSpace(this)};
+  AllocationAlignment alignment =
+      HeapObject::RequiredAlignment(in_shared_space, map());
+  CHECK_EQ(0, MainAllocator::GetFillToAlign(address(), alignment));
+  return true;
+}
+
 void DescriptorArray::GeneralizeAllFields() {
   int length = number_of_descriptors();
   for (InternalIndex i : InternalIndex::Range(length)) {

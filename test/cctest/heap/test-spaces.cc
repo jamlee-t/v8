@@ -431,13 +431,13 @@ TEST(OldLargeObjectSpace) {
     CHECK(IsHeapObject(obj));
     Tagged<HeapObject> ho = Cast<HeapObject>(obj);
     CHECK(lo->Contains(ho));
-    CHECK_EQ(0, Heap::GetFillToAlign(ho.address(), kTaggedAligned));
+    CHECK_EQ(0, MainAllocator::GetFillToAlign(ho.address(), kTaggedAligned));
     // All large objects have the same alignment because they start at the
     // same offset within a page. Fixed double arrays have the most strict
     // alignment requirements.
-    CHECK_EQ(0,
-             Heap::GetFillToAlign(ho.address(), HeapObject::RequiredAlignment(
-                                                    lo->identity(), map)));
+    CHECK_EQ(0, MainAllocator::GetFillToAlign(
+                    ho.address(),
+                    HeapObject::RequiredAlignment(lo->identity(), map)));
     DirectHandle<HeapObject> keep_alive(ho, isolate);
   }
   CHECK_LT(0, successful_allocations);

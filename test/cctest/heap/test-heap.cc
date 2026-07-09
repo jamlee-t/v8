@@ -2243,32 +2243,33 @@ HEAP_TEST(TestSizeOfObjects) {
 TEST(TestAlignmentCalculations) {
   // Maximum fill amounts are consistent.
   int maximum_double_misalignment = kDoubleSize - kTaggedSize;
-  int max_word_fill = Heap::GetMaximumFillToAlign(kTaggedAligned);
+  int max_word_fill = MainAllocator::GetMaximumFillToAlign(kTaggedAligned);
   CHECK_EQ(0, max_word_fill);
-  int max_double_fill = Heap::GetMaximumFillToAlign(kDoubleAligned);
+  int max_double_fill = MainAllocator::GetMaximumFillToAlign(kDoubleAligned);
   CHECK_EQ(maximum_double_misalignment, max_double_fill);
-  int max_double_unaligned_fill = Heap::GetMaximumFillToAlign(kDoubleUnaligned);
+  int max_double_unaligned_fill =
+      MainAllocator::GetMaximumFillToAlign(kDoubleUnaligned);
   CHECK_EQ(maximum_double_misalignment, max_double_unaligned_fill);
 
   Address base = kNullAddress;
   int fill = 0;
 
   // Word alignment never requires fill.
-  fill = Heap::GetFillToAlign(base, kTaggedAligned);
+  fill = MainAllocator::GetFillToAlign(base, kTaggedAligned);
   CHECK_EQ(0, fill);
-  fill = Heap::GetFillToAlign(base + kTaggedSize, kTaggedAligned);
+  fill = MainAllocator::GetFillToAlign(base + kTaggedSize, kTaggedAligned);
   CHECK_EQ(0, fill);
 
   // No fill is required when address is double aligned.
-  fill = Heap::GetFillToAlign(base, kDoubleAligned);
+  fill = MainAllocator::GetFillToAlign(base, kDoubleAligned);
   CHECK_EQ(0, fill);
   // Fill is required if address is not double aligned.
-  fill = Heap::GetFillToAlign(base + kTaggedSize, kDoubleAligned);
+  fill = MainAllocator::GetFillToAlign(base + kTaggedSize, kDoubleAligned);
   CHECK_EQ(maximum_double_misalignment, fill);
   // kDoubleUnaligned has the opposite fill amounts.
-  fill = Heap::GetFillToAlign(base, kDoubleUnaligned);
+  fill = MainAllocator::GetFillToAlign(base, kDoubleUnaligned);
   CHECK_EQ(maximum_double_misalignment, fill);
-  fill = Heap::GetFillToAlign(base + kTaggedSize, kDoubleUnaligned);
+  fill = MainAllocator::GetFillToAlign(base + kTaggedSize, kDoubleUnaligned);
   CHECK_EQ(0, fill);
 }
 
@@ -2354,7 +2355,7 @@ static Tagged<HeapObject> OldSpaceAllocateAligned(
 static Address AlignOldSpace(AllocationAlignment alignment, int offset) {
   LinearAllocationArea* old_space =
       &CcTest::i_isolate()->isolate_data()->old_allocation_info();
-  int fill = Heap::GetFillToAlign(old_space->top(), alignment);
+  int fill = MainAllocator::GetFillToAlign(old_space->top(), alignment);
   int allocation = fill + offset;
   if (allocation) {
     OldSpaceAllocateAligned(allocation, kTaggedAligned);
@@ -2431,7 +2432,7 @@ TEST(HeapNumberAlignment) {
   const auto required_alignment = HeapObject::RequiredAlignment(
       InSharedSpace{false}, *factory->heap_number_map());
   const int maximum_misalignment =
-      Heap::GetMaximumFillToAlign(required_alignment);
+      MainAllocator::GetMaximumFillToAlign(required_alignment);
 
   for (int offset = 0; offset <= maximum_misalignment; offset += kTaggedSize) {
     if (!v8_flags.single_generation) {
@@ -2440,8 +2441,9 @@ TEST(HeapNumberAlignment) {
       DirectHandle<Object> number_new = factory->NewNumber(1.000123);
       CHECK(IsHeapNumber(*number_new));
       CHECK(HeapLayout::InYoungGeneration(*number_new));
-      CHECK_EQ(0, Heap::GetFillToAlign(Cast<HeapObject>(*number_new).address(),
-                                       required_alignment));
+      CHECK_EQ(
+          0, MainAllocator::GetFillToAlign(
+                 Cast<HeapObject>(*number_new).address(), required_alignment));
     }
 
     AlignOldSpace(required_alignment, offset);
@@ -2449,8 +2451,9 @@ TEST(HeapNumberAlignment) {
         factory->NewNumber<AllocationType::kOld>(1.000321);
     CHECK(IsHeapNumber(*number_old));
     CHECK(heap->InOldSpace(*number_old));
-    CHECK_EQ(0, Heap::GetFillToAlign(Cast<HeapObject>(*number_old).address(),
-                                     required_alignment));
+    CHECK_EQ(0,
+             MainAllocator::GetFillToAlign(
+                 Cast<HeapObject>(*number_old).address(), required_alignment));
   }
 }
 

@@ -266,6 +266,16 @@ class MainAllocator {
       int size_in_bytes, AllocationAlignment alignment,
       AllocationOrigin origin);
 
+  // Calculates the maximum amount of filler that could be required by the
+  // given alignment.
+  V8_EXPORT_PRIVATE static int GetMaximumFillToAlign(
+      AllocationAlignment alignment);
+
+  // Calculates the actual amount of filler required for a given address at the
+  // given alignment.
+  V8_INLINE static int GetFillToAlign(Address address,
+                                      AllocationAlignment alignment);
+
  private:
   enum class BlackAllocation {
     kAlwaysEnabled,
@@ -290,9 +300,10 @@ class MainAllocator {
                       AllocationAlignment alignment, AllocationOrigin origin);
 
   // Slow path of allocation function
-  V8_WARN_UNUSED_RESULT V8_EXPORT_PRIVATE AllocationResult
-  AllocateRawSlow(SafeHeapObjectSize size_in_bytes,
-                  AllocationAlignment alignment, AllocationOrigin origin);
+  V8_WARN_UNUSED_RESULT V8_EXPORT_PRIVATE V8_NOINLINE V8_PRESERVE_MOST
+      AllocationResult
+      AllocateRawSlow(SafeHeapObjectSize size_in_bytes,
+                      AllocationAlignment alignment, AllocationOrigin origin);
 
   bool EnsureAllocation(SafeHeapObjectSize size_in_bytes,
                         AllocationAlignment alignment, AllocationOrigin origin);

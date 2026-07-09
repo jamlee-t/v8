@@ -1045,14 +1045,6 @@ AllocationAlignment HeapObject::RequiredAlignment(InSharedSpace in_shared_space,
   return kTaggedAligned;
 }
 
-bool HeapObject::CheckRequiredAlignment() const {
-  const InSharedSpace in_shared_space{HeapLayout::InWritableSharedSpace(this)};
-  AllocationAlignment alignment =
-      HeapObject::RequiredAlignment(in_shared_space, map());
-  CHECK_EQ(0, Heap::GetFillToAlign(address(), alignment));
-  return true;
-}
-
 Address HeapObject::GetFieldAddress(int field_offset) const {
   return field_address(field_offset);
 }
