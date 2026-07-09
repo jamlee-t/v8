@@ -598,6 +598,7 @@ def _CommonChecks(input_api, output_api):
       _CheckPythonLiterals,
       _CheckMultiLineIfBraces,
       _CheckDepsGitignored,
+      _CheckMarkdown,
   ]
 
   return sum([check(input_api, output_api) for check in checks], [])
@@ -796,6 +797,29 @@ def _CheckBannedCpp(input_api, output_api):
             output_api.PresubmitError('Banned pattern ({}):\n  {}:{} {}'.format(
                 regex, f.LocalPath(), line_number, message)))
   return errors
+
+
+def _CheckMarkdown(input_api, output_api):
+  # Check only modified markdown files
+  affected_md_files = [
+      f.LocalPath()
+      for f in input_api.AffectedFiles(include_deletes=False)
+      if f.LocalPath().endswith('.md')
+  ]
+  if not affected_md_files:
+    return []
+
+  script_path = input_api.os_path.join(input_api.PresubmitLocalPath(), 'tools',
+                                       'dev', 'markdown_checker.py')
+  cmd = [input_api.python3_executable, script_path] + affected_md_files
+
+  return input_api.RunTests([
+      input_api.Command(
+          name='CheckMarkdown',
+          cmd=cmd,
+          kwargs={'cwd': input_api.PresubmitLocalPath()},
+          message=output_api.PresubmitError)
+  ])
 
 
 def CheckChangeOnUpload(input_api, output_api):
