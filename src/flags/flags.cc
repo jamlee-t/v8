@@ -15,7 +15,9 @@
 #include <optional>
 #include <set>
 #include <sstream>
+#include <string_view>
 #include <unordered_map>
+#include <vector>
 
 #include "src/base/fpu.h"
 #include "src/base/hashing.h"
@@ -344,6 +346,11 @@ struct FlagMetadata {
   int canonical_index;
 };
 
+constexpr bool IsTestOnlyComment(const char* comment) {
+  return comment &&
+         std::string_view{comment}.ends_with(" (test-only / unsafe)");
+}
+
 constexpr auto kFlagsMetadata = []() {
   struct RawMetadata {
     const char* name;
@@ -390,6 +397,12 @@ constexpr auto kFlagsMetadata = []() {
 
   return metadata;
 }();
+
+static_assert(std::any_of(kFlagsMetadata.begin(), kFlagsMetadata.end(),
+                          [](const FlagMetadata& entry) {
+                            return IsTestOnlyComment(entry.comment);
+                          }),
+              "Must have test-only flags");
 
 // Number of flags plus aliases.
 constexpr size_t kNumAllFlags = kFlagsMetadata.size();
@@ -1269,14 +1282,14 @@ class ImplicationProcessor {
 
 }  // namespace
 
-// Defines a contradicion if at least one of the two flags is set. We currently
-// don't handle contradictions when two default-on flags are turned off, because
-// there are none.
-#define CONTRADICTION(flag1, flag2)                         \
-  (v8_flags.flag1 || v8_flags.flag2)                        \
-      ? std::make_tuple(FindFlagByPointer(&v8_flags.flag1), \
-                        FindFlagByPointer(&v8_flags.flag2)) \
-      : std::make_tuple(nullptr, nullptr)
+// Defines a contradiction and adds it to the 'contradictions' vector if at
+// least one of the two flags is set. We currently don't handle contradictions
+// when two default-on flags are turned off, because there are none.
+#define CONTRADICTION(flag1, flag2)                                  \
+  if (v8_flags.flag1 || v8_flags.flag2) {                            \
+    contradictions.emplace_back(FindFlagByPointer(&v8_flags.flag1),  \
+                                FindFlagByPointer(&v8_flags.flag2)); \
+  }
 
 #define RESET_WHEN_FUZZING(flag) CONTRADICTION(flag, fuzzing)
 #define RESET_WHEN_CORRECTNESS_FUZZING(flag) \
@@ -1286,125 +1299,132 @@ class ImplicationProcessor {
 void FlagList::ResolveContradictionsWhenFuzzing() {
   if (!i::v8_flags.fuzzing) return;
 
-  std::tuple<Flag*, Flag*> contradictions[] = {
-      // List of flags that lead to known contradictory cycles when both
-      // deviate from their defaults. One of them will be reset with precedence
-      // left to right.
-      CONTRADICTION(always_osr_from_maglev, disable_optimizing_compilers),
-      CONTRADICTION(always_osr_from_maglev, jitless),
-      CONTRADICTION(always_osr_from_maglev, lite_mode),
-      CONTRADICTION(always_osr_from_maglev, turbofan),
-      CONTRADICTION(always_osr_from_maglev, turboshaft),
-      CONTRADICTION(assert_types, stress_concurrent_inlining),
-      CONTRADICTION(assert_types, stress_concurrent_inlining_attach_code),
-      CONTRADICTION(disable_optimizing_compilers, maglev_future),
-      CONTRADICTION(disable_optimizing_compilers, stress_concurrent_inlining),
-      CONTRADICTION(disable_optimizing_compilers,
-                    stress_concurrent_inlining_attach_code),
-      CONTRADICTION(disable_optimizing_compilers, stress_maglev),
-      CONTRADICTION(disable_optimizing_compilers, wasm_in_js_inlining_body),
-      CONTRADICTION(disable_optimizing_compilers, turbolev_future),
-      CONTRADICTION(disable_optimizing_compilers, wasm_in_js_inlining_wrapper),
-      CONTRADICTION(jit_fuzzing, max_lazy),
-      CONTRADICTION(jitless, maglev_as_top_tier),
-      CONTRADICTION(jitless, maglev_future),
-      CONTRADICTION(jitless, stress_concurrent_inlining),
-      CONTRADICTION(jitless, stress_concurrent_inlining_attach_code),
-      CONTRADICTION(jitless, stress_maglev),
-      CONTRADICTION(jitless, turbolev_future),
-      CONTRADICTION(jitless, wasm_in_js_inlining_wrapper),
-      CONTRADICTION(jitless, wasm_in_js_inlining_body),
-      CONTRADICTION(jitless, verify_turboshaft),
+  std::vector<std::tuple<Flag*, Flag*>> contradictions;
+
+  // Automatically reset all test-only flags.
+  Flag* fuzzing_flag = FindFlagByPointer(&v8_flags.fuzzing);
+  for (size_t i = 0; i < kNumAllFlags; ++i) {
+    if (static_cast<int>(i) != kFlagsMetadata[i].canonical_index) continue;
+    if (IsTestOnlyComment(kFlagsMetadata[i].comment)) {
+      contradictions.emplace_back(&flags[kFlagsMetadata[i].flag_index],
+                                  fuzzing_flag);
+    }
+  }
+
+  // List of flags that lead to known contradictory cycles when both
+  // deviate from their defaults. One of them will be reset with precedence
+  // left to right.
+  CONTRADICTION(always_osr_from_maglev, disable_optimizing_compilers);
+  CONTRADICTION(always_osr_from_maglev, jitless);
+  CONTRADICTION(always_osr_from_maglev, lite_mode);
+  CONTRADICTION(always_osr_from_maglev, turbofan);
+  CONTRADICTION(always_osr_from_maglev, turboshaft);
+  CONTRADICTION(assert_types, stress_concurrent_inlining);
+  CONTRADICTION(assert_types, stress_concurrent_inlining_attach_code);
+  CONTRADICTION(disable_optimizing_compilers, maglev_future);
+  CONTRADICTION(disable_optimizing_compilers, stress_concurrent_inlining);
+  CONTRADICTION(disable_optimizing_compilers,
+                stress_concurrent_inlining_attach_code);
+  CONTRADICTION(disable_optimizing_compilers, stress_maglev);
+  CONTRADICTION(disable_optimizing_compilers, wasm_in_js_inlining_body);
+  CONTRADICTION(disable_optimizing_compilers, turbolev_future);
+  CONTRADICTION(disable_optimizing_compilers, wasm_in_js_inlining_wrapper);
+  CONTRADICTION(jit_fuzzing, max_lazy);
+  CONTRADICTION(jitless, maglev_as_top_tier);
+  CONTRADICTION(jitless, maglev_future);
+  CONTRADICTION(jitless, stress_concurrent_inlining);
+  CONTRADICTION(jitless, stress_concurrent_inlining_attach_code);
+  CONTRADICTION(jitless, stress_maglev);
+  CONTRADICTION(jitless, turbolev_future);
+  CONTRADICTION(jitless, wasm_in_js_inlining_wrapper);
+  CONTRADICTION(jitless, wasm_in_js_inlining_body);
+  CONTRADICTION(jitless, verify_turboshaft);
 #if V8_ENABLE_WEBASSEMBLY
-      CONTRADICTION(wasm_jitless_if_available_for_testing, turbolev),
-      CONTRADICTION(wasm_jitless_if_available_for_testing, turbolev_future),
-      CONTRADICTION(wasm_jitless_if_available_for_testing,
-                    wasm_in_js_inlining_wrapper),
+  CONTRADICTION(wasm_jitless_if_available_for_testing, turbolev);
+  CONTRADICTION(wasm_jitless_if_available_for_testing, turbolev_future);
+  CONTRADICTION(wasm_jitless_if_available_for_testing,
+                wasm_in_js_inlining_wrapper);
 #endif  // V8_ENABLE_WEBASSEMBLY
-      CONTRADICTION(lite_mode, maglev_as_top_tier),
-      CONTRADICTION(lite_mode, maglev_future),
-      CONTRADICTION(lite_mode, predictable_gc_schedule),
-      CONTRADICTION(lite_mode, stress_concurrent_inlining),
-      CONTRADICTION(lite_mode, stress_concurrent_inlining_attach_code),
-      CONTRADICTION(lite_mode, stress_maglev),
-      CONTRADICTION(lite_mode, turbolev_future),
-      CONTRADICTION(lite_mode, wasm_in_js_inlining_body),
-      CONTRADICTION(lite_mode, verify_turboshaft),
-      CONTRADICTION(maglev_as_top_tier, stress_concurrent_inlining),
-      CONTRADICTION(maglev_as_top_tier, stress_concurrent_inlining_attach_code),
-      CONTRADICTION(maglev_as_top_tier, turbolev_future),
-      CONTRADICTION(optimize_for_size, predictable_gc_schedule),
-      CONTRADICTION(predictable, stress_concurrent_inlining_attach_code),
-      CONTRADICTION(predictable_gc_schedule, stress_compaction),
-      CONTRADICTION(single_threaded, stress_concurrent_inlining_attach_code),
+  CONTRADICTION(lite_mode, maglev_as_top_tier);
+  CONTRADICTION(lite_mode, maglev_future);
+  CONTRADICTION(lite_mode, predictable_gc_schedule);
+  CONTRADICTION(lite_mode, stress_concurrent_inlining);
+  CONTRADICTION(lite_mode, stress_concurrent_inlining_attach_code);
+  CONTRADICTION(lite_mode, stress_maglev);
+  CONTRADICTION(lite_mode, turbolev_future);
+  CONTRADICTION(lite_mode, wasm_in_js_inlining_body);
+  CONTRADICTION(lite_mode, verify_turboshaft);
+  CONTRADICTION(maglev_as_top_tier, stress_concurrent_inlining);
+  CONTRADICTION(maglev_as_top_tier, stress_concurrent_inlining_attach_code);
+  CONTRADICTION(maglev_as_top_tier, turbolev_future);
+  CONTRADICTION(optimize_for_size, predictable_gc_schedule);
+  CONTRADICTION(predictable, stress_concurrent_inlining_attach_code);
+  CONTRADICTION(predictable_gc_schedule, stress_compaction);
+  CONTRADICTION(single_threaded, stress_concurrent_inlining_attach_code);
 #if V8_ENABLE_WEBASSEMBLY
-      CONTRADICTION(single_threaded, wasm_pgo_to_file),
-      CONTRADICTION(single_threaded, wasm_generate_compilation_hints),
-      CONTRADICTION(single_threaded, trace_wasm_generate_compilation_hints),
+  CONTRADICTION(single_threaded, wasm_pgo_to_file);
+  CONTRADICTION(single_threaded, wasm_generate_compilation_hints);
+  CONTRADICTION(single_threaded, trace_wasm_generate_compilation_hints);
 #endif  // V8_ENABLE_WEBASSEMBLY
-      CONTRADICTION(stress_concurrent_inlining, turboshaft_assert_types),
-      CONTRADICTION(stress_concurrent_inlining_attach_code,
-                    turboshaft_assert_types),
-      CONTRADICTION(turboshaft, stress_concurrent_inlining),
-      CONTRADICTION(turboshaft, stress_concurrent_inlining_attach_code),
-      CONTRADICTION(minor_ms, handle_weak_ref_weakly_in_minor_gc),
+  CONTRADICTION(stress_concurrent_inlining, turboshaft_assert_types);
+  CONTRADICTION(stress_concurrent_inlining_attach_code,
+                turboshaft_assert_types);
+  CONTRADICTION(turboshaft, stress_concurrent_inlining);
+  CONTRADICTION(turboshaft, stress_concurrent_inlining_attach_code);
+  CONTRADICTION(minor_ms, handle_weak_ref_weakly_in_minor_gc);
 
-      // These stresses enable additional CHECKs that are classified as
-      // non-issues by the sandbox fuzzer crash filters, and hence may result in
-      // masking real issues from the fuzzer.
-      CONTRADICTION(stress_lazy_source_positions, sandbox_fuzzing),
-      CONTRADICTION(stress_lazy_source_positions, sandbox_testing),
-      CONTRADICTION(stress_lazy, sandbox_fuzzing),
-      CONTRADICTION(stress_lazy, sandbox_testing),
+  // These stresses enable additional CHECKs that are classified as
+  // non-issues by the sandbox fuzzer crash filters, and hence may result in
+  // masking real issues from the fuzzer.
+  CONTRADICTION(stress_lazy_source_positions, sandbox_fuzzing);
+  CONTRADICTION(stress_lazy_source_positions, sandbox_testing);
+  CONTRADICTION(stress_lazy, sandbox_fuzzing);
+  CONTRADICTION(stress_lazy, sandbox_testing);
 
-      // List of flags that shouldn't be used when --fuzzing or
-      // --correctness-fuzzer-suppressions is passed. These flags will be reset
-      // to their defaults.
+  // List of flags that shouldn't be used when --fuzzing or
+  // --correctness-fuzzer-suppressions is passed. These flags will be reset
+  // to their defaults.
 
-      // https://crbug.com/419424082
-      RESET_WHEN_CORRECTNESS_FUZZING(default_to_experimental_regexp_engine),
-      RESET_WHEN_CORRECTNESS_FUZZING(enable_experimental_regexp_engine),
-      RESET_WHEN_CORRECTNESS_FUZZING(
-          experimental_regexp_engine_capture_group_opt),
+  // https://crbug.com/419424082
+  RESET_WHEN_CORRECTNESS_FUZZING(default_to_experimental_regexp_engine);
+  RESET_WHEN_CORRECTNESS_FUZZING(enable_experimental_regexp_engine);
+  RESET_WHEN_CORRECTNESS_FUZZING(experimental_regexp_engine_capture_group_opt);
 
-      // https://crbug.com/369652671
-      RESET_WHEN_CORRECTNESS_FUZZING(stress_lazy_compilation),
+  // https://crbug.com/369652671
+  RESET_WHEN_CORRECTNESS_FUZZING(stress_lazy_compilation);
 
-      // https://crbug.com/380327159
-      RESET_WHEN_CORRECTNESS_FUZZING(turbo_stats),
-      RESET_WHEN_CORRECTNESS_FUZZING(turbo_stats_nvp),
-      RESET_WHEN_CORRECTNESS_FUZZING(turbo_stats_wasm),
+  // https://crbug.com/380327159
+  RESET_WHEN_CORRECTNESS_FUZZING(turbo_stats);
+  RESET_WHEN_CORRECTNESS_FUZZING(turbo_stats_nvp);
+  RESET_WHEN_CORRECTNESS_FUZZING(turbo_stats_wasm);
 
-      // Don't use any asserting modes with differential fuzzing as it ignores
-      // crashes anyways and sometimes can't digest the output from these
-      // flags.
-      RESET_WHEN_CORRECTNESS_FUZZING(assert_types),
-      RESET_WHEN_CORRECTNESS_FUZZING(maglev_assert_types),
-      RESET_WHEN_CORRECTNESS_FUZZING(turboshaft_assert_types),
-      RESET_WHEN_CORRECTNESS_FUZZING(verify_bytecode_full),
-      RESET_WHEN_CORRECTNESS_FUZZING(verify_bytecode_light),
+  // Don't use any asserting modes with differential fuzzing as it ignores
+  // crashes anyways and sometimes can't digest the output from these
+  // flags.
+  RESET_WHEN_CORRECTNESS_FUZZING(assert_types);
+  RESET_WHEN_CORRECTNESS_FUZZING(maglev_assert_types);
+  RESET_WHEN_CORRECTNESS_FUZZING(turboshaft_assert_types);
+  RESET_WHEN_CORRECTNESS_FUZZING(verify_bytecode_full);
+  RESET_WHEN_CORRECTNESS_FUZZING(verify_bytecode_light);
 #if V8_ENABLE_WEBASSEMBLY
-      RESET_WHEN_CORRECTNESS_FUZZING(wasm_assert_types),
+  RESET_WHEN_CORRECTNESS_FUZZING(wasm_assert_types);
 #endif  // V8_ENABLE_WEBASSEMBLY
 
-      // Not useful for differential fuzzing: https://crbug.com/496356383
-      RESET_WHEN_CORRECTNESS_FUZZING(heap_snapshot_on_gc),
+  // Not useful for differential fuzzing: https://crbug.com/496356383
+  RESET_WHEN_CORRECTNESS_FUZZING(heap_snapshot_on_gc);
 
-      // https://crbug.com/369974230
-      RESET_WHEN_FUZZING(expose_async_hooks),
+  // https://crbug.com/369974230
+  RESET_WHEN_FUZZING(expose_async_hooks);
 
-      // https://crbug.com/371061101
-      RESET_WHEN_FUZZING(parallel_compile_tasks_for_lazy),
+  // https://crbug.com/371061101
+  RESET_WHEN_FUZZING(parallel_compile_tasks_for_lazy);
 
-      // https://crbug.com/366671002
-      RESET_WHEN_FUZZING(stress_snapshot),
+  // https://crbug.com/366671002
+  RESET_WHEN_FUZZING(stress_snapshot);
 
-      // https://crbug.com/393401455
-      RESET_WHEN_FUZZING(turboshaft),
+  // https://crbug.com/393401455
+  RESET_WHEN_FUZZING(turboshaft);
 
-      // OOBs are expected when using --mock-arraybuffer-allocator.
-      RESET_WHEN_FUZZING(mock_arraybuffer_allocator),
-  };
   for (auto [flag1, flag2] : contradictions) {
     if (!flag1 || !flag2) continue;
     if (flag1->IsDefault() || flag2->IsDefault()) continue;
