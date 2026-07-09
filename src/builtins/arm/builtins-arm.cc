@@ -2938,7 +2938,7 @@ void Generate_WasmDebugBreakOrTrap(MacroAssembler* masm, DebugBreakKind kind) {
     if (kind == DebugBreakKind::kTrap) {
       // Reason was pushed before the frame.
       // [fp+4]=saved lr, [fp+0]=saved fp, [fp+8]=reason.
-      __ ldr(r0, MemOperand(fp, 8));
+      __ ldr(r0, MemOperand(fp, 2 * kSystemPointerSize));
       __ Push(r0);
       __ CallRuntime(Runtime::kThrowWasmError, 1);
       __ stop();
