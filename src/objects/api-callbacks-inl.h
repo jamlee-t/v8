@@ -8,6 +8,8 @@
 #include "src/objects/api-callbacks.h"
 // Include the non-inl header before the rest of the headers.
 
+#include <algorithm>
+
 #include "src/heap/heap-write-barrier-inl.h"
 #include "src/heap/heap-write-barrier.h"
 #include "src/objects/foreign-inl.h"
@@ -138,8 +140,8 @@ void AccessorInfo::RestoreCallbackRedirectionAfterDeserialization(
 
 void AccessorInfo::clear_padding() {
   if (FIELD_SIZE(kOptionalPaddingOffset) == 0) return;
-  Memset(reinterpret_cast<uint8_t*>(address() + kOptionalPaddingOffset), 0,
-         FIELD_SIZE(kOptionalPaddingOffset));
+  std::fill_n(reinterpret_cast<uint8_t*>(address() + kOptionalPaddingOffset),
+              FIELD_SIZE(kOptionalPaddingOffset), 0);
 }
 
 // For the purpose of checking whether the respective callback field is
@@ -264,8 +266,8 @@ void InterceptorInfo::RestoreCallbackRedirectionAfterDeserialization(
 
 void InterceptorInfo::clear_padding() {
   if (FIELD_SIZE(kOptionalPaddingOffset) == 0) return;
-  Memset(reinterpret_cast<uint8_t*>(address() + kOptionalPaddingOffset), 0,
-         FIELD_SIZE(kOptionalPaddingOffset));
+  std::fill_n(reinterpret_cast<uint8_t*>(address() + kOptionalPaddingOffset),
+              FIELD_SIZE(kOptionalPaddingOffset), 0);
 }
 
 // Returns holder object suitable for Api callbacks - in case the holder is

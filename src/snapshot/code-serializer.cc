@@ -4,6 +4,7 @@
 
 #include "src/snapshot/code-serializer.h"
 
+#include <algorithm>
 #include <memory>
 
 #include "src/base/fpu.h"
@@ -744,7 +745,7 @@ SerializedCodeData::SerializedCodeData(const std::vector<uint8_t>* payload,
   AllocateData(size);
 
   // Zero out pre-payload data. Part of that is only used for padding.
-  Memset(data_, 0, kHeaderSize);
+  std::fill_n(data_, kHeaderSize, 0);
 
   // Set header values.
   SetMagicNumber();
@@ -757,7 +758,8 @@ SerializedCodeData::SerializedCodeData(const std::vector<uint8_t>* payload,
   SetHeaderValue(kPayloadLengthOffset, static_cast<uint32_t>(payload->size()));
 
   // Zero out any padding in the header.
-  Memset(data_ + kUnalignedHeaderSize, 0, kHeaderSize - kUnalignedHeaderSize);
+  std::fill_n(data_ + kUnalignedHeaderSize, kHeaderSize - kUnalignedHeaderSize,
+              0);
 
   // Copy serialized data.
   CopyBytes(data_ + kHeaderSize, payload->data(),

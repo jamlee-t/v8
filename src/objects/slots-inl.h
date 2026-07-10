@@ -8,6 +8,8 @@
 #include "src/objects/slots.h"
 // Include the non-inl header before the rest of the headers.
 
+#include <algorithm>
+
 #include "include/v8-internal.h"
 #include "src/base/atomic-utils.h"
 #include "src/common/globals.h"
@@ -474,7 +476,7 @@ inline void MemsetTagged(Tagged_t* start, Tagged<MaybeObject> value,
 #else
   Tagged_t raw_value = value.ptr();
 #endif
-  Memset(start, raw_value, count);
+  std::fill_n(start, count, raw_value);
 }
 
 inline void Relaxed_MemsetTagged(Tagged_t* start, Tagged<MaybeObject> value,
@@ -501,7 +503,7 @@ inline void Relaxed_MemsetTagged(SlotBase<T, Tagged_t> start,
 }
 
 void MemsetPointer(FullObjectSlot start, Tagged<Object> value, size_t count) {
-  Memset(start.location(), value.ptr(), count);
+  std::fill_n(start.location(), count, value.ptr());
 }
 
 }  // namespace internal

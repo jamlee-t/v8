@@ -8,6 +8,8 @@
 #include "src/objects/code.h"
 // Include the non-inl header before the rest of the headers.
 
+#include <algorithm>
+
 #include "src/baseline/bytecode-offset-iterator.h"
 #include "src/codegen/code-desc.h"
 #include "src/deoptimizer/deoptimize-reason.h"
@@ -866,8 +868,8 @@ void Code::UpdateInstructionStart(IsolateForSandbox isolate,
 
 void Code::clear_padding() {
   if (kSize - kUnalignedSize == 0) return;
-  Memset(reinterpret_cast<uint8_t*>(address() + kUnalignedSize), 0,
-         kSize - kUnalignedSize);
+  std::fill_n(reinterpret_cast<uint8_t*>(address() + kUnalignedSize),
+              kSize - kUnalignedSize, 0);
 }
 
 RELAXED_UINT32_ACCESSORS(Code, flags, kFlagsOffset)
