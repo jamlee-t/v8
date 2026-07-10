@@ -5849,6 +5849,7 @@ class TurboshaftGraphBuildingInterface
       __ ArraySet(array, __ Word32Constant(i), elements[i].op, element_type, {},
                   write_barrier, ArraySetOp::Kind::kInitialize);
     }
+    if (shared) __ MemoryBarrier(AtomicMemoryOrder::kSeqCst);
     result->op = array;
   }
 
@@ -9314,6 +9315,7 @@ class TurboshaftGraphBuildingInterface
     // Initialize the elements.
     ArrayFillImpl(array, __ Word32Constant(0), initial_value, length,
                   array_type, write_barrier, ArraySetOp::Kind::kInitialize);
+    if (shared) __ MemoryBarrier(AtomicMemoryOrder::kSeqCst);
     return array;
   }
 
@@ -9388,6 +9390,7 @@ class TurboshaftGraphBuildingInterface
     static_assert(Heap::kMinObjectSizeInTaggedWords == 2 &&
                       WasmStruct::kHeaderSize == 2 * kTaggedSize,
                   "empty struct might require initialization of padding field");
+    if (type.is_shared) __ MemoryBarrier(AtomicMemoryOrder::kSeqCst);
     return struct_value;
   }
 

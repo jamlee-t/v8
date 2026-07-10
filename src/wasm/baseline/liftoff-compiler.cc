@@ -8008,6 +8008,8 @@ class LiftoffCompiler {
       pinned.clear(value);
     }
 
+    if (type.is_shared) __ AtomicFence(AtomicMemoryOrder::kSeqCst);
+
     // If this assert fails then initialization of padding field might be
     // necessary.
     static_assert(Heap::kMinObjectSizeInTaggedWords == 2 &&
@@ -8174,6 +8176,8 @@ class LiftoffCompiler {
                           initial_value_on_stack
                       ? compiler::kFullWriteBarrier
                       : compiler::kNoWriteBarrier);
+
+    if (is_shared) __ AtomicFence(AtomicMemoryOrder::kSeqCst);
 
     __ PushRegister(kRef, obj);
   }
@@ -8419,6 +8423,8 @@ class LiftoffCompiler {
       StoreObjectField(decoder, array.gp(), no_reg, offset - kHeapObjectTag,
                        element, false, pinned, elem_kind, write_barrier);
     }
+
+    if (is_shared) __ AtomicFence(AtomicMemoryOrder::kSeqCst);
 
     // Push the array onto the stack.
     __ PushRegister(kRef, array);
