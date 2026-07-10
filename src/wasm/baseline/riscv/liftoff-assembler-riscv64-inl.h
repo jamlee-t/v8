@@ -266,7 +266,7 @@ void LiftoffAssembler::LoadConstant(LiftoffRegister reg, WasmValue value) {
 }
 
 void LiftoffAssembler::PrepareDebugTrap(MessageTemplate message) {
-  UNIMPLEMENTED();
+  Push(Smi::FromInt(static_cast<int>(message)));
 }
 
 void LiftoffAssembler::LoadTaggedPointer(Register dst, Register src_addr,
