@@ -10,6 +10,7 @@
 #include "src/codegen/compiler.h"
 #include "src/common/globals.h"
 #include "src/diagnostics/code-tracer.h"
+#include "src/debug/debug.h"
 #include "src/execution/frames-inl.h"
 #include "src/execution/isolate.h"
 #include "src/execution/tiering-manager.h"
@@ -243,12 +244,13 @@ bool JSFunction::CanDiscardCompiled(IsolateForSandbox isolate) const {
 DirectHandle<Object> JSFunction::GetFunctionPrototype(
     Isolate* isolate, DirectHandle<JSFunction> function) {
   if (!function->has_prototype()) {
-    // We lazily allocate .prototype for functions, which confuses debug
-    // evaluate which assumes we can write to temporary objects we allocated
-    // during evaluation. We err on the side of caution here and prevent the
-    // newly allocated prototype from going into the temporary objects set,
-    // which means writes to it will be considered a side effect.
-    DisableTemporaryObjectTracking no_temp_tracking(isolate->debug());
+    // Disable temporary object tracking when lazily allocating .prototype for
+    // permanent functions. This prevents new permanent objects from being
+    // confused with dead temporary objects that left behind stale ranges.
+    std::optional<DisableTemporaryObjectTracking> no_temp_tracking;
+    if (!isolate->debug()->IsTemporaryObject(function)) {
+      no_temp_tracking.emplace(isolate->debug());
+    }
     DirectHandle<JSObject> proto =
         isolate->factory()->NewFunctionPrototype(function);
     JSFunction::SetPrototype(isolate, function, proto);

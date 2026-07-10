@@ -54,7 +54,10 @@ class Debug::TemporaryObjectsTracker : public HeapObjectAllocationTracker {
   TemporaryObjectsTracker& operator=(const TemporaryObjectsTracker&) = delete;
 
   void AllocationEvent(Address addr, int size) override {
-    if (disabled) return;
+    if (disabled) {
+      RemoveFromRegions(addr, addr + size);
+      return;
+    }
     AddRegion(addr, addr + size);
   }
 
@@ -73,7 +76,7 @@ class Debug::TemporaryObjectsTracker : public HeapObjectAllocationTracker {
     }
   }
 
-  bool HasObject(DirectHandle<HeapObject> obj) {
+  bool HasObject(DirectHandle<HeapObject> obj) const {
     if (IsJSObject(*obj) && Cast<JSObject>(obj)->GetEmbedderFieldCount()) {
       // Embedder may store any pointers using embedder fields and implements
       // non trivial logic, e.g. create wrappers lazily and store pointer to
@@ -88,7 +91,7 @@ class Debug::TemporaryObjectsTracker : public HeapObjectAllocationTracker {
   bool disabled = false;
 
  private:
-  bool HasRegionContainingObject(Address start, Address end) {
+  bool HasRegionContainingObject(Address start, Address end) const {
     // Check if there is a region that contains (overlaps) this object's space.
     auto it = FindOverlappingRegion(start, end, false);
     // If there is, we expect the region to contain the entire object.
@@ -100,8 +103,8 @@ class Debug::TemporaryObjectsTracker : public HeapObjectAllocationTracker {
   // This function returns any one of the overlapping regions (there might be
   // multiple). If {include_adjacent} is true, it will also consider regions
   // that have no overlap but are directly connected.
-  std::map<Address, Address>::iterator FindOverlappingRegion(
-      Address start, Address end, bool include_adjacent) {
+  std::map<Address, Address>::const_iterator FindOverlappingRegion(
+      Address start, Address end, bool include_adjacent) const {
     // Region A = [start, end) overlaps with an existing region [existing_start,
     // existing_end) iff (start <= existing_end) && (existing_start <= end).
     // Since we index {regions_} by end address, we can find a candidate that
@@ -3403,6 +3406,13 @@ void Debug::SetTemporaryObjectTrackingDisabled(bool disabled) {
 bool Debug::GetTemporaryObjectTrackingDisabled() const {
   if (temporary_objects_) {
     return temporary_objects_->disabled;
+  }
+  return false;
+}
+
+bool Debug::IsTemporaryObject(DirectHandle<HeapObject> object) const {
+  if (temporary_objects_) {
+    return temporary_objects_->HasObject(object);
   }
   return false;
 }
