@@ -481,6 +481,28 @@ class MemoryContentTable
     }
   }
 
+  void InvalidateEverything() {
+    for (auto& base_keys : base_keys_) {
+      for (auto it = base_keys.second.with_offsets.begin();
+           it != base_keys.second.with_offsets.end();) {
+        Key key = *it;
+        // It's important to remove with RemoveAt before Setting the key to
+        // invalid, otherwise OnKeyChange will remove {key} from {base_keys},
+        // which will invalidate {it}.
+        it = base_keys.second.with_offsets.RemoveAt(it);
+        TRACE(">>> Invalidating " << key.data().mem);
+        Set(key, OpIndex::Invalid());
+      }
+      for (auto it = base_keys.second.with_indices.begin();
+           it != base_keys.second.with_indices.end();) {
+        Key key = *it;
+        it = base_keys.second.with_indices.RemoveAt(it);
+        TRACE(">>> Invalidating " << key.data().mem);
+        Set(key, OpIndex::Invalid());
+      }
+    }
+  }
+
   OpIndex Find(const LoadOp& load) {
     OpIndex base = ResolveBase(load.base());
     OptionalOpIndex index = load.index();
