@@ -1467,7 +1467,16 @@ DirectHandle<HeapObject> RegExpMacroAssemblerARM64::GetCode(
   const int num_wreg_to_allocate =
       (num_stack_registers + align_mask) & ~align_mask;
 
-  {
+  // Skip the JS stack guard check for patterns whose register file fits within
+  // the stack limit's guaranteed slack: allocating it then can never push the
+  // stack past the point the check would catch, so the check is pure overhead
+  // on every match. This is the same slack that lets optimized JS elide the
+  // entry stack check for small leaf frames (see the static_assert and
+  // CodeGenerator::ShouldApplyOffsetToStackCheck).
+  static constexpr int kMaxRegistersWithoutStackCheck = 32;
+  static_assert(kMaxRegistersWithoutStackCheck * kWRegSize <=
+                kStackLimitSlackForDeoptimizationInBytes);
+  if (num_registers_ > kMaxRegistersWithoutStackCheck) {
     // Check if we have space on the stack.
     Label stack_limit_hit, stack_ok;
 
