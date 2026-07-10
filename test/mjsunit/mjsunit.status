@@ -2792,6 +2792,7 @@
   # TODO(42204563): These tests rely on the shared heap which is incompatible
   # with single generation.
   'regress/regress-461969023': [SKIP],
+  'regress/regress-526275356': [SKIP],
   'turboshaft/regress-523436017': [SKIP],
   # We need this here because it needs --fuzzing, and in that case we do not
   # check for contradictory flags.

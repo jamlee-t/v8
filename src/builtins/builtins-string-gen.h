@@ -198,7 +198,8 @@ class StringBuiltinsAssembler : public CodeStubAssembler {
   TNode<String> AllocAndCopyStringCharacters(TNode<T> from,
                                              TNode<BoolT> from_is_one_byte,
                                              TNode<IntPtrT> from_index,
-                                             TNode<IntPtrT> character_count);
+                                             TNode<IntPtrT> character_count,
+                                             Label* if_bailout);
 };
 
 }  // namespace internal
