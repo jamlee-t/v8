@@ -2673,6 +2673,77 @@ ReduceResult MaglevReducer<BaseT>::BuildSmiUntag(ValueNode* node) {
 }
 
 template <typename BaseT>
+ReduceResult MaglevReducer<BaseT>::BuildCheckString(ValueNode* object) {
+  NodeType known_type;
+  // Check for the empty type first so that we catch the case where
+  // GetType(object) is already empty.
+  if (IsEmptyNodeType(IntersectType(GetType(object), NodeType::kString))) {
+    return EmitUnconditionalDeopt(DeoptimizeReason::kNotAString);
+  }
+  if (EnsureType(object, NodeType::kString, &known_type)) {
+    return ReduceResult::Done();
+  }
+  return AddNewNode<CheckString>({object}, GetCheckType(known_type));
+}
+
+namespace detail {
+inline bool CheckConditionIn32(int32_t lhs, int32_t rhs,
+                               AssertCondition condition) {
+  switch (condition) {
+    case AssertCondition::kEqual:
+      return lhs == rhs;
+    case AssertCondition::kNotEqual:
+      return lhs != rhs;
+    case AssertCondition::kLessThan:
+      return lhs < rhs;
+    case AssertCondition::kLessThanEqual:
+      return lhs <= rhs;
+    case AssertCondition::kGreaterThan:
+      return lhs > rhs;
+    case AssertCondition::kGreaterThanEqual:
+      return lhs >= rhs;
+    case AssertCondition::kUnsignedLessThan:
+      return static_cast<uint32_t>(lhs) < static_cast<uint32_t>(rhs);
+    case AssertCondition::kUnsignedLessThanEqual:
+      return static_cast<uint32_t>(lhs) <= static_cast<uint32_t>(rhs);
+    case AssertCondition::kUnsignedGreaterThan:
+      return static_cast<uint32_t>(lhs) > static_cast<uint32_t>(rhs);
+    case AssertCondition::kUnsignedGreaterThanEqual:
+      return static_cast<uint32_t>(lhs) >= static_cast<uint32_t>(rhs);
+  }
+  UNREACHABLE();
+}
+}  // namespace detail
+
+template <typename BaseT>
+ReduceResult MaglevReducer<BaseT>::TryBuildCheckInt32Condition(
+    ValueNode* lhs, ValueNode* rhs, AssertCondition condition,
+    DeoptimizeReason reason) {
+  auto lhs_const = TryGetInt32Constant(lhs);
+  if (lhs_const) {
+    auto rhs_const = TryGetInt32Constant(rhs);
+    if (rhs_const) {
+      if (detail::CheckConditionIn32(lhs_const.value(), rhs_const.value(),
+                                     condition)) {
+        return ReduceResult::Done();
+      }
+      return EmitUnconditionalDeopt(reason);
+    }
+  }
+  return AddNewNode<CheckInt32Condition>({lhs, rhs}, condition, reason);
+}
+
+template <typename BaseT>
+compiler::OptionalObjectRef MaglevReducer<BaseT>::TryFoldLoadConstantDataField(
+    compiler::JSObjectRef holder,
+    compiler::PropertyAccessInfo const& access_info) {
+  DCHECK(!access_info.field_representation().IsDouble());
+  return holder.GetOwnFastConstantDataProperty(
+      broker(), access_info.field_representation(), access_info.field_index(),
+      broker()->dependencies());
+}
+
+template <typename BaseT>
 ReduceResult MaglevReducer<BaseT>::BuildNumberOrOddballToFloat64OrHoleyFloat64(
     ValueNode* node, UseRepresentation use_rep, NodeType allowed_input_type) {
   DCHECK(use_rep == UseRepresentation::kFloat64 ||
@@ -5482,6 +5553,102 @@ bool MaglevReducer<BaseT>::CanElideResolvePromiseThenLookup(ValueNode* value) {
   broker()->dependencies()->DependOnStablePrototypeChains(
       access_info.lookup_start_object_maps(), kStartAtPrototype);
   return true;
+}
+
+template <typename BaseT>
+MaybeReduceResult MaglevReducer<BaseT>::TryReduceRegExpPrototypeTest(
+    compiler::JSFunctionRef target, CallArguments& args) {
+  if (!CanSpeculateCall()) return {};
+  if (v8_flags.force_slow_path) return {};
+
+  if (args.receiver_mode() == ConvertReceiverMode::kNullOrUndefined) {
+    TRACE(TraceColor::kRed
+          << "! Failed to reduce RegExp.prototype.test - no receiver");
+    return {};
+  }
+  if (args.count() < 1) {
+    TRACE(TraceColor::kRed << "! Failed to reduce RegExp.prototype.test - "
+                              "no search argument");
+    return {};
+  }
+
+  compiler::NativeContextRef native_context = broker()->target_native_context();
+  compiler::MapRef regexp_initial_map =
+      native_context.regexp_function(broker()).initial_map(broker());
+
+  ValueNode* receiver = args.receiver();
+  MapInference<MaglevReducer<BaseT>> inference(this, receiver);
+  auto possible_receiver_maps = inference.TryGetPossibleMaps();
+  if (!possible_receiver_maps) {
+    TRACE(TraceColor::kRed << "! Failed to reduce RegExp.prototype.test - "
+                              "unknown receiver map");
+    return {};
+  }
+  if (possible_receiver_maps->is_empty()) {
+    return ReduceResult::DoneWithAbort();
+  }
+  if (possible_receiver_maps->size() != 1 ||
+      !possible_receiver_maps->at(0).equals(regexp_initial_map)) {
+    TRACE(TraceColor::kRed << "! Failed to reduce RegExp.prototype.test - "
+                              "not the initial RegExp map");
+    return {};
+  }
+
+  compiler::PropertyAccessInfo exec_access_info =
+      broker()->GetPropertyAccessInfo(regexp_initial_map,
+                                      broker()->exec_string(),
+                                      compiler::AccessMode::kLoad);
+  if (exec_access_info.IsInvalid()) {
+    TRACE(TraceColor::kRed << "! Failed to reduce RegExp.prototype.test - "
+                              "no exec access info");
+    return {};
+  }
+  if (!exec_access_info.IsFastDataConstant()) {
+    TRACE(TraceColor::kRed << "! Failed to reduce RegExp.prototype.test - "
+                              "exec is not a constant");
+    return {};
+  }
+  compiler::OptionalJSObjectRef holder = exec_access_info.holder();
+  if (!holder.has_value()) {
+    TRACE(TraceColor::kRed << "! Failed to reduce RegExp.prototype.test - "
+                              "exec is not on the prototype");
+    return {};
+  }
+  if (exec_access_info.field_representation().IsDouble()) {
+    TRACE(TraceColor::kRed << "! Failed to reduce RegExp.prototype.test - "
+                              "exec has double representation");
+    return {};
+  }
+  compiler::OptionalObjectRef exec =
+      TryFoldLoadConstantDataField(holder.value(), exec_access_info);
+  if (!exec.has_value() ||
+      !exec->equals(native_context.regexp_exec_function(broker()))) {
+    TRACE(TraceColor::kRed << "! Failed to reduce RegExp.prototype.test - "
+                              "exec was replaced");
+    return {};
+  }
+  broker()->dependencies()->DependOnStablePrototypeChains(
+      exec_access_info.lookup_start_object_maps(), kStartAtPrototype,
+      holder.value());
+
+  RETURN_IF_ABORT(inference.InsertMapChecks(zone()));
+
+  ValueNode* search_string = args[0];
+  RETURN_IF_ABORT(BuildCheckString(search_string));
+
+  // lastIndex is a plain Object field: it can hold any value, so the untag
+  // below must be the checked one.
+  ValueNode* last_index;
+  GET_VALUE_OR_ABORT(
+      last_index, BuildLoadTaggedField(receiver, JSRegExp::kLastIndexOffset));
+  ValueNode* last_index_int32;
+  GET_VALUE_OR_ABORT(last_index_int32, BuildSmiUntag(last_index));
+  RETURN_IF_ABORT(TryBuildCheckInt32Condition(
+      last_index_int32, GetInt32Constant(0), AssertCondition::kGreaterThanEqual,
+      DeoptimizeReason::kNotASmi));
+
+  return BuildCallBuiltin<Builtin::kRegExpPrototypeTestFast>(
+      GetConstant(native_context), {receiver, search_string});
 }
 
 template <typename BaseT>

@@ -3767,19 +3767,6 @@ ReduceResult MaglevGraphBuilder::BuildCheckHeapObject(ValueNode* object) {
 }
 
 
-ReduceResult MaglevGraphBuilder::BuildCheckString(ValueNode* object) {
-  NodeType known_type;
-  // Check for the empty type first so that we catch the case where
-  // GetType(object) is already empty.
-  if (IsEmptyNodeType(IntersectType(GetType(object), NodeType::kString))) {
-    return reducer_.EmitUnconditionalDeopt(DeoptimizeReason::kNotAString);
-  }
-  if (reducer_.EnsureType(object, NodeType::kString, &known_type)) {
-    return ReduceResult::Done();
-  }
-  return AddNewNode<CheckString>({object}, GetCheckType(known_type));
-}
-
 ReduceResult MaglevGraphBuilder::BuildCheckStringOrStringWrapper(
     ValueNode* object) {
   NodeType known_type;
@@ -4354,15 +4341,6 @@ compiler::OptionalJSObjectRef MaglevGraphBuilder::TryGetConstantDataFieldHolder(
     return c.value();
   }
   return {};
-}
-
-compiler::OptionalObjectRef MaglevGraphBuilder::TryFoldLoadConstantDataField(
-    compiler::JSObjectRef holder,
-    compiler::PropertyAccessInfo const& access_info) {
-  DCHECK(!access_info.field_representation().IsDouble());
-  return holder.GetOwnFastConstantDataProperty(
-      broker(), access_info.field_representation(), access_info.field_index(),
-      broker()->dependencies());
 }
 
 std::optional<Float64> MaglevGraphBuilder::TryFoldLoadConstantDoubleField(
@@ -5193,51 +5171,6 @@ MaybeReduceResult MaglevGraphBuilder::TryBuildElementAccessOnString(
         DeoptimizeReason::kOutOfBounds));
     return emit_load();
   }
-}
-
-namespace {
-bool CheckConditionIn32(int32_t lhs, int32_t rhs, AssertCondition condition) {
-  switch (condition) {
-    case AssertCondition::kEqual:
-      return lhs == rhs;
-    case AssertCondition::kNotEqual:
-      return lhs != rhs;
-    case AssertCondition::kLessThan:
-      return lhs < rhs;
-    case AssertCondition::kLessThanEqual:
-      return lhs <= rhs;
-    case AssertCondition::kGreaterThan:
-      return lhs > rhs;
-    case AssertCondition::kGreaterThanEqual:
-      return lhs >= rhs;
-    case AssertCondition::kUnsignedLessThan:
-      return static_cast<uint32_t>(lhs) < static_cast<uint32_t>(rhs);
-    case AssertCondition::kUnsignedLessThanEqual:
-      return static_cast<uint32_t>(lhs) <= static_cast<uint32_t>(rhs);
-    case AssertCondition::kUnsignedGreaterThan:
-      return static_cast<uint32_t>(lhs) > static_cast<uint32_t>(rhs);
-    case AssertCondition::kUnsignedGreaterThanEqual:
-      return static_cast<uint32_t>(lhs) >= static_cast<uint32_t>(rhs);
-  }
-  UNREACHABLE();
-}
-
-}  // namespace
-
-ReduceResult MaglevGraphBuilder::TryBuildCheckInt32Condition(
-    ValueNode* lhs, ValueNode* rhs, AssertCondition condition,
-    DeoptimizeReason reason) {
-  auto lhs_const = TryGetInt32Constant(lhs);
-  if (lhs_const) {
-    auto rhs_const = TryGetInt32Constant(rhs);
-    if (rhs_const) {
-      if (CheckConditionIn32(lhs_const.value(), rhs_const.value(), condition)) {
-        return ReduceResult::Done();
-      }
-      return reducer_.EmitUnconditionalDeopt(reason);
-    }
-  }
-  return AddNewNode<CheckInt32Condition>({lhs, rhs}, condition, reason);
 }
 
 ReduceResult MaglevGraphBuilder::BuildLoadTypedArrayLength(

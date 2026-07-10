@@ -786,6 +786,15 @@ class MaglevReducer {
 
   ReduceResult BuildSmiUntag(ValueNode* node);
   ReduceResult BuildCheckSmi(ValueNode* object);
+  ReduceResult BuildCheckString(ValueNode* object);
+
+  ReduceResult TryBuildCheckInt32Condition(ValueNode* lhs, ValueNode* rhs,
+                                           AssertCondition condition,
+                                           DeoptimizeReason reason);
+
+  compiler::OptionalObjectRef TryFoldLoadConstantDataField(
+      compiler::JSObjectRef holder,
+      compiler::PropertyAccessInfo const& access_info);
 
   ReduceResult BuildNumberOrOddballToFloat64OrHoleyFloat64(
       ValueNode* node, UseRepresentation use_rep, NodeType allowed_input_type);
@@ -1116,6 +1125,7 @@ class MaglevReducer {
   V(MathTrunc)                                 \
   V(PromisePrototypeThen)                      \
   V(PromiseResolveTrampoline)                  \
+  V(RegExpPrototypeTest)                       \
   IEEE_754_UNARY_LIST(V)                       \
   IEEE_754_BINARY_LIST(V)                      \
   IF_INTL(V, StringPrototypeLocaleCompareIntl) \

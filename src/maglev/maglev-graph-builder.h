@@ -1142,7 +1142,9 @@ class MaglevGraphBuilder {
   ReduceResult BuildCheckJSFunction(ValueNode* object);
   ReduceResult BuildCheckJSReceiver(ValueNode* object);
   ReduceResult BuildCheckJSReceiverOrNullOrUndefined(ValueNode* object);
-  ReduceResult BuildCheckString(ValueNode* object);
+  ReduceResult BuildCheckString(ValueNode* object) {
+    return reducer_.BuildCheckString(object);
+  }
   ReduceResult BuildCheckStringOrStringWrapper(ValueNode* object);
   ReduceResult BuildCheckStringOrOddball(ValueNode* object);
   ReduceResult BuildCheckSymbol(ValueNode* object);
@@ -1276,7 +1278,9 @@ class MaglevGraphBuilder {
       ValueNode* lookup_start_object);
   compiler::OptionalObjectRef TryFoldLoadConstantDataField(
       compiler::JSObjectRef holder,
-      compiler::PropertyAccessInfo const& access_info);
+      compiler::PropertyAccessInfo const& access_info) {
+    return reducer_.TryFoldLoadConstantDataField(holder, access_info);
+  }
   std::optional<Float64> TryFoldLoadConstantDoubleField(
       compiler::JSObjectRef holder,
       compiler::PropertyAccessInfo const& access_info);
@@ -1325,7 +1329,9 @@ class MaglevGraphBuilder {
 
   ReduceResult TryBuildCheckInt32Condition(ValueNode* lhs, ValueNode* rhs,
                                            AssertCondition condition,
-                                           DeoptimizeReason reason);
+                                           DeoptimizeReason reason) {
+    return reducer_.TryBuildCheckInt32Condition(lhs, rhs, condition, reason);
+  }
 
   MaybeReduceResult TryBuildPropertyLoad(
       ValueNode* receiver, ValueNode* lookup_start_object,
