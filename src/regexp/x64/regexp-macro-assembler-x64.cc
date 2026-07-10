@@ -1560,16 +1560,19 @@ DirectHandle<HeapObject> RegExpMacroAssemblerX64::GetCode(
 
     ExternalReference stack_limit =
         ExternalReference::address_of_jslimit(isolate());
-    __ movq(r9, rsp);
+    // Use rax as scratch here to keep the parameter registers (input_end is
+    // r9 under the Windows ABI) live for the input position setup after
+    // stack_ok.
+    __ movq(rax, rsp);
     __ Move(kScratchRegister, stack_limit);
-    __ subq(r9, Operand(kScratchRegister, 0));
+    __ subq(rax, Operand(kScratchRegister, 0));
     Immediate extra_space_for_variables(num_registers_ * kSystemPointerSize);
 
     // Handle it if the stack pointer is already below the stack limit.
     __ j(below_equal, &stack_limit_hit, Label::kNear);
     // Check if there is room for the variable number of registers above
     // the stack limit.
-    __ cmpq(r9, extra_space_for_variables);
+    __ cmpq(rax, extra_space_for_variables);
     __ j(above_equal, &stack_ok);
     // Exit with OutOfMemory exception. There is not enough space on the stack
     // for our working registers.
@@ -1586,36 +1589,65 @@ DirectHandle<HeapObject> RegExpMacroAssemblerX64::GetCode(
     __ j(not_zero, &return_rax);
     LoadRegExpStackPointerFromMemory(backtrack_stackpointer());
 
+    // The stack guard call clobbered all registers. Reload the parameter
+    // registers used below for the input position setup.
+    __ movq(kCArgRegs[1], Operand(rbp, kStartIndexOffset));
+    __ movq(kCArgRegs[2], Operand(rbp, kInputStartOffset));
+    __ movq(kCArgRegs[3], Operand(rbp, kInputEndOffset));
+
     __ bind(&stack_ok);
   }
 
   // Allocate space on stack for registers.
   __ AllocateStackSpace(num_registers_ * kSystemPointerSize);
-  // Load string length.
-  __ movq(rsi, Operand(rbp, kInputEndOffset));
-  // Load input position.
-  __ movq(rdi, Operand(rbp, kInputStartOffset));
-  // Set up rdi to be negative offset from string end.
+
+  // Set up the input positions. start_index/input_start/input_end are still in
+  // their entry parameter registers (nothing in the prologue above clobbers
+  // them, and the stack-guard slow path reloads them), so shuffle them directly
+  // into their target registers instead of reloading from the frame.
+  // kCArgRegs: [1]=start_index, [2]=input_start, [3]=input_end.
+  // Target: rsi=input_end, rdi=input_start - input_end.
+#ifdef DEBUG
+  // The shuffle depends on that liveness; a future prologue edit that clobbered
+  // one of these registers would silently corrupt the match base. Verify each
+  // against the frame slot it was spilled to at entry and trap on mismatch.
+  {
+    Label live_ok, live_bad;
+    __ cmpq(kCArgRegs[1], Operand(rbp, kStartIndexOffset));
+    __ j(not_equal, &live_bad, Label::kNear);
+    __ cmpq(kCArgRegs[2], Operand(rbp, kInputStartOffset));
+    __ j(not_equal, &live_bad, Label::kNear);
+    __ cmpq(kCArgRegs[3], Operand(rbp, kInputEndOffset));
+    __ j(equal, &live_ok, Label::kNear);
+    __ bind(&live_bad);
+    __ int3();
+    __ bind(&live_ok);
+  }
+#endif
+  __ movq(rax, kCArgRegs[1]);
+  __ movq(rsi, kCArgRegs[3]);
+  __ movq(rdi, kCArgRegs[2]);
   __ subq(rdi, rsi);
-  // Set rax to address of char before start of the string
-  // (effectively string position -1).
-  __ movq(rcx, Operand(rbp, kStartIndexOffset));
-  __ negq(rcx);
-  __ leaq(rax, Operand(rdi, rcx, CharSizeScaleFactor(), -char_size()));
+  // Initialize the code object pointer here, ahead of the flag-sensitive region
+  // below: Move may expand to more than a single flag-neutral instruction.
+  __ Move(code_object_pointer(), masm_.CodeObject());
+  // Set rax to the address of the char before the start of the string
+  // (effectively string position -1). negq also sets ZF iff start_index == 0.
+  // Only leaq and movq follow before the at-start branch consumes ZF, and both
+  // are flag-neutral on x86-64, so the flag survives.
+  __ negq(rax);
+  __ leaq(rax, Operand(rdi, rax, CharSizeScaleFactor(), -char_size()));
   // Store this value in a local variable, for use when clearing
   // position registers.
   __ movq(Operand(rbp, kStringStartMinusOneOffset), rax);
-
-  // Initialize code object pointer.
-  __ Move(code_object_pointer(), masm_.CodeObject());
 
   Label load_char_start_regexp;  // Execution restarts here for global regexps.
   {
     Label start_regexp;
 
     // Load newline if index is at start, previous character otherwise.
-    __ cmpl(Operand(rbp, kStartIndexOffset), Immediate(0));
-    __ j(not_equal, &load_char_start_regexp, Label::kNear);
+    // ZF is still set from the negq of start_index above.
+    __ j(not_zero, &load_char_start_regexp, Label::kNear);
     __ Move(current_character(), '\n');
     __ jmp(&start_regexp, Label::kNear);
 
