@@ -440,19 +440,25 @@ void MacroAssembler::Call(Label* target) {
 }
 
 void MacroAssembler::Push(Handle<HeapObject> handle) {
-  mov(r0, Operand(handle));
-  push(r0);
+  UseScratchRegisterScope temps(this);
+  Register scratch = temps.Acquire();
+  mov(scratch, Operand(handle));
+  push(scratch);
 }
 
 void MacroAssembler::Push(Tagged<Smi> smi) {
-  mov(r0, Operand(smi));
-  push(r0);
+  UseScratchRegisterScope temps(this);
+  Register scratch = temps.Acquire();
+  mov(scratch, Operand(smi));
+  push(scratch);
 }
 
 void MacroAssembler::Push(Tagged<TaggedIndex> index) {
   // TaggedIndex is the same as Smi for 32 bit archs.
-  mov(r0, Operand(static_cast<uint32_t>(index.value())));
-  push(r0);
+  UseScratchRegisterScope temps(this);
+  Register scratch = temps.Acquire();
+  mov(scratch, Operand(static_cast<uint32_t>(index.value())));
+  push(scratch);
 }
 
 void MacroAssembler::PushArray(Register array, Register size, Register scratch,
