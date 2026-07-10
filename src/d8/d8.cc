@@ -5938,6 +5938,19 @@ class InspectorClient : public v8_inspector::V8InspectorClient {
     context_.Reset(isolate_, global_context);
   }
 
+  ~InspectorClient() override {
+    // The InspectorClient is stack-allocated in RunMainIsolate(). Async tasks
+    // (e.g. WebAssembly compilation) may outlive that frame and later invoke
+    // `send()` in the old context. Clear the raw pointer we stashed in the
+    // context's embedder data so those calls fail safely instead of touching
+    // dead stack memory.
+    if (!isolate_) return;
+    HandleScope scope(isolate_);
+    Local<Context> context = context_.Get(isolate_);
+    context->SetAlignedPointerInEmbedderData(kInspectorClientIndex, nullptr,
+                                             kInspectorClientTag);
+  }
+
   void runMessageLoopOnPause(int contextGroupId) override {
     v8::Isolate::AllowJavascriptExecutionScope allow_script(isolate_);
     v8::HandleScope handle_scope(isolate_);
@@ -5977,7 +5990,7 @@ class InspectorClient : public v8_inspector::V8InspectorClient {
     InspectorClient* inspector_client = static_cast<InspectorClient*>(
         context->GetAlignedPointerFromEmbedderData(kInspectorClientIndex,
                                                    kInspectorClientTag));
-    return inspector_client->session_.get();
+    return inspector_client ? inspector_client->session_.get() : nullptr;
   }
 
   Local<Context> ensureDefaultContextInGroup(int group_id) override {
@@ -5996,6 +6009,7 @@ class InspectorClient : public v8_inspector::V8InspectorClient {
     Local<String> message = info[0]->ToString(context).ToLocalChecked();
     v8_inspector::V8InspectorSession* session =
         InspectorClient::GetSession(context);
+    if (!session) return;
     uint32_t length = message->Length();
     std::unique_ptr<uint16_t[]> buffer(new uint16_t[length]);
     message->Write(isolate, 0, length, buffer.get());
@@ -6014,7 +6028,7 @@ class InspectorClient : public v8_inspector::V8InspectorClient {
   std::unique_ptr<v8_inspector::V8Inspector::Channel> channel_;
   bool is_paused = false;
   Global<Context> context_;
-  Isolate* isolate_;
+  Isolate* isolate_ = nullptr;
 };
 
 SourceGroup::~SourceGroup() {
