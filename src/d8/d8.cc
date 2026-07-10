@@ -62,6 +62,7 @@
 #include "src/debug/debug-interface.h"
 #include "src/deoptimizer/deoptimizer.h"
 #include "src/diagnostics/basic-block-profiler.h"
+#include "src/execution/execution.h"
 #include "src/execution/microtask-queue.h"
 #include "src/execution/v8threads.h"
 #include "src/execution/vm-state-inl.h"
@@ -5888,17 +5889,27 @@ class InspectorFrontend final : public v8_inspector::V8Inspector::Channel {
     }
     if (callback->IsFunction()) {
       v8::TryCatch try_catch(isolate_);
-      Local<Value> args[] = {message};
-      USE(callback.As<Function>()->Call(context, Undefined(isolate_), 1, args));
+      i::Isolate* i_isolate = reinterpret_cast<i::Isolate*>(isolate_);
+      i::DirectHandle<i::Object> i_callback =
+          Utils::OpenDirectHandle(*callback);
+      i::DirectHandle<i::Object> i_receiver =
+          i_isolate->factory()->undefined_value();
+      i::DirectHandle<i::Object> i_args[] = {Utils::OpenDirectHandle(*message)};
+      i::MaybeDirectHandle<i::Object> maybe_exception;
+      std::ignore = i::Execution::TryCall(
+          i_isolate, i_callback, i_receiver, base::VectorOf(i_args),
+          i::Execution::MessageHandling::kKeepPending, &maybe_exception);
 #ifdef DEBUG
-      if (try_catch.HasCaught() && !try_catch.HasTerminated() &&
-          !i::v8_flags.fuzzing) {
-        Local<Object> exception = try_catch.Exception().As<Object>();
+      i::DirectHandle<i::Object> i_exception;
+      if (maybe_exception.ToHandle(&i_exception) &&
+          !try_catch.HasTerminated() && !i::v8_flags.fuzzing) {
+        Local<Value> exception = Utils::ToLocal(i_exception);
+        Local<Object> exception_obj = exception.As<Object>();
         Local<String> key = v8::String::NewFromUtf8Literal(
             isolate_, "message", NewStringType::kInternalized);
         Local<String> expected = v8::String::NewFromUtf8Literal(
             isolate_, "Maximum call stack size exceeded");
-        Local<Value> value = exception->Get(context, key).ToLocalChecked();
+        Local<Value> value = exception_obj->Get(context, key).ToLocalChecked();
         DCHECK(value->StrictEquals(expected));
       }
 #endif
