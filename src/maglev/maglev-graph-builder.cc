@@ -8568,7 +8568,7 @@ MaybeReduceResult MaglevGraphBuilder::TryReduceGeneratorPrototypeNext(
   ValueNode* receiver = args.receiver();
   if (!receiver) return {};
 
-  RETURN_IF_ABORT(BuildCheckInstanceType(receiver, NodeType::kUnknown,
+  RETURN_IF_ABORT(BuildCheckInstanceType(receiver, NodeType::kJSGeneratorObject,
                                          JS_GENERATOR_OBJECT_TYPE,
                                          JS_GENERATOR_OBJECT_TYPE));
 

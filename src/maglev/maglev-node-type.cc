@@ -36,6 +36,9 @@ NodeType StaticTypeForMap(compiler::MapRef map,
     return NodeType::kCallable;
   }
   if (map.IsJSDataViewMap()) return NodeType::kJSDataView;
+  if (map.instance_type() == JS_GENERATOR_OBJECT_TYPE) {
+    return NodeType::kJSGeneratorObject;
+  }
   if (map.IsJSReceiverMap()) {
     // JSReceiver but not any of the above.
     return NodeType::kOtherJSReceiver;
@@ -91,9 +94,13 @@ bool IsInstanceOfLeafNodeType(compiler::MapRef map, NodeType type,
       return map.is_callable() && !map.IsJSFunctionMap();
     case NodeType::kJSDataView:
       return map.IsJSDataViewMap();
+    case NodeType::kJSGeneratorObject:
+      return map.instance_type() == JS_GENERATOR_OBJECT_TYPE;
     case NodeType::kOtherJSReceiver:
       return map.IsJSReceiverMap() && !map.IsJSArrayMap() &&
-             !map.is_callable() && !map.IsStringWrapperMap();
+             !map.is_callable() && !map.IsStringWrapperMap() &&
+             !map.IsJSDataViewMap() &&
+             map.instance_type() != JS_GENERATOR_OBJECT_TYPE;
     case NodeType::kOtherHeapObject:
       return !map.IsHeapNumberMap() && !map.IsOddballMap() &&
              !map.IsContextMap() && !map.IsSymbolMap() && !map.IsStringMap() &&

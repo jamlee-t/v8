@@ -1867,7 +1867,8 @@ TF_BUILTIN(CheckMaglevType, CodeStubAssembler) {
   BIND(&is_js_receiver);
   {
     Label is_js_array(this), is_js_data_view(this), is_primitive_wrapper(this),
-        is_js_function(this), is_string_wrapper(this), is_other_callable(this);
+        is_js_function(this), is_string_wrapper(this), is_other_callable(this),
+        is_js_generator_object(this);
 
     GotoIf(Word32Equal(instance_type, Int32Constant(JS_ARRAY_TYPE)),
            &is_js_array);
@@ -1875,6 +1876,8 @@ TF_BUILTIN(CheckMaglevType, CodeStubAssembler) {
            &is_js_data_view);
     GotoIf(Word32Equal(instance_type, Int32Constant(JS_PRIMITIVE_WRAPPER_TYPE)),
            &is_primitive_wrapper);
+    GotoIf(Word32Equal(instance_type, Int32Constant(JS_GENERATOR_OBJECT_TYPE)),
+           &is_js_generator_object);
     GotoIf(
         IsInRange(instance_type, FIRST_JS_FUNCTION_TYPE, LAST_JS_FUNCTION_TYPE),
         &is_js_function);
@@ -1908,6 +1911,9 @@ TF_BUILTIN(CheckMaglevType, CodeStubAssembler) {
 
     BIND(&is_string_wrapper);
     CheckType(maglev::NodeType::kStringWrapper);
+
+    BIND(&is_js_generator_object);
+    CheckType(maglev::NodeType::kJSGeneratorObject);
 
     BIND(&is_other_callable);
     CheckType(maglev::NodeType::kOtherCallable);
