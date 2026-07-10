@@ -344,15 +344,17 @@ ConcurrentMarking::ConcurrentMarking(Heap* heap, WeakObjects* weak_objects)
   // Concurrent marking requires atomic object field writes.
   CHECK(!v8_flags.concurrent_marking);
 #endif
-  int max_tasks;
+  uint32_t max_tasks;
   if (v8_flags.concurrent_marking_max_worker_num == 0) {
-    max_tasks = V8::GetCurrentPlatform()->NumberOfWorkerThreads();
+    int num_threads = V8::GetCurrentPlatform()->NumberOfWorkerThreads();
+    DCHECK_GE(num_threads, 0);
+    max_tasks = static_cast<uint32_t>(num_threads);
   } else {
     max_tasks = v8_flags.concurrent_marking_max_worker_num;
   }
 
   task_state_.reserve(max_tasks + 1);
-  for (int i = 0; i <= max_tasks; ++i) {
+  for (uint32_t i = 0; i <= max_tasks; ++i) {
     task_state_.emplace_back(std::make_unique<TaskState>());
   }
 }

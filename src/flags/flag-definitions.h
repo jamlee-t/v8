@@ -2642,7 +2642,7 @@ DEFINE_BOOL(concurrent_marking, true, "use concurrent marking")
 // stores.
 DEFINE_BOOL(concurrent_marking, false, "use concurrent marking")
 #endif
-DEFINE_INT(
+DEFINE_UINT(
     concurrent_marking_max_worker_num, 7,
     "max worker number of concurrent marking, 0 for NumberOfWorkerThreads")
 DEFINE_BOOL(concurrent_array_buffer_sweeping, true,
