@@ -1390,8 +1390,12 @@ void LiftoffAssembler::MoveStackValue(uint32_t dst_offset, uint32_t src_offset,
 template <>
 inline void LiftoffAssembler::Move(Register dst, Register src, ValueKind kind) {
   DCHECK_NE(dst, src);
-  // TODO(ksreten): Handle different sizes here.
-  MacroAssembler::Move(dst, src);
+  if (kind == kI32) {
+    MacroAssembler::slli_w(dst, src, 0);
+  } else {
+    DCHECK(kI64 == kind || is_reference(kind));
+    MacroAssembler::Move(dst, src);
+  }
 }
 
 template <>

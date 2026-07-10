@@ -3566,7 +3566,13 @@ void InstructionSelector::VisitNode(OpIndex node) {
           if constexpr (Is64()) {
             DCHECK_EQ(cast.kind, TaggedBitcastOp::Kind::kSmi);
             DCHECK(SmiValuesAre31Bits());
+// On the LoongArch64 platform, 32-bit integers should always be
+// sign-extended.
+#if V8_TARGET_ARCH_LOONG64
+            return VisitTruncateInt64ToInt32(node);
+#else
             return VisitBitcastSmiToWord(node);
+#endif
           } else {
             return VisitBitcastTaggedToWord(node);
           }
@@ -3585,7 +3591,11 @@ void InstructionSelector::VisitNode(OpIndex node) {
         case multi(Rep::Compressed(), Rep::Word32()):
           MarkAsWord32(node);
           if (cast.kind == TaggedBitcastOp::Kind::kSmi) {
+#if V8_TARGET_ARCH_LOONG64
+            return VisitTruncateInt64ToInt32(node);
+#else
             return VisitBitcastSmiToWord(node);
+#endif
           } else {
             return VisitBitcastTaggedToWord(node);
           }
