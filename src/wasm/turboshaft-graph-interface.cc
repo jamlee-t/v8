@@ -8889,7 +8889,10 @@ class TurboshaftGraphBuildingInterface
     // For tail calls that we transform to regular calls, we need to set the
     // call's position to that of the inlined call node to get correct stack
     // traces.
-    if (check_for_exception == CheckForException::kCatchInParentFrame) {
+    // In unreachable code the call is non-existent (OpIndex::Invalid()), so
+    // there is no operation to attach a position to.
+    if (check_for_exception == CheckForException::kCatchInParentFrame &&
+        !__ generating_unreachable_operations()) {
       __ output_graph().operation_origins()[call] = WasmPositionToOpIndex(
           parent_position_.ScriptOffset(),
           parent_position_.InliningId() == SourcePosition::kNotInlined
