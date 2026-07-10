@@ -338,7 +338,9 @@ class ZoneVector {
       size_t count = last - first;
       size_t assignable;
       position = PrepareForInsertion(pos, count, &assignable);
-      if constexpr (std::is_trivially_copyable_v<T>) {
+      if constexpr (std::is_trivially_copyable_v<T> && std::is_pointer_v<It> &&
+                    std::is_same_v<std::remove_cv_t<std::remove_pointer_t<It>>,
+                                   std::remove_cv_t<T>>) {
         base::MemCopy(position, first, count * sizeof(T));
       } else {
         CopyingOverwrite(position, first, first + assignable);
