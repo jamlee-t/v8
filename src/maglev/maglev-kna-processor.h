@@ -99,6 +99,10 @@ class RecomputeKnownNodeAspectsProcessor {
     }
     DCHECK_NOT_NULL(known_node_aspects_);
 
+    if (block->is_exception_handler_block()) {
+      known_node_aspects_->ClearAvailableExpressions();
+    }
+
     // We might now have more accurate types for phi inputs; recompute the phi
     // types based on them.
     RecomputePhiTypes(block);
