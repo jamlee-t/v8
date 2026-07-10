@@ -2873,9 +2873,13 @@ DEFINE_BOOL(fuzzer_gc_analysis, false,
 DEFINE_INT(stress_marking, 0,
            "force marking at random points between 0 and X (inclusive) percent "
            "of the regular marking start limit")
+DEFINE_REQUIREMENT(v8_flags.stress_marking >= 0)
+DEFINE_REQUIREMENT(v8_flags.stress_marking <= 100)
 DEFINE_INT(stress_scavenge, 0,
            "force scavenge at random points between 0 and X (inclusive) "
            "percent of the new space capacity")
+DEFINE_REQUIREMENT(v8_flags.stress_scavenge >= 0)
+DEFINE_REQUIREMENT(v8_flags.stress_scavenge <= 100)
 DEFINE_VALUE_IMPLICATION(fuzzer_gc_analysis, stress_marking, 99)
 DEFINE_VALUE_IMPLICATION(fuzzer_gc_analysis, stress_scavenge, 99)
 DEFINE_BOOL(
