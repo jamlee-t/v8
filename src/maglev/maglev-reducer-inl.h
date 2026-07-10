@@ -53,6 +53,7 @@ template <typename NodeT, typename... Args>
 ReduceResult MaglevReducer<BaseT>::AddNewNode(
     std::initializer_list<ValueNode*> inputs, Args&&... args) {
   static_assert(IsFixedInputNode<NodeT>());
+  DCHECK_EQ(inputs.size(), NodeT::kInputCount);
   if constexpr (Node::participate_in_cse(Node::opcode_of<NodeT>) &&
                 ReducerBaseWithKNA<BaseT>) {
     if (v8_flags.maglev_cse) {
@@ -71,6 +72,7 @@ template <typename NodeT, typename... Args>
 NodeT* MaglevReducer<BaseT>::AddNewNodeNoInputConversion(
     std::initializer_list<ValueNode*> inputs, Args&&... args) {
   static_assert(IsFixedInputNode<NodeT>());
+  DCHECK_EQ(inputs.size(), NodeT::kInputCount);
   if constexpr (Node::participate_in_cse(Node::opcode_of<NodeT>) &&
                 ReducerBaseWithKNA<BaseT>) {
     if (v8_flags.maglev_cse) {

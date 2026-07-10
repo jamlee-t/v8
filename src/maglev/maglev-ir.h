@@ -9850,7 +9850,12 @@ class StringLocaleCompareIntl
 
 class StringConcat : public FixedInputValueNodeT<2, StringConcat> {
  public:
-  explicit StringConcat(uint64_t bitfield) : Base(bitfield) {}
+  using MinLengthField = NextBitField<uint32_t, 8>;
+  static constexpr uint32_t kNoMinLength = MinLengthField::kMax;
+  static_assert(kNoMinLength > ConsString::kMinLength);
+
+  explicit StringConcat(uint64_t bitfield)
+      : Base(bitfield | MinLengthField::encode(kNoMinLength)) {}
 
   static constexpr OpProperties kProperties =
       OpProperties::Call() | OpProperties::CanAllocate() |
@@ -9862,6 +9867,19 @@ class StringConcat : public FixedInputValueNodeT<2, StringConcat> {
   void GenerateCode(MaglevAssembler*, const ProcessingState&);
 
   NodeType type() const { return NodeType::kString; }
+
+  template <typename Cb>
+  uint32_t MinLength(const Cb& Compute) {
+    uint32_t cur = MinLengthField::decode(bitfield());
+    if (cur == kNoMinLength) {
+      cur = Compute();
+      if (cur >= kNoMinLength) {
+        cur = kNoMinLength - 1;
+      }
+      set_bitfield(MinLengthField::update(bitfield(), cur));
+    }
+    return cur;
+  }
 };
 
 /*

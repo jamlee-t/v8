@@ -1888,31 +1888,36 @@ ReduceResult MaglevGraphBuilder::BuildNewConsStringMap(ValueNode* left,
   return AddNewNode<ConsStringMap>({left_map, right_map});
 }
 
-size_t MaglevGraphBuilder::StringLengthStaticLowerBound(ValueNode* string,
-                                                        int max_depth) {
+namespace {
+bool IsConsString(ValueNode* string) {
+  if (auto alloc = string->TryCast<InlinedAllocation>()) {
+    return alloc->object()->object_type() == vobj::ObjectType::kConsString;
+  }
+  return string->Is<NewConsString>();
+}
+}  // namespace
+
+uint32_t MaglevGraphBuilder::StringLengthStaticLowerBound(ValueNode* string,
+                                                          int max_depth) {
   if (auto maybe_constant = TryGetConstant<String>(string)) {
     if (maybe_constant->IsString()) {
       return maybe_constant->AsString().length();
     }
   }
+  if (IsConsString(string)) {
+    return ConsString::kMinLength;
+  }
   switch (string->opcode()) {
     case Opcode::kNumberToString:
       return 1;
-    case Opcode::kInlinedAllocation:
-      // TODO(olivf): Add a NodeType::kConsString instead of this check.
-      if (string->Cast<InlinedAllocation>()->object()->object_type() ==
-          vobj::ObjectType::kConsString) {
-        return ConsString::kMinLength;
-      }
-      break;
-    case Opcode::kNewConsString:
-      return ConsString::kMinLength;
     case Opcode::kStringConcat:
       if (max_depth == 0) return 0;
-      return StringLengthStaticLowerBound(string->input(0).node(),
-                                          max_depth - 1) +
-             StringLengthStaticLowerBound(string->input(1).node(),
-                                          max_depth - 1);
+      return string->Cast<StringConcat>()->MinLength([&]() {
+        return StringLengthStaticLowerBound(string->input(0).node(),
+                                            max_depth - 1) +
+               StringLengthStaticLowerBound(string->input(1).node(),
+                                            max_depth - 1);
+      });
     case Opcode::kPhi: {
       // For the builder pattern where the inputs are cons strings, we will see
       // a phi from the Select that compares against the empty string. We
@@ -1924,10 +1929,10 @@ size_t MaglevGraphBuilder::StringLengthStaticLowerBound(ValueNode* string,
           (phi->is_loop_phi() && phi->is_unmerged_loop_phi())) {
         return 0;
       }
-      size_t overall_min_length =
+      auto overall_min_length =
           StringLengthStaticLowerBound(phi->input(0).node(), max_depth - 1);
       for (int i = 1; i < phi->input_count(); ++i) {
-        size_t min =
+        auto min =
             StringLengthStaticLowerBound(phi->input(i).node(), max_depth - 1);
         if (min < overall_min_length) {
           overall_min_length = min;
@@ -1952,48 +1957,68 @@ MaybeReduceResult MaglevGraphBuilder::TryBuildNewConsString(
 
   size_t left_min_length = StringLengthStaticLowerBound(left);
   size_t right_min_length = StringLengthStaticLowerBound(right);
-  bool result_is_cons_string =
-      left_min_length + right_min_length >= ConsString::kMinLength;
 
-  // TODO(olivf): Support the fast case with a non-cons string fallback.
-  if (!result_is_cons_string) {
-    return MaybeReduceResult::Fail();
+  // If the right hand side is a ConsString, then we can create a ConsString.
+  // This doesn't work with the left hand side, since the right hand side of a
+  // ConsString cannot be the empty string except when the left hand side is a
+  // SeqString or External string.
+  bool unconditionally =
+      IsConsString(right) || (right_min_length > 0 && IsConsString(left));
+
+  if (!unconditionally &&
+      (left_min_length + right_min_length < ConsString::kMinLength)) {
+    return ReduceResult::Fail();
+  }
+
+  // Check the string_length_protector since we need to bail on overflow.
+  compiler::PropertyCellRef string_length_protector = MakeRef(
+      broker(), broker()->isolate()->factory()->string_length_protector());
+  string_length_protector.CacheAsProtector(broker());
+  if (string_length_protector.value(broker()).AsSmi() !=
+      Protectors::kProtectorValid) {
+    return ReduceResult::Fail();
   }
 
   ValueNode* left_length;
   GET_VALUE_OR_ABORT(left_length, BuildLoadStringLength(left));
+  if (TryGetInt32Constant(left_length) == 0) return right;
+
   ValueNode* right_length;
   GET_VALUE_OR_ABORT(right_length, BuildLoadStringLength(right));
+  if (TryGetInt32Constant(right_length) == 0) return left;
+
+  ValueNode* new_length;
+  MaybeReduceResult folded =
+      reducer_.TryFoldInt32BinaryOperation<Operation::kAdd>(left_length,
+                                                            right_length);
+  if (folded.HasValue()) {
+    new_length = folded.value();
+  } else {
+    GET_VALUE_OR_ABORT(new_length, AddNewNode<Int32AddWithOverflow>(
+                                       {left_length, right_length}));
+  }
+
+  RETURN_IF_ABORT(TryBuildCheckInt32Condition(
+      new_length, GetInt32Constant(String::kMaxLength),
+      AssertCondition::kUnsignedLessThanEqual,
+      DeoptimizeReason::kStringTooLarge));
 
   auto BuildConsString = [&]() -> ReduceResult {
-    ValueNode* new_length;
-    MaybeReduceResult folded =
-        reducer_.TryFoldInt32BinaryOperation<Operation::kAdd>(left_length,
-                                                              right_length);
-    if (folded.HasValue()) {
-      new_length = folded.value();
-    } else {
-      GET_VALUE_OR_ABORT(new_length, AddNewNode<Int32AddWithOverflow>(
-                                         {left_length, right_length}));
-    }
-
-    RETURN_IF_ABORT(TryBuildCheckInt32Condition(
-        new_length, GetInt32Constant(String::kMaxLength),
-        AssertCondition::kUnsignedLessThanEqual,
-        DeoptimizeReason::kStringTooLarge));
-
     if (is_turbolev()) {
-      // TODO(dmercadier): This can be removed once the Turbolev escape
-      // analysis can handle VirtualConsStrings.
+      // TODO(dmercadier): This can be removed once the Turbolev
+      // escape analysis can handle VirtualConsStrings.
       return AddNewNode<NewConsString>({new_length, left, right});
     }
-
     ValueNode* new_map;
     GET_VALUE_OR_ABORT(new_map, BuildNewConsStringMap(left, right));
     VirtualObject* cons_string =
         reducer_.CreateConsString(new_map, new_length, left, right);
     return reducer_.BuildInlinedAllocation(cons_string, allocation_type);
   };
+
+  if (unconditionally) {
+    return BuildConsString();
+  }
 
   return Select(
       [&](BranchBuilder& builder) {

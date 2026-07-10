@@ -1557,7 +1557,7 @@ class MaglevGraphBuilder {
   MaybeReduceResult TryBuildStringConcat(ValueNode* left, ValueNode* right);
   ReduceResult BuildStringConcat(ValueNode* left, ValueNode* right);
   ReduceResult BuildNewConsStringMap(ValueNode* left, ValueNode* right);
-  size_t StringLengthStaticLowerBound(ValueNode* string, int max_depth = 2);
+  uint32_t StringLengthStaticLowerBound(ValueNode* string, int max_depth = 2);
   MaybeReduceResult TryBuildNewConsString(
       ValueNode* left, ValueNode* right,
       AllocationType allocation_type = AllocationType::kYoung);
