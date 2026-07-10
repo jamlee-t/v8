@@ -8227,6 +8227,11 @@ int Shell::Main(int argc, char* argv[]) {
               // Isolate to avoid retaining stray tasks with v8::Global pointing
               // into a reclaimed Isolate.
               platform::NotifyIsolateShutdown(g_default_platform, isolate2);
+#ifdef V8_ENABLE_HARDWARE_WATCHPOINT_SUPPORT
+              if (Shell::options.memory_corruption_via_watchpoints) {
+                ResetAllHardwareWatchpoints();
+              }
+#endif  // V8_ENABLE_HARDWARE_WATCHPOINT_SUPPORT
               isolate2->Dispose();
             });
 
