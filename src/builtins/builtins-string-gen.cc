@@ -539,13 +539,28 @@ TNode<String> StringBuiltinsAssembler::StringAdd(
     TNode<IntPtrT> word_left_length = Signed(ChangeUint32ToWord(left_length));
     TNode<IntPtrT> word_right_length = Signed(ChangeUint32ToWord(right_length));
 
+    // Allocating the result string below may trigger a GC that internalizes
+    // {var_left} or {var_right} in place, turning a sequential string into a
+    // ThinString. The copies below read them with their (now stale) sequential
+    // layout, so re-check after the allocation and fall back to the runtime
+    // (which handles any representation) if either transitioned. {result} is
+    // only committed once the check passes, so the bailout leaves it unbound
+    // like the other paths to {runtime}.
+    auto bail_if_not_sequential = [&]() {
+      GotoIfNot(IsSequentialString(var_left.value()), &runtime);
+      GotoIfNot(IsSequentialString(var_right.value()), &runtime);
+    };
+
     Label two_byte(this);
     static_assert(kTwoByteStringTag == 0);
     GotoIf(IsNotSetWord32(Word32And(left_instance_type, right_instance_type),
                           kStringEncodingMask),
            &two_byte);
     // One-byte sequential string case
-    result = AllocateNonEmptySeqOneByteString(new_length);
+    TNode<String> one_byte_result =
+        AllocateNonEmptySeqOneByteString(new_length);
+    bail_if_not_sequential();
+    result = one_byte_result;
     CopyStringCharacters(var_left.value(), result.value(), IntPtrConstant(0),
                          IntPtrConstant(0), word_left_length,
                          String::ONE_BYTE_ENCODING, String::ONE_BYTE_ENCODING);
@@ -557,7 +572,10 @@ TNode<String> StringBuiltinsAssembler::StringAdd(
     BIND(&two_byte);
     {
       // Two-byte sequential string case
-      result = AllocateNonEmptySeqTwoByteString(new_length);
+      TNode<String> two_byte_result =
+          AllocateNonEmptySeqTwoByteString(new_length);
+      bail_if_not_sequential();
+      result = two_byte_result;
       Label left_two_byte(this);
       Label right_two_byte(this);
       GotoIf(IsNotSetWord32(left_instance_type, kStringEncodingMask),
