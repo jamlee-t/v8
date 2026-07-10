@@ -93,7 +93,7 @@ class GlobalSafepointInterruptTask : public CancelableTask {
 
 void IsolateSafepoint::InitiateGlobalSafepointScope(
     Isolate* initiator, PerClientSafepointData* client_data) {
-  shared_space_isolate()->global_safepoint()->AssertActive();
+  isolate()->global_safepoint()->AssertActive();
   LockMutex(initiator->main_thread_local_heap());
   CHECK_EQ(++active_safepoint_scopes_, 1);
   barrier_.Arm();
@@ -282,10 +282,6 @@ void IsolateSafepoint::AssertMainThreadIsOnlyThread() {
 }
 
 Isolate* IsolateSafepoint::isolate() const { return heap_->isolate(); }
-
-Isolate* IsolateSafepoint::shared_space_isolate() const {
-  return isolate()->shared_space_isolate();
-}
 
 std::optional<IsolateSafepointScope>
 IsolateSafepoint::ReachSafepointWithoutTriggeringGC() {

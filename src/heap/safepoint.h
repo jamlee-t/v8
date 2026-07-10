@@ -146,7 +146,6 @@ class IsolateSafepoint final {
   }
 
   Isolate* isolate() const;
-  Isolate* shared_space_isolate() const;
 
   Barrier barrier_;
   Heap* heap_;
