@@ -39,7 +39,6 @@ class V8_EXPORT_PRIVATE FlagHelpers {
 };
 
 struct Flag;
-Flag* FindFlagByPointer(const void* ptr);
 V8_EXPORT_PRIVATE Flag* FindFlagByName(const char* name);
 V8_EXPORT_PRIVATE Flag* FindImplicationFlagByName(const char* name);
 

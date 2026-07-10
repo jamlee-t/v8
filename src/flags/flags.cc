@@ -398,11 +398,33 @@ constexpr auto kFlagsMetadata = []() {
   return metadata;
 }();
 
-static_assert(std::any_of(kFlagsMetadata.begin(), kFlagsMetadata.end(),
-                          [](const FlagMetadata& entry) {
-                            return IsTestOnlyComment(entry.comment);
-                          }),
-              "Must have test-only flags");
+// Number of primary test-only flags.
+constexpr size_t kNumTestOnlyFlags = []() {
+  size_t count = 0;
+  for (size_t i = 0; i < kFlagsMetadata.size(); ++i) {
+    if (static_cast<int>(i) == kFlagsMetadata[i].canonical_index &&
+        IsTestOnlyComment(kFlagsMetadata[i].comment)) {
+      count++;
+    }
+  }
+  return count;
+}();
+
+// Indices of all test-only flags (primary flags only, no aliases).
+constexpr std::array<int, kNumTestOnlyFlags> kTestOnlyFlagIndices = []() {
+  std::array<int, kNumTestOnlyFlags> indices{};
+  size_t count = 0;
+  for (size_t i = 0; i < kFlagsMetadata.size(); ++i) {
+    if (static_cast<int>(i) == kFlagsMetadata[i].canonical_index &&
+        IsTestOnlyComment(kFlagsMetadata[i].comment)) {
+      indices[count++] = kFlagsMetadata[i].flag_index;
+    }
+  }
+  DCHECK_EQ(count, kNumTestOnlyFlags);
+  return indices;
+}();
+
+static_assert(kNumTestOnlyFlags > 0, "Must have test-only flags");
 
 // Number of flags plus aliases.
 constexpr size_t kNumAllFlags = kFlagsMetadata.size();
@@ -432,6 +454,16 @@ constexpr std::array<int, kNumFlags> kPrimaryToAllIndices = []() {
   return indices;
 }();
 
+// Crashes for not existing names.
+constexpr int FindFlagIndexByName(const char* name) {
+  for (size_t i = 0; i < kNumAllFlags; ++i) {
+    if (FlagHelpers::EqualNames(kFlagsMetadata[i].name, name)) {
+      return kFlagsMetadata[i].flag_index;
+    }
+  }
+  UNREACHABLE();
+}
+
 }  // namespace
 
 const char* Flag::name() const {
@@ -444,13 +476,6 @@ const char* Flag::comment() const {
   size_t index = this - flags;
   DCHECK_LT(index, kNumFlags);
   return kFlagsMetadata[kPrimaryToAllIndices[index]].comment;
-}
-
-Flag* FindFlagByPointer(const void* ptr) {
-  for (Flag& flag : flags) {
-    if (flag.PointsTo(ptr)) return &flag;
-  }
-  return nullptr;
 }
 
 // Optimized look-up of flags by name using binary search. Returns the canonical
@@ -1285,10 +1310,11 @@ class ImplicationProcessor {
 // Defines a contradiction and adds it to the 'contradictions' vector if at
 // least one of the two flags is set. We currently don't handle contradictions
 // when two default-on flags are turned off, because there are none.
-#define CONTRADICTION(flag1, flag2)                                  \
-  if (v8_flags.flag1 || v8_flags.flag2) {                            \
-    contradictions.emplace_back(FindFlagByPointer(&v8_flags.flag1),  \
-                                FindFlagByPointer(&v8_flags.flag2)); \
+#define CONTRADICTION(flag1, flag2)                              \
+  if (v8_flags.flag1 || v8_flags.flag2) {                        \
+    static constexpr int index1 = FindFlagIndexByName(#flag1);   \
+    static constexpr int index2 = FindFlagIndexByName(#flag2);   \
+    contradictions.emplace_back(&flags[index1], &flags[index2]); \
   }
 
 #define RESET_WHEN_FUZZING(flag) CONTRADICTION(flag, fuzzing)
@@ -1302,13 +1328,9 @@ void FlagList::ResolveContradictionsWhenFuzzing() {
   std::vector<std::tuple<Flag*, Flag*>> contradictions;
 
   // Automatically reset all test-only flags.
-  Flag* fuzzing_flag = FindFlagByPointer(&v8_flags.fuzzing);
-  for (size_t i = 0; i < kNumAllFlags; ++i) {
-    if (static_cast<int>(i) != kFlagsMetadata[i].canonical_index) continue;
-    if (IsTestOnlyComment(kFlagsMetadata[i].comment)) {
-      contradictions.emplace_back(&flags[kFlagsMetadata[i].flag_index],
-                                  fuzzing_flag);
-    }
+  static constexpr int fuzzing_flag_index = FindFlagIndexByName("fuzzing");
+  for (int index : kTestOnlyFlagIndices) {
+    contradictions.emplace_back(&flags[index], &flags[fuzzing_flag_index]);
   }
 
   // List of flags that lead to known contradictory cycles when both
@@ -1446,11 +1468,11 @@ void FlagList::ResolveContradictionsWhenFuzzing() {
     flag1->Reset();
   }
   if (!base::bits::IsPowerOfTwo(v8_flags.homomorphic_ic_count.value())) {
-    if (Flag* f = FindFlagByPointer(&v8_flags.homomorphic_ic_count)) {
-      std::cerr << "Warning: resetting flag --homomorphic-ic-count due to "
-                   "invalid value\n";
-      f->Reset();
-    }
+    static constexpr int homomorphic_ic_count_index =
+        FindFlagIndexByName("homomorphic-ic-count");
+    std::cerr << "Warning: resetting flag --homomorphic-ic-count due to "
+                 "invalid value\n";
+    flags[homomorphic_ic_count_index].Reset();
   }
   if ((v8_flags.trace_turbo || v8_flags.trace_turbo_graph) &&
       v8_flags.fuzzing_and_concurrent_recompilation) {
