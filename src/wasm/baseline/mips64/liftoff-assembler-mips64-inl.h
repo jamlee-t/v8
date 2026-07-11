@@ -499,7 +499,10 @@ void LiftoffAssembler::LoadConstant(LiftoffRegister reg, WasmValue value) {
 }
 
 void LiftoffAssembler::PrepareDebugTrap(MessageTemplate message) {
-  UNIMPLEMENTED();
+  UseScratchRegisterScope temps(this);
+  Register scratch = temps.Acquire();
+  li(scratch, Operand(Smi::FromInt(static_cast<int>(message))));
+  Push(scratch);
 }
 
 void LiftoffAssembler::LoadInstanceDataFromFrame(Register dst) {
