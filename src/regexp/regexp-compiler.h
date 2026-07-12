@@ -236,6 +236,16 @@ class BoyerMooreLookahead : public ZoneObject {
   // caller should fall back to another strategy.
   bool EmitSkipInstructions(RegExpMacroAssembler* masm);
 
+  // Exposes the BitInTable skip-scan inputs without emitting: picks the most
+  // discriminating lookahead interval and builds the boolean (and SIMD nibble)
+  // table for it. *offset is the lookahead position to test (the SkipUntil*
+  // cp_offset); *advance_by is the per-iteration stride. Returns false if no
+  // worthwhile interval exists. Used by ChoiceNode::EmitOneOfMasked3Search to
+  // build the leading scan of a fused SkipUntilOneOfMasked3.
+  bool BuildSkipTable(RegExpMacroAssembler* masm, int* offset, int* advance_by,
+                      Handle<ByteArray>* table,
+                      Handle<ByteArray>* nibble_table);
+
  private:
   // This is the value obtained by EatsAtLeast.  If we do not have at least this
   // many characters left in the sample string then the match is bound to fail.

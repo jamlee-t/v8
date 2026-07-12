@@ -3086,6 +3086,35 @@ bool BoyerMooreLookahead::EmitSkipInstructions(RegExpMacroAssembler* masm) {
   return true;
 }
 
+bool BoyerMooreLookahead::BuildSkipTable(RegExpMacroAssembler* masm,
+                                         int* offset, int* advance_by,
+                                         Handle<ByteArray>* table,
+                                         Handle<ByteArray>* nibble_table) {
+  const int kSize = RegExpMacroAssembler::kTableSize;
+  const int kBitsPerByte = 8;
+  int min_lookahead = 0;
+  int max_lookahead = 0;
+  if (!FindWorthwhileInterval(&min_lookahead, &max_lookahead)) return false;
+
+  Factory* factory = masm->isolate()->factory();
+  Handle<ByteArray> boolean_skip_table =
+      factory->NewByteArray(kSize, AllocationType::kOld);
+  // Always build the SIMD nibble table: the SkipUntilOneOfMasked3 lowering that
+  // consumes this table embeds it unconditionally, so (unlike the standalone
+  // SkipUntilBitInTable path) we cannot gate it on SkipUntilBitInTableUseSimd.
+  static_assert(kSize == 128);
+  Handle<ByteArray> nibbles =
+      factory->NewByteArray(kSize / kBitsPerByte, AllocationType::kOld);
+  const int skip_distance = max_lookahead + 1 - min_lookahead;
+  GetSkipTable(min_lookahead, max_lookahead, boolean_skip_table, nibbles);
+
+  *offset = max_lookahead;
+  *advance_by = skip_distance;
+  *table = boolean_skip_table;
+  *nibble_table = nibbles;
+  return true;
+}
+
 /* Code generation for choice nodes.
  *
  * We generate quick checks that do a mask and compare to eliminate a
@@ -3427,7 +3456,12 @@ int ChoiceNode::EmitOptimizedUnanchoredSearch(
       printer->PrintBoyerMooreLookahead(bm);
     }
 #endif
-    if (bm->EmitSkipInstructions(macro_assembler)) {
+    // Prefer the fused SkipUntilOneOfMasked3 over a bare skip-table scan when
+    // the body is a shared-prefix 3-way alternation: it keeps the per-candidate
+    // dispatch inside the SIMD scan loop instead of leaving it to scalar
+    // EmitChoices code at every table hit.
+    if (EmitOneOfMasked3Search(compiler, bm) ||
+        bm->EmitSkipInstructions(macro_assembler)) {
       // BM owns the search; do not attempt the inline SkipUntil* scan paths.
       *bm_scan_emitted = true;
     }
@@ -3903,6 +3937,132 @@ void ChoiceNode::EmitSkipUntilSearchPrelude(Compiler* compiler, Trace* trace,
   masm->SkipUntilBitInTable(kScanCpOffset, table, nibble_table, kScanAdvanceBy,
                             kBoundsCheckOffset, &cont, &cont);
   masm->Bind(&cont);
+}
+
+bool ChoiceNode::EmitOneOfMasked3Search(Compiler* compiler,
+                                        BoyerMooreLookahead* bm) {
+  if (!v8_flags.regexp_simd_in_rc) return false;
+  // The op lowering only handles 1-byte (LATIN1) input.
+  if (!compiler->one_byte()) return false;
+
+  // Shape: alt0 = <wrapper> -> Text(prefix) -> Choice(3 forward Text alts),
+  // what RationalizeConsecutiveAtoms produces for a shared-prefix 3-way
+  // alternation (e.g. /<script|<style|<link/ -> '<' then (script|style|link)).
+  // The window covers the prefix and the three alternatives' heads.
+  Node* body =
+      FindBodyNodeUnderOneWrapper(alternatives_->at(0).node(), nullptr);
+  TextNode* prefix = body != nullptr ? body->AsTextNode() : nullptr;
+  if (prefix == nullptr || prefix->read_backward()) {
+    TRACE("* No SkipUntilOneOfMasked3 (not a shared-prefix 3-way alternation)");
+    return false;
+  }
+  ChoiceNode* choice =
+      SkipEatsAtLeastTags(prefix->on_success())->AsChoiceNode();
+  if (choice == nullptr || choice->AsLoopChoiceNode() != nullptr ||
+      choice->AsNegativeLookaroundChoiceNode() != nullptr) {
+    TRACE("* No SkipUntilOneOfMasked3 (not a shared-prefix 3-way alternation)");
+    return false;
+  }
+  static constexpr int kNumAlternatives = 3;  // The op dispatches three ways.
+  if (choice->alternatives()->length() != kNumAlternatives) {
+    TRACE("* No SkipUntilOneOfMasked3 (alternation is not 3-way)");
+    return false;
+  }
+  for (int i = 0; i < kNumAlternatives; i++) {
+    auto* guards = choice->alternatives()->at(i).guards();
+    if (guards != nullptr && guards->length() != 0) {
+      TRACE("* No SkipUntilOneOfMasked3 (guarded alternative)");
+      return false;
+    }
+    TextNode* alt = choice->alternatives()->at(i).node()->AsTextNode();
+    if (alt == nullptr || alt->read_backward()) {
+      TRACE("* No SkipUntilOneOfMasked3 (alternative is not forward text)");
+      return false;
+    }
+  }
+  const int prefix_len = prefix->Length();
+
+  // The op loads a 4-char window at offset 0 (combined check) and another at
+  // the prefix end (per-alt dispatch); both must be in bounds.
+  static constexpr int kSkipChars = 4;
+  if (bm->length() < prefix_len + kSkipChars) {
+    TRACE("* No SkipUntilOneOfMasked3 (search window too small)");
+    return false;
+  }
+
+  // bc0: the leading scan over BM's most discriminating lookahead position.
+  int scan_offset;
+  int advance_by;
+  Handle<ByteArray> table;
+  Handle<ByteArray> nibble_table;
+  if (!bm->BuildSkipTable(compiler->macro_assembler(), &scan_offset,
+                          &advance_by, &table, &nibble_table)) {
+    TRACE("* No SkipUntilOneOfMasked3 (no skip table)");
+    return false;
+  }
+
+  // QuickCheck masks: the combined (whole body) over the window at offset 0,
+  // and each alternative's head over the window at the prefix end. cont-routing
+  // makes these a prefilter only -- EmitChoices does the real, priority-correct
+  // match at a surviving candidate -- so loose over-approximations stay
+  // correct.
+  constexpr bool kPossiblyAtStart = false;
+  static constexpr int kCombinedBudget = 4;  // recurse prefix -> Choice
+  static constexpr int kAltBudget = 1;       // each alt is a plain Text
+  QuickCheckDetails combined(kSkipChars);
+  prefix->GetQuickCheckDetails(&combined, compiler, 0, kPossiblyAtStart,
+                               kCombinedBudget);
+  if (combined.cannot_match() || !combined.Rationalize(compiler->one_byte()) ||
+      combined.mask() == 0) {
+    TRACE("* No SkipUntilOneOfMasked3 (combined quick check unusable)");
+    return false;
+  }
+  QuickCheckDetails alt_qc[kNumAlternatives] = {QuickCheckDetails(kSkipChars),
+                                                QuickCheckDetails(kSkipChars),
+                                                QuickCheckDetails(kSkipChars)};
+  for (int i = 0; i < kNumAlternatives; i++) {
+    choice->alternatives()->at(i).node()->GetQuickCheckDetails(
+        &alt_qc[i], compiler, 0, kPossiblyAtStart, kAltBudget);
+    if (alt_qc[i].cannot_match() ||
+        !alt_qc[i].Rationalize(compiler->one_byte()) || alt_qc[i].mask() == 0) {
+      TRACE("* No SkipUntilOneOfMasked3 (alternative quick check unusable)");
+      return false;
+    }
+  }
+
+  // cont-routing: every exit (end-of-input and all three dispatch matches)
+  // lands on `cont`; the op's internal advance loop rejects non-candidates in
+  // SIMD. The caller falls through to EmitChoices, which matches the prefix +
+  // alternation (with correct priority) at the surviving candidate.
+  TRACE("* Emit SkipUntilOneOfMasked3 scan prelude");
+  RegExpMacroAssembler* masm = compiler->macro_assembler();
+  Label cont;
+  const int bounds = bm->length() - 1;
+  RegExpMacroAssembler::SkipUntilOneOfMasked3Args args;
+  args.bc0_cp_offset = scan_offset;
+  args.bc0_advance_by = advance_by;
+  args.bc0_table = table;
+  args.bc0_nibble_table = nibble_table;
+  args.bc1_bounds_check_offset = bounds;
+  args.bc1_on_failure = &cont;
+  args.bc1_cp_offset = 0;
+  args.bc2_characters = combined.value();
+  args.bc2_mask = combined.mask();
+  args.bc3_by = 1;
+  args.bc4_bounds_check_offset = bounds;
+  args.bc4_cp_offset = prefix_len;
+  args.bc5_characters = alt_qc[0].value();
+  args.bc5_mask = alt_qc[0].mask();
+  args.bc5_on_equal = &cont;
+  args.bc6_characters = alt_qc[1].value();
+  args.bc6_mask = alt_qc[1].mask();
+  args.bc6_on_equal = &cont;
+  args.bc7_characters = alt_qc[2].value();
+  args.bc7_mask = alt_qc[2].mask();
+  args.fallthrough_jump_target = &cont;
+  masm->SkipUntilOneOfMasked3(args);
+  masm->Bind(&cont);
+  return true;
 }
 
 bool ChoiceNode::MaybeEmitFixedLengthConsumeScan(Compiler* compiler,

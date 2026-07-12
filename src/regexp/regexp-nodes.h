@@ -756,6 +756,13 @@ class ChoiceNode : public Node {
   // (which emits the body at the candidate position), so there is no need to
   // report back whether the prelude fired.
   void EmitSkipUntilSearchPrelude(Compiler* compiler, Trace* trace, Node* body);
+  // Emitted from EmitOptimizedUnanchoredSearch (the Boyer-Moore seam). If the
+  // search body is Text(prefix) -> Choice(3 Texts) -- what a shared-prefix
+  // 3-way alternation factors into, e.g. /<script|<style|<link/ -- emits a
+  // SkipUntilOneOfMasked3 that fuses |bm|'s skip-table scan with a 3-way masked
+  // dispatch, routing every exit to one `cont`. Returns true if emitted, so the
+  // caller skips the bare table scan and falls through to EmitChoices.
+  bool EmitOneOfMasked3Search(Compiler* compiler, BoyerMooreLookahead* bm);
   // For a greedy one-byte character-class body, emit a single SkipUntilChar /
   // SkipUntilCharOrChar / SkipUntilCharAnd scan over its exit set in place of
   // the per-iteration body + back-edge (landing on |exit|), and return true.
