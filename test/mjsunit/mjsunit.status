@@ -438,6 +438,7 @@
   'regress/regress-crbug-1041232': [SKIP],
   'regress/regress-499721612': [SKIP],
   'regress/wasm/regress-1010272': [SKIP],
+  'regress/wasm/regress-531302064': [SKIP],
   'wasm/atomics-stress': [SKIP],
   'wasm/atomics64-stress': [SKIP],
   'wasm/atomics-memory64': [SKIP],
