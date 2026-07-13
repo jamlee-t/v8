@@ -28,12 +28,6 @@ namespace v8::internal::maglev {
 #define BLOCK_ID(b) b->id()
 #define PRINT_NODE(n) "n" << NODE_ID(n) << ": " << PrintNode(n)
 
-bool IsUnusedAndCanBeRemoved(ValueNode* node) {
-  if (node->properties().is_required_when_unused()) return false;
-  if (node->Is<ArgumentsElements>()) return false;
-  return !node->is_used();
-}
-
 ValueNode* EscapeAnalysisData::Get(InlinedAllocation* base, int offset) {
   DCHECK_EQ(base, TryGetCandidateInlinedAllocation(base));
   ObjectField addr = ObjectField{base, offset};
@@ -748,13 +742,8 @@ class CandidateAnalyzer {
   template <class NodeT>
     requires std::is_base_of_v<NodeBase, NodeT>
   ProcessResult Process(NodeT* node, const ProcessingState&) {
-    if constexpr (std::is_base_of_v<ValueNode, NodeT>) {
-      if (IsUnusedAndCanBeRemoved(static_cast<ValueNode*>(node))) {
-        // TODO(dmercadier): consider running proper DCE before escape analysis
-        // to not block escape analysis on dead nodes.
-        return ProcessResult::kContinue;
-      }
-    }
+    // TODO(dmercadier): consider running proper DCE before escape analysis
+    // to not block escape analysis on dead nodes.
 
     for (Input input : node->inputs()) {
       ValueNode* input_node = data_.ResolveBase(input);
