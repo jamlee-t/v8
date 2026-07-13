@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 // Flags: --enable-tracing --trace-path=test/mjsunit/d8/regress-506689382-v8-trace.json --trace-config=test/mjsunit/d8/regress-506689382-trace-config.json
+// Resources: test/mjsunit/d8/regress-506689382-trace-config.json
 
 'use strict';
 
