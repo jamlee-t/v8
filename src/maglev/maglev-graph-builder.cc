@@ -8542,6 +8542,24 @@ MaybeReduceResult MaglevGraphBuilder::TryReduceGeneratorPrototypeNext(
       GetSmiConstant(JSGeneratorObject::kGeneratorClosed);
   ValueNode* executing_constant =
       GetSmiConstant(JSGeneratorObject::kGeneratorExecuting);
+  ValueNode* next_constant = GetSmiConstant(JSGeneratorObject::kNext);
+
+  // If any of the constants have an empty type, we're in dead code, and the
+  // write barrier elision logic inside StoreTaggedFieldNoWriteBarrier will be
+  // confused. Bail out now. Ideally, this would be done inside
+  // BuildStoreTaggedFieldNoWriteBarrier, but 1) in the code below we want to
+  // assert there won't be deopts after we've called into user code, and we have
+  // no way to distinguish a abort (reducer_.BuildAbort()) from a deopt. 2)
+  // Other callers of BuildStoreTaggedField cannot handle bailouts either.
+  // TODO(marja): Fix that and put the abort inside BuildStoreTaggedField.
+
+  if (IsEmptyNodeType(GetType(closed_constant)) ||
+      IsEmptyNodeType(GetType(executing_constant)) ||
+      IsEmptyNodeType(GetType(next_constant))) {
+    // We must be in unreachable code. Avoid the CanElideWriteBarrier logic
+    // below.
+    return reducer_.BuildAbort(AbortReason::kUnreachable);
+  }
 
   MaglevSubGraphBuilder::Label generator_already_closed(&subgraph, 1);
   MaglevSubGraphBuilder::Label generator_finished(&subgraph, 1);
@@ -8562,8 +8580,7 @@ MaybeReduceResult MaglevGraphBuilder::TryReduceGeneratorPrototypeNext(
       AssertCondition::kNotEqual, DeoptimizeReason::kWrongValue));
 
   CHECK(BuildStoreTaggedFieldNoWriteBarrier(
-            receiver, GetSmiConstant(JSGeneratorObject::kNext),
-            offsetof(JSGeneratorObject, resume_mode_),
+            receiver, next_constant, offsetof(JSGeneratorObject, resume_mode_),
             StoreTaggedMode::kDefault)
             .IsDoneWithoutAbort());
 

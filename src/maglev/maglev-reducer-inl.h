@@ -514,6 +514,9 @@ ReduceResult MaglevReducer<BaseT>::BuildStoreTrustedPointerField(
 template <typename BaseT>
 bool MaglevReducer<BaseT>::CanElideWriteBarrier(ValueNode* object,
                                                 ValueNode* value) {
+  // Ideally, all callers would handle the "value has an empty type" outside.
+  // But this requires some more wiring to work. TODO(marja): Enable this:
+  // DCHECK(!IsEmptyNodeType(GetType(value)));
   if (value->Is<RootConstant>() || value->Is<ConsStringMap>()) return true;
   if (!IsEmptyNodeType(GetType(value)) && CheckType(value, NodeType::kSmi)) {
     return true;
