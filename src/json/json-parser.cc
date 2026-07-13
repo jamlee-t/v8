@@ -792,8 +792,10 @@ template <typename Char>
 template <bool should_track_json_source>
 Handle<JSObject> JsonParser<Char>::BuildJsonObject(const JsonContinuation& cont,
                                                    DirectHandle<Map> feedback) {
+  bool feedback_was_deprecated = false;
   if (!feedback.is_null() && feedback->is_deprecated()) {
     feedback = Map::Update(isolate_, feedback);
+    feedback_was_deprecated = true;
   }
   size_t start = cont.index();
   DCHECK_LE(start, property_stack_.size());
@@ -809,13 +811,16 @@ Handle<JSObject> JsonParser<Char>::BuildJsonObject(const JsonContinuation& cont,
   // JSDataObjectBuilder entirely.
   //
   // Note:
-  // 1. Any deprecated feedback map has already been migrated via Map::Update at
-  //    the start of BuildJsonObject.
+  // 1. If the original feedback map was deprecated, we must skip the fast path
+  //    because fast_keys_matched was verified against the old map and the
+  //    updated map may have a different descriptor layout or be a dictionary
+  //    map.
   // 2. IsFastElementsKind(feedback->elements_kind()) is required because we
   //    initialize object->set_elements(empty_fixed_array()). An empty fixed
   //    array is a valid backing store for any fast elements kind when element
   //    capacity is 0, but is invalid for dictionary elements maps.
   if (cont.fast_keys_matched && cont.elements == 0 && !feedback.is_null() &&
+      !feedback_was_deprecated &&
       IsFastElementsKind(feedback->elements_kind())) {
     // fast_keys_matched guarantees exact descriptor count alignment.
     DCHECK_EQ(length, feedback->NumberOfOwnDescriptors());

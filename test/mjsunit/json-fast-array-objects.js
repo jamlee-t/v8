@@ -51,3 +51,23 @@
   assertEquals(60, parsed[1].a);
   assertEquals(80, parsed[1].b);
 })();
+
+// Test that map transitions across child property parsing that deprecate feedback maps
+// or normalize maps to dictionary mode do not trigger fast-path DCHECK/memory bugs.
+(function TestDeprecatedMapSlowElementsTransition() {
+  let arr = [];
+  for (let i = 0; i < 1600; i++) {
+    arr.push(`{"a":1.1,"p${i}":1}`);
+  }
+  let str = `[{"a":1,"b":1},{"a":1,"b":1},{"a":2,"b":[${arr.join(',')}]}]`;
+  let res = JSON.parse(str);
+  assertEquals(3, res.length);
+  assertEquals(1, res[0].a);
+  assertEquals(1, res[0].b);
+  assertEquals(2, res[2].a);
+  assertEquals(1600, res[2].b.length);
+  assertEquals(1.1, res[2].b[0].a);
+  assertEquals(1, res[2].b[0].p0);
+  assertEquals(1.1, res[2].b[1599].a);
+  assertEquals(1, res[2].b[1599].p1599);
+})();
