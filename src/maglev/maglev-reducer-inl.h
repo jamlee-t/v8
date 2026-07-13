@@ -2015,7 +2015,8 @@ MaybeReduceResult
 MaglevReducer<BaseT>::TryBuildLoadFixedArrayElementConstantIndex(
     ValueNode* elements, int32_t index, LoadType type) {
   if (index < 0 || static_cast<uint32_t>(index) >= FixedArray::kMaxLength) {
-    return {};
+    // Has to be unreachable because of an earlier check.
+    return BuildAbort(AbortReason::kUnreachable);
   }
   if (compiler::OptionalFixedArrayRef fixed_array_ref =
           TryGetConstant<FixedArray>(elements)) {
