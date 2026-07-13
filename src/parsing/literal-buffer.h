@@ -114,7 +114,7 @@ class LiteralBuffer final {
     return iscntrl(code_unit) || isprint(code_unit);
   }
 
-  V8_INLINE void AddOneByteCharImpl(uint8_t one_byte_char) {
+  V8_INLINE void AddOneByteCharUnchecked(uint8_t one_byte_char) {
     backing_store_[position_] = one_byte_char;
     position_ += kOneByteSize;
   }
@@ -124,7 +124,7 @@ class LiteralBuffer final {
     if (V8_UNLIKELY(position_ >= backing_store_.size())) {
       return ExpandBufferAndAddOneByteChar(one_byte_char);
     }
-    AddOneByteCharImpl(one_byte_char);
+    AddOneByteCharUnchecked(one_byte_char);
   }
 
   void AddTwoByteChar(base::uc32 code_unit);

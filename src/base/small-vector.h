@@ -210,14 +210,14 @@ class SmallVector {
     if (V8_UNLIKELY(end_ == end_of_storage_)) {
       return grow_and_emplace_back(std::forward<Args>(args)...);
     }
-    emplace_back_impl(std::forward<Args>(args)...);
+    emplace_back_unchecked(std::forward<Args>(args)...);
   }
 
   void push_back(T x) {
     if (V8_UNLIKELY(end_ == end_of_storage_)) {
       return grow_and_push_back(std::move(x));
     }
-    emplace_back_impl(std::move(x));
+    emplace_back_unchecked(std::move(x));
   }
 
   void pop_back(size_t count = 1) {
@@ -335,7 +335,7 @@ class SmallVector {
   V8_NOINLINE V8_PRESERVE_MOST void Grow() { Grow(0); }
 
   template <typename... Args>
-  V8_INLINE void emplace_back_impl(Args&&... args) {
+  V8_INLINE void emplace_back_unchecked(Args&&... args) {
     void* storage = end_;
     end_ += 1;
     new (storage) T(std::forward<Args>(args)...);
@@ -344,12 +344,12 @@ class SmallVector {
   template <typename... Args>
   V8_NOINLINE V8_PRESERVE_MOST void grow_and_emplace_back(Args&&... args) {
     Grow();
-    emplace_back_impl(std::forward<Args>(args)...);
+    emplace_back_unchecked(std::forward<Args>(args)...);
   }
 
   V8_NOINLINE V8_PRESERVE_MOST void grow_and_push_back(T x) {
     Grow();
-    emplace_back_impl(std::move(x));
+    emplace_back_unchecked(std::move(x));
   }
 
   // Grows the backing store by a factor of two, and at least to {min_capacity}.

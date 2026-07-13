@@ -47,7 +47,7 @@ void LiteralBuffer::ExpandBuffer() {
 
 void LiteralBuffer::ExpandBufferAndAddOneByteChar(uint8_t one_byte_char) {
   ExpandBuffer();
-  AddOneByteCharImpl(one_byte_char);
+  AddOneByteCharUnchecked(one_byte_char);
 }
 
 void LiteralBuffer::ExpandBufferTo(size_t min_size) {
