@@ -29,6 +29,8 @@ struct MemoryAccessInformation {
   reg_value_type* result_reg = nullptr;
   // Index of the XMM register (0-15) if it's an XMM register.
   int xmm_reg_index = -1;
+  // Index of the mask register (0-7) if it's an AVX-512 mask register.
+  int k_reg_index = -1;
 
   int access_width = 8;
   // Width of the destination register. Differs from access_width only for

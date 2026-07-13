@@ -263,19 +263,19 @@ void MutateReadValue(struct user_regs_struct& regs,
   DCHECK_EQ(MemoryAccessInformation::kRead, access_info.kind);
 
   const bool is_xmm = access_info.xmm_reg_index >= 0;
+  const bool is_k_reg = access_info.k_reg_index >= 0;
 
-  if (is_xmm) {
-    // Floating point values are much less interesting to mutate, but for
-    // completeness we support mutating them as well.
-    // XMM registers are part of the extended state (AVX/YMM). We use the
-    // newer PTRACE_GETREGSET API to support both.
-    // Newer CPUs like Intel Sapphire Rapids (or Emerald Rapids) with AMX
-    // enabled require more than 8KB for the XSAVE state. AMX matrix tile
-    // registers (TMM0-TMM7) alone add 8KB of state. For such CPUs,
-    // `cpuid leaf 0xD` currently reports a required size of 11008 bytes.
-    // We allocate a 16KB buffer to provide some headroom for future extensions.
-    // If future CPUs require even more space, this buffer size can be
-    // increased accordingly.
+  if (is_xmm || is_k_reg) {
+    // Floating point and mask register values are much less interesting to
+    // mutate, but for completeness we support mutating them as well. They are
+    // part of the extended state (AVX/YMM/AVX-512). We use the newer
+    // PTRACE_GETREGSET API to support both. Newer CPUs like Intel Sapphire
+    // Rapids (or Emerald Rapids) with AMX enabled require more than 8KB for the
+    // XSAVE state. AMX matrix tile registers (TMM0-TMM7) alone add 8KB of
+    // state. For such CPUs, `cpuid leaf 0xD` currently reports a required size
+    // of 11008 bytes. We allocate a 16KB buffer to provide some headroom for
+    // future extensions. If future CPUs require even more space, this buffer
+    // size can be increased accordingly.
     alignas(64) uint8_t xsave_buffer[16384];
     struct iovec iov;
     iov.iov_base = xsave_buffer;
@@ -295,47 +295,75 @@ void MutateReadValue(struct user_regs_struct& regs,
     CHECK_EQ(0, ptrace(PTRACE_GETREGSET, g_support.d8_pid,
                        reinterpret_cast<void*>(NT_X86_XSTATE), &iov));
 
-    static constexpr size_t kXmmRegistersOffset =
-        offsetof(struct user_fpregs_struct, xmm_space);
-    size_t reg_offset = access_info.xmm_reg_index * i::kSimd128Size;
-    // Note: We currently only mutate the lower 64 bits of the YMM/XMM register.
-    // This is sufficient to trigger a value change that can be detected in
-    // JavaScript, but does not provide full 256-bit mutation.
-    // TODO(clemensb): Mutate all bits and respect access_info.access_width.
-    uint64_t* target_val_ptr = reinterpret_cast<uint64_t*>(
-        xsave_buffer + kXmmRegistersOffset + reg_offset);
-    uint64_t read_value_u64 = *target_val_ptr;
-    double read_value_double = base::bit_cast<double>(read_value_u64);
+    uint64_t* target_val_ptr = nullptr;
 
-    // TODO(clemensb): Same TODOs as below apply here.
-    // TODO(clemensb): In particular we could / should generate special values
-    // like different NaNs, denormals, +/-0, +/- inf.
-    uint64_t new_value;
-    double new_value_double;
-    switch (g_support.rng.NextInt(4)) {
-      case 0:
-        new_value_double = read_value_double + 10.;
-        new_value = base::bit_cast<uint64_t>(new_value_double);
-        break;
-      case 1:
-        new_value_double = read_value_double - 10.;
-        new_value = base::bit_cast<uint64_t>(new_value_double);
-        break;
-      case 2:
-        // Random bit flip.
-        new_value = read_value_u64 ^ (uint64_t{1} << g_support.rng.NextInt(64));
-        new_value_double = base::bit_cast<double>(new_value);
-        break;
-      case 3:
-        new_value = g_support.rng.NextInt64();
-        new_value_double = base::bit_cast<double>(new_value);
-        break;
+    if (is_xmm) {
+      static constexpr size_t kXmmRegistersOffset =
+          offsetof(struct user_fpregs_struct, xmm_space);
+      size_t reg_offset = access_info.xmm_reg_index * i::kSimd128Size;
+      // Note: We currently only mutate the lower 64 bits of the YMM/XMM
+      // register. This is sufficient to trigger a value change that can be
+      // detected in JavaScript, but does not provide full 256-bit mutation.
+      // TODO(clemensb): Mutate all bits and respect access_info.access_width.
+      target_val_ptr = reinterpret_cast<uint64_t*>(
+          xsave_buffer + kXmmRegistersOffset + reg_offset);
+    } else {
+      DCHECK(is_k_reg);
+      // CPUID leaf 0xD, sub-leaf 5 returns the size and offset of the AVX-512
+      // opmask state component. Offset is returned in EBX (cpu_info[1]).
+      __asm__ volatile("cpuid \n\t"
+                       : "=a"(cpu_info[0]), "=b"(cpu_info[1]),
+                         "=c"(cpu_info[2]), "=d"(cpu_info[3])
+                       : "a"(0xD), "c"(5));
+      size_t k_registers_offset = static_cast<size_t>(cpu_info[1]);
+      CHECK_NE(0, k_registers_offset);
+      target_val_ptr = reinterpret_cast<uint64_t*>(
+          xsave_buffer + k_registers_offset + access_info.k_reg_index * 8);
     }
-    TRACE(
-        "[debugger] Changing value in result register from "
-        "%" PRIu64 "/%" PRIx64 "/%.16g to %" PRIu64 "/%" PRIx64 "/%.16g.\n",
-        read_value_u64, read_value_u64, read_value_double, new_value, new_value,
-        new_value_double);
+
+    uint64_t read_value_u64 = *target_val_ptr;
+    uint64_t new_value;
+
+    if (is_xmm) {
+      double read_value_double = base::bit_cast<double>(read_value_u64);
+      double new_value_double;
+      // TODO(clemensb): Same TODOs as below apply here.
+      // TODO(clemensb): In particular we could / should generate special values
+      // like different NaNs, denormals, +/-0, +/- inf.
+      switch (g_support.rng.NextInt(4)) {
+        case 0:
+          new_value_double = read_value_double + 10.;
+          new_value = base::bit_cast<uint64_t>(new_value_double);
+          break;
+        case 1:
+          new_value_double = read_value_double - 10.;
+          new_value = base::bit_cast<uint64_t>(new_value_double);
+          break;
+        case 2:
+          // Random bit flip.
+          new_value =
+              read_value_u64 ^ (uint64_t{1} << g_support.rng.NextInt(64));
+          new_value_double = base::bit_cast<double>(new_value);
+          break;
+        case 3:
+          new_value = g_support.rng.NextInt64();
+          new_value_double = base::bit_cast<double>(new_value);
+          break;
+      }
+      TRACE(
+          "[debugger] Changing value in result register from "
+          "%" PRIu64 "/%" PRIx64 "/%.16g to %" PRIu64 "/%" PRIx64 "/%.16g.\n",
+          read_value_u64, read_value_u64, read_value_double, new_value,
+          new_value, new_value_double);
+    } else {
+      // Basic mutation: Flip a random bit in the lower 16 bits of the mask.
+      new_value = read_value_u64 ^ (uint64_t{1} << g_support.rng.NextInt(16));
+      TRACE(
+          "[debugger] Changing value in mask register k%d from "
+          "%" PRIu64 "/%" PRIx64 " to %" PRIu64 "/%" PRIx64 ".\n",
+          access_info.k_reg_index, read_value_u64, read_value_u64, new_value,
+          new_value);
+    }
 
     *target_val_ptr = new_value;
 

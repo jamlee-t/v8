@@ -141,6 +141,15 @@ TEST(MemoryAccessInformationTest, ParseInstructionWidthAndExtension) {
     EXPECT_EQ(1, info.xmm_reg_index);
     EXPECT_EQ(1, info.access_width);
   }
+
+  // Test AVX-512 mask register read (vpcmpeqb k0,xmm16,[rdi],0x0).
+  {
+    MemoryAccessInformation info = ParseMemoryAccessInformationFromInstruction(
+        "vpcmpeqb k0,xmm16,[rdi],0x0", regs);
+    EXPECT_EQ(MemoryAccessInformation::kRead, info.kind);
+    EXPECT_EQ(0, info.k_reg_index);
+    EXPECT_EQ(-1, info.xmm_reg_index);
+  }
 }
 
 }  // namespace

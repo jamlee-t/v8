@@ -194,6 +194,18 @@ MemoryAccessInformation ParseMemoryAccessInformationFromInstruction(
             .extension = extension};
   }
 
+  if (op[0] == 'k' && op[1] >= '0' && op[1] <= '7' &&
+      (op[2] == ',' || op[2] == ' ' || op[2] == '\0')) {
+    int reg_num = op[1] - '0';
+    return {.kind = MemoryAccessInformation::kRead,
+            .result_reg = nullptr,
+            .xmm_reg_index = -1,
+            .k_reg_index = reg_num,
+            .access_width = access_width,
+            .dest_width = dest_width,
+            .extension = extension};
+  }
+
   if (memcmp(space_pos + 1, "xmm", 3) == 0 ||
       memcmp(space_pos + 1, "ymm", 3) == 0) {
     int reg_num = atoi(space_pos + 4);
