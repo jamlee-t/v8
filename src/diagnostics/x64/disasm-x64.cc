@@ -589,6 +589,11 @@ int DisassemblerX64::PrintRightOperandHelper(
   get_modrm(*modrmp, &mod, &regop, &rm);
   RegisterNameMapping register_name =
       (mod == 3) ? direct_register_name : &DisassemblerX64::NameOfCPURegister;
+  if (is_evex() && mod == 3 &&
+      (register_name == &DisassemblerX64::NameOfAVXRegister ||
+       register_name == &DisassemblerX64::NameOfXMMRegister)) {
+    rm = evex_rm(rm);
+  }
   switch (mod) {
     case 0:
       if ((rm & 7) == 5) {
@@ -1344,13 +1349,13 @@ int DisassemblerX64::AVXInstruction(uint8_t* data) {
         current += 1;
         break;
       case 0x92:
-        AppendToBuffer("kmovd %s,%s", NameOfKRegister(regop),
+        AppendToBuffer("kmovd %s,%s", NameOfKRegister(regop & 0x7),
                        NameOfCPURegister(rm));
         current++;
         break;
       case 0x93:
         AppendToBuffer("kmovd %s,%s", NameOfCPURegister(rm),
-                       NameOfKRegister(regop));
+                       NameOfKRegister(regop & 0x7));
         current++;
         break;
 #define DISASM_SSE2_INSTRUCTION_LIST_SD(instruction, _1, _2, opcode)     \
