@@ -1813,6 +1813,7 @@ class Heap final {
                                 const char* collector_reason);
 
   void PerformHeapVerification();
+  void VerifyEmptySharedHeap();
   std::vector<Isolate*> PauseConcurrentThreadsInClients(
       GarbageCollector collector);
   void ResumeConcurrentThreadsInClients(std::vector<Isolate*> paused_clients);

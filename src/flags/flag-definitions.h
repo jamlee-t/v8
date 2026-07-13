@@ -4311,9 +4311,15 @@ DEFINE_BOOL(incremental_marking_for_gc_in_background, true,
 #if V8_CAN_CREATE_SHARED_HEAP_BOOL
 DEFINE_EXPERIMENTAL_FEATURE(shared_heap,
                             "Enables a shared heap between isolates.")
+DEFINE_BOOL(empty_shared_heap, false,
+            "Enables a shared heap, but not shared allocations")
+DEFINE_IMPLICATION(empty_shared_heap, shared_heap)
+DEFINE_NEG_IMPLICATION(empty_shared_heap, shared_string_table)
 #else
 DEFINE_BOOL_READONLY(shared_heap, false,
                      "Enables a shared heap between isolates.")
+DEFINE_BOOL_READONLY(empty_shared_heap, false,
+                     "Enables a shared heap, but not shared allocations")
 #endif
 
 DEFINE_BOOL(proto_assign_seq_opt, true,

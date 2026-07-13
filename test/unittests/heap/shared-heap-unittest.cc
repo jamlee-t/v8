@@ -985,6 +985,39 @@ TEST_F(SharedHeapTest, WriteBarrierForRange_SharedHeapMarking) {
   InvokeMajorGC(isolate);
 }
 
+template <typename TMixin>
+class WithEmptySharedHeapFlagsMixin : public TMixin {
+ public:
+  WithEmptySharedHeapFlagsMixin() { i::v8_flags.empty_shared_heap = true; }
+};
+
+using SharedHeapEmptyTestPlatform =
+    WithDefaultPlatformMixin<WithEmptySharedHeapFlagsMixin<::testing::Test>>;
+
+using SharedHeapEmptyTest = WithInternalIsolateMixin<
+    WithIsolateScopeMixin<WithIsolateMixin<SharedHeapEmptyTestPlatform>>>;
+
+TEST_F(SharedHeapEmptyTest, FlagImplications) {
+  EXPECT_TRUE(v8_flags.empty_shared_heap);
+  EXPECT_TRUE(v8_flags.shared_heap);
+  EXPECT_FALSE(v8_flags.shared_string_table);
+}
+
+TEST_F(SharedHeapEmptyTest, EmptySharedHeapPasses) {
+  i_isolate()->factory()->NewFixedArray(10, AllocationType::kYoung);
+  i_isolate()->factory()->NewFixedArray(10, AllocationType::kOld);
+  InvokeMajorGC(i_isolate());
+}
+
+TEST_F(SharedHeapEmptyTest, EmptySharedHeapCrashes) {
+  EXPECT_DEATH_IF_SUPPORTED(
+      {
+        i_isolate()->factory()->NewFixedArray(10, AllocationType::kSharedOld);
+        InvokeMajorGC(i_isolate());
+      },
+      "");
+}
+
 }  // namespace internal
 }  // namespace v8
 

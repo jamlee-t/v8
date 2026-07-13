@@ -2260,6 +2260,10 @@ void Heap::PerformGarbageCollection(GarbageCollector collector,
   std::vector<Isolate*> paused_clients =
       PauseConcurrentThreadsInClients(collector);
 
+  if (v8_flags.empty_shared_heap) {
+    VerifyEmptySharedHeap();
+  }
+
   FreeLinearAllocationAreas();
 
   tracer()->StartInSafepoint(atomic_pause_start_time);
@@ -2360,6 +2364,16 @@ void Heap::PerformHeapVerification() {
     isolate()->global_safepoint()->IterateClientIsolates([](Isolate* client) {
       HeapVerifier::VerifyHeapIfEnabled(client->heap());
     });
+  }
+}
+
+void Heap::VerifyEmptySharedHeap() {
+  DCHECK(v8_flags.empty_shared_heap);
+  if (isolate()->has_shared_space()) {
+    CHECK_EQ(shared_allocation_space()->SizeOfObjects(), 0);
+    CHECK_EQ(shared_lo_allocation_space()->SizeOfObjects(), 0);
+    CHECK_EQ(shared_trusted_allocation_space()->SizeOfObjects(), 0);
+    CHECK_EQ(shared_trusted_lo_allocation_space()->SizeOfObjects(), 0);
   }
 }
 
