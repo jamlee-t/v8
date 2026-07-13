@@ -1528,9 +1528,9 @@ class Elider {
       DCHECK(keys_mappings().contains(addr));
       Key key = keys_mappings().at(addr);
       ValueNode* replacement = field_values().Get(key);
-      DCHECK_NOT_NULL(replacement);
 
-      if (replacement->value_representation() != node->value_representation()) {
+      if (replacement == nullptr || (replacement->value_representation() !=
+                                     node->value_representation())) {
         // We have to be in unreachable code. Replacing by a DeadValue node
         // instead to avoid mismatches in the graph.
         // Note that this may sound a  bit risky: the mismatch could be because

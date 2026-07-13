@@ -436,6 +436,9 @@ std::optional<maglev::Graph*> TurbolevFrontendPipeline::Run() {
     // TODO(dmercadier): it would make sense to run this before Phi untagging so
     // that Phi untagging can untag the Phis created by Escape Analysis.
     Run<EscapeAnalysisPhase>();
+    // TODO(dmercadier): can we run this PostOptimizerPhase as part of the
+    // Elider phase of escape analysis?
+    Run<PostOptimizerPhase>(nullptr);
   }
   Run<PostHocPhase>();
   Run<DeadNodeSweepingPhase>();
