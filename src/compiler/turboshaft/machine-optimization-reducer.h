@@ -1225,15 +1225,14 @@ class MachineOptimizationReducer : public Next {
       const OpIndex child = children.back();
       children.pop_back();
       if (const WordBinopOp* child_binop =
-              matcher_.Get(child).template TryCast<WordBinopOp>();
+              matcher_.template TryCast<WordBinopOp>(child);
           child_binop && child_binop->kind == WordBinopOp::Kind::kAdd) {
         // explore add's children too
         children.push_back(child_binop->left());
         children.push_back(child_binop->right());
         continue;
       } else if (const Simd128ExtractLaneOp* child_extract =
-                     matcher_.Get(child)
-                         .template TryCast<Simd128ExtractLaneOp>();
+                     matcher_.template TryCast<Simd128ExtractLaneOp>(child);
                  child_extract &&
                  child_extract->kind == Simd128ExtractLaneOp::Kind::kI32x4) {
         // check extract, and record to check future ones against
@@ -2374,11 +2373,10 @@ class MachineOptimizationReducer : public Next {
       // Which, with 16-bit lanes, is equivalent to: 0, 4, 1, 5, 2, 6, 3, 7
 
       auto TryCastExtMul = [this](V<Simd128> node) -> const Simd128BinopOp* {
-        if (auto* unop =
-                matcher_.Get(node).template TryCast<Simd128UnaryOp>()) {
+        if (auto* unop = matcher_.template TryCast<Simd128UnaryOp>(node)) {
           if (unop->kind == Simd128UnaryOp::Kind::kI32x4ExtAddPairwiseI16x8S) {
-            if (auto* binop = matcher_.Get(unop->input())
-                                  .template TryCast<Simd128BinopOp>()) {
+            if (auto* binop =
+                    matcher_.template TryCast<Simd128BinopOp>(unop->input())) {
               if (binop->kind == Simd128BinopOp::Kind::kI16x8ExtMulLowI8x16S ||
                   binop->kind == Simd128BinopOp::Kind::kI16x8ExtMulHighI8x16S) {
                 return binop;
