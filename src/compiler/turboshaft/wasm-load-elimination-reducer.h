@@ -212,6 +212,11 @@ class WasmMemoryContentTable
            it != base_keys.second.with_offsets.end();) {
         Key key = *it;
         if (!key.data().mem.mutability ||
+            // As long as we do not have indirect strings in shared space,
+            // shared string shape cannot change and it is safe to keep
+            // kStringPrepareForGetCodeunitIndex (which is the only mutable
+            // loadlike type).
+            key.data().mem.type_index == kLoadLikeType ||
             !module_->type(key.data().mem.type_index).is_shared) {
           ++it;
           continue;
