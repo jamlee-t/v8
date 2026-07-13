@@ -1530,6 +1530,21 @@ class Elider {
       ValueNode* replacement = field_values().Get(key);
       DCHECK_NOT_NULL(replacement);
 
+      if (replacement->value_representation() != node->value_representation()) {
+        // We have to be in unreachable code. Replacing by a DeadValue node
+        // instead to avoid mismatches in the graph.
+        // Note that this may sound a  bit risky: the mismatch could be because
+        // of a bug in the escape analysis. However, even if this is the case,
+        // inserting a DeadValue will lead to a reliable crash during compiling
+        // (it it reaches the Turbolev graph builder) or at runtime (if it
+        // reaches the MaglevGraphOptimizer, which will replace it by an
+        // Unreachable).
+        node->OverwriteWith(
+            Opcode::kDeadValue,
+            OpProperties::ForValueRepresentation(node->value_representation()));
+        return ProcessResult::kContinue;
+      }
+
       if (!IsStillInTheGraph(replacement)) {
         // {replacement} isn't in the graph anymore, so we don't overwrite the
         // current node with an Identity to it. It might be tempting to kill the

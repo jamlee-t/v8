@@ -3241,10 +3241,11 @@ class Identity : public FixedInputValueNodeT<1, Identity> {
 
 class DeadValue : public FixedInputValueNodeT<0, DeadValue> {
  public:
-  static constexpr OpProperties kProperties =
-      OpProperties::ForValueRepresentation(ValueRepresentation::kTagged);
+  static constexpr OpProperties kProperties = OpProperties::Pure();
 
-  explicit DeadValue(uint64_t bitfield) : Base(bitfield) {}
+  explicit DeadValue(uint64_t bitfield,
+                     ValueRepresentation repr = ValueRepresentation::kTagged)
+      : Base(bitfield | OpProperties::ForValueRepresentation(repr)) {}
 
   void SetValueLocationConstraints() { UNREACHABLE(); }
   void GenerateCode(MaglevAssembler*, const ProcessingState&) { UNREACHABLE(); }

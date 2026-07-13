@@ -3665,12 +3665,19 @@ ProcessResult MaglevGraphOptimizer::VisitJumpLoop(
   return ProcessResult::kContinue;
 }
 
+ProcessResult MaglevGraphOptimizer::VisitDeadValue(
+    DeadValue* node, const ProcessingState& state) {
+  // DeadValues are unreachable, so we truncate the block now.
+  auto res = reducer_.BuildAbort(AbortReason::kUnreachable);
+  CHECK(res.IsDoneWithAbort());
+  return ProcessResult::kTruncateBlock;
+}
+
 // Nodes never emitted before Graph optimizer.
 #define UNREACHABLE_NODES(X) \
   X(ConstantGapMove)         \
   X(GapMove)                 \
   X(Int32Divide)             \
-  X(DeadValue)               \
   X(VirtualObject)
 
 #define UNREACHEABLE_VISITOR(Node)                                          \
