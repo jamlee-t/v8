@@ -328,7 +328,6 @@ class TurboshaftGraphBuildingInterface
         ssa_env_[index] = __ Parameter(
             index + 1, RepresentationFor(decoder->sig_->GetParam(index)));
       }
-      instance_cache_.Initialize(trusted_instance_data, decoder->module_);
     } else {
       trusted_instance_data = real_parameters_[0];
       for (; index < decoder->sig_->parameter_count(); index++) {
@@ -426,6 +425,9 @@ class TurboshaftGraphBuildingInterface
 
     if (mode_ == kRegular) {
       StackCheck(WasmStackCheckOp::Kind::kFunctionEntry, decoder);
+      // The stack check could make memory growth visible, so only initialize
+      // the InstanceCache after that.
+      instance_cache_.Initialize(trusted_instance_data, decoder->module_);
     }
 
     if (v8_flags.trace_wasm) {
