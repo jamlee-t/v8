@@ -259,7 +259,6 @@ void LateLoadEliminationAnalyzer::ProcessBlock(const Block& block,
       case Opcode::kDebugBreak:
       case Opcode::kJSStackCheck:
 #ifdef V8_ENABLE_WEBASSEMBLY
-      case Opcode::kWasmStackCheck:
       case Opcode::kSimd128LaneMemory:
       case Opcode::kGlobalSet:
       case Opcode::kArraySet:
@@ -273,6 +272,12 @@ void LateLoadEliminationAnalyzer::ProcessBlock(const Block& block,
         // We explicitly break for those operations that have can_write effects
         // but don't actually write, or cannot interfere with load elimination.
         break;
+
+#ifdef V8_ENABLE_WEBASSEMBLY
+      case Opcode::kWasmStackCheck:
+        ProcessWasmStackCheck(op_idx, op.Cast<WasmStackCheckOp>());
+        break;
+#endif  // V8_ENABLE_WEBASSEMBLY
 
       default:
         // Operations that `can_write` should invalidate the state. All such
@@ -712,6 +717,21 @@ void LateLoadEliminationAnalyzer::ProcessChange(OpIndex op_idx,
 
   InvalidateIfAlias(change.input());
 }
+
+#ifdef V8_ENABLE_WEBASSEMBLY
+void LateLoadEliminationAnalyzer::ProcessWasmStackCheck(
+    OpIndex op_idx, const WasmStackCheckOp& op) {
+  TRACE("> ProcessWasmStackCheck(" << op_idx << ")");
+  if (op.kind == WasmStackCheckOp::Kind::kLoop &&
+      op.trusted_instance_data().valid()) {
+    OpIndex instance = op.trusted_instance_data().value();
+    memory_.InvalidateAtOffset(WasmTrustedInstanceData::kMemory0StartOffset,
+                               instance);
+    memory_.InvalidateAtOffset(WasmTrustedInstanceData::kMemory0SizeOffset,
+                               instance);
+  }
+}
+#endif  // V8_ENABLE_WEBASSEMBLY
 
 void LateLoadEliminationAnalyzer::FinishBlock(const Block* block) {
   block_to_snapshot_mapping_[block->index()] = Snapshot{

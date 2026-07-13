@@ -4208,7 +4208,7 @@ struct WasmStackCheckOp : OperationT<WasmStackCheckOp> {
         return OpEffects()
             .RequiredWhenUnused()
             .CanReadMemory()
-            .CanWriteHeapMemory()
+            .CanWriteMemory()
             .CanAllocate();
       case Kind::kFunctionEntry:
         // For function entry stack checks, we could model their side effects
