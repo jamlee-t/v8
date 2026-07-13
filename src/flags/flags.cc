@@ -1425,6 +1425,10 @@ void FlagList::ResolveContradictionsWhenFuzzing() {
   // https://crbug.com/393401455
   RESET_WHEN_FUZZING(turboshaft);
 
+  if (v8_flags.turbofan && !v8_flags.turbolev) {
+    RESET_WHEN_FUZZING(array_destructure_bytecode);
+  }
+
   for (auto [flag1, flag2] : contradictions) {
     if (!flag1 || !flag2) continue;
     if (flag1->IsDefault() || flag2->IsDefault()) continue;
