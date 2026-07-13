@@ -307,13 +307,19 @@ static_assert(ReducerBaseWithLazyDeopt<MaglevGraphOptimizer>);
 MaglevGraphOptimizer::MaglevGraphOptimizer(
     Graph* graph, RecomputeKnownNodeAspectsProcessor& kna_processor,
     NodeRanges* ranges)
-    : reducer_(this, graph), kna_processor_(kna_processor), ranges_(ranges) {}
+    : reducer_(this, graph),
+      kna_processor_(kna_processor),
+      ranges_(ranges),
+      block_range_refinements_(graph->zone()) {}
 
 BlockProcessResult MaglevGraphOptimizer::PreProcessBasicBlock(
     BasicBlock* block) {
   // TODO(olivf): Support allocation folding across control flow.
   reducer_.ClearCurrentAllocationBlock();
   reducer_.set_current_block(block);
+  // TODO(victorgomes): Consider propagating refinements downstream the control
+  // flow graph.
+  block_range_refinements_.clear();
   TRACE(TraceColor::kYellow << "Entering block b" << block->id());
   if (block->is_loop()) {
     loop_depth_++;
@@ -375,7 +381,30 @@ compiler::JSHeapBroker* MaglevGraphOptimizer::broker() const {
 
 std::optional<Range> MaglevGraphOptimizer::GetRange(ValueNode* node) {
   if (!ranges_) return {};
-  return ranges_->Get(reducer_.current_block(), node);
+  Range range = ranges_->Get(reducer_.current_block(), node);
+  auto it = block_range_refinements_.find(node);
+  if (it == block_range_refinements_.end()) return range;
+  Range refined = Range::Intersect(range, it->second);
+  return refined.is_empty() ? range : refined;
+}
+
+void MaglevGraphOptimizer::RecordBoundsCheckRefinement(ValueNode* index,
+                                                       ValueNode* length) {
+  if (!ranges_) return;
+  if (IsConstantNode(index->opcode())) return;
+  Range length_range = ranges_->Get(reducer_.current_block(), length);
+  if (!length_range.IsInt32()) return;
+  std::optional<int64_t> min = length_range.min();
+  std::optional<int64_t> max = length_range.max();
+  if (min.value_or(-1) < 0 || max.value_or(0) < 1) return;
+  if (!min || !max || *min < 0 || *max < 1) return;
+  Range refined(0, *max - 1);
+  auto it = block_range_refinements_.find(index);
+  if (it != block_range_refinements_.end()) {
+    Range narrower = Range::Intersect(it->second, refined);
+    if (!narrower.is_empty()) refined = narrower;
+  }
+  block_range_refinements_.insert_or_assign(index, refined);
 }
 
 bool MaglevGraphOptimizer::IsRangeLessEqual(ValueNode* lhs, ValueNode* rhs) {
@@ -703,6 +732,11 @@ ProcessResult MaglevGraphOptimizer::VisitCheckInt32IsSmi(
     }
     return DeoptAndTruncate(DeoptimizeReason::kNotASmi);
   }
+  if (auto range = GetRange(node->input_node(0))) {
+    if (Range::Smi().contains(*range)) {
+      return RemoveCurrentNode();
+    }
+  }
   return ProcessResult::kContinue;
 }
 
@@ -713,6 +747,11 @@ ProcessResult MaglevGraphOptimizer::VisitCheckUint32IsSmi(
       return RemoveCurrentNode();
     }
     return DeoptAndTruncate(DeoptimizeReason::kNotASmi);
+  }
+  if (auto range = GetRange(node->input_node(0))) {
+    if (Range::Smi().contains(*range)) {
+      return RemoveCurrentNode();
+    }
   }
   return ProcessResult::kContinue;
 }
@@ -774,6 +813,7 @@ ProcessResult MaglevGraphOptimizer::VisitCheckInt32Condition(
         return RemoveCurrentNode();
       }
     }
+    RecordBoundsCheckRefinement(lhs, rhs);
   }
   return ProcessResult::kContinue;
 }

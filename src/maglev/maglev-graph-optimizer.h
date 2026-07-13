@@ -110,6 +110,11 @@ class MaglevGraphOptimizer {
   NodeRanges* ranges_;
   int loop_depth_ = 0;
 
+  // Range analysis doesn't support changing/updating a range in the middle of
+  // the block, it only records entry/exit block ranges. We use a separate map
+  // for refinements done in the middle of the block.
+  ZoneMap<ValueNode*, Range> block_range_refinements_;
+
   NodeBase* current_node_;
 
   NodeBase* current_node() const {
@@ -121,6 +126,7 @@ class MaglevGraphOptimizer {
 
   std::optional<Range> GetRange(ValueNode* node);
   bool IsRangeLessEqual(ValueNode* lhs, ValueNode* rhs);
+  void RecordBoundsCheckRefinement(ValueNode* index, ValueNode* length);
 
   void UnwrapInputs();
 
