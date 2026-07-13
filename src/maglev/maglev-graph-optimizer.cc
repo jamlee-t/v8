@@ -1069,7 +1069,14 @@ ProcessResult MaglevGraphOptimizer::VisitStoreFixedHoleyDoubleArrayElement(
 
 ProcessResult MaglevGraphOptimizer::VisitStoreFixedDoubleArrayElement(
     StoreFixedDoubleArrayElement* node, const ProcessingState& state) {
-  // TODO(b/424157317): Optimize.
+  if (std::optional<int32_t> index =
+          reducer_.TryGetInt32Constant(node->IndexInput().node())) {
+    if (*index < 0 || static_cast<uint32_t>(*index) >= FixedArray::kMaxLength) {
+      // This is an out-of-bound store, which means that we have to be in
+      // unreachable code.
+      REMOVE_AND_RETURN_IF_DONE(reducer_.BuildAbort(AbortReason::kUnreachable));
+    }
+  }
   return ProcessResult::kContinue;
 }
 

@@ -560,15 +560,25 @@ class CandidateAnalyzer {
     TRACE("Process " << PRINT_NODE(node));
     if (Int32Constant* index_node =
             node->IndexInput().node()->template TryCast<Int32Constant>()) {
-      int offset = FixedArrayT::OffsetOfElementAt(index_node->value());
+      int index = index_node->value();
+      // Note that in unreachable code, {index} could be negative or too large,
+      // but this shouldn't be possible here, since the GraphOptimizer should
+      // truncate the graph in such cases.
+      CHECK(index >= 0 &&
+            static_cast<uint32_t>(index) <= FixedArrayT::kMaxLength);
+
+      int offset = FixedArrayT::OffsetOfElementAt(index);
+      DCHECK_NE(offset, offsetof(FixedArrayT, map_));
+
       ProcessFieldStore(node, node->ElementsInput().node(), offset,
                         node->ValueInput().node());
-    } else {
-      // TODO(dmercadier): handle non-constant indices. This will require
-      // stack-allocating the array.
-      data_.MarkAsEscapedIfCandidate(node->ElementsInput().node());
-      data_.MarkAsEscapedIfCandidate(node->ValueInput().node());
+      return ProcessResult::kContinue;
     }
+
+    // TODO(dmercadier): handle non-constant indices. This will require
+    // stack-allocating the array.
+    data_.MarkAsEscapedIfCandidate(node->ElementsInput().node());
+    data_.MarkAsEscapedIfCandidate(node->ValueInput().node());
 
     return ProcessResult::kContinue;
   }
