@@ -13,7 +13,7 @@ namespace v8::internal {
 
 class GeneratedCodeValidator {
  public:
-  static void Validate(Tagged<Code> code);
+  static V8_EXPORT_PRIVATE void Validate(Tagged<Code> code);
 };
 
 }  // namespace v8::internal
