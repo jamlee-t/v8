@@ -115,6 +115,13 @@ class ResourceAllocation {
   std::array<int8_t, kNumResources> free_units_ = {0};
 };
 
+enum class SchedulingDirection : uint8_t {
+  kForward,
+  kBackward,
+};
+
+enum class UseTieBreaker : uint8_t { kDisable, kEnable };
+
 class InstructionScheduler final : public ZoneObject {
  public:
   V8_EXPORT_PRIVATE InstructionScheduler(Zone* zone,
@@ -245,9 +252,8 @@ class InstructionScheduler final : public ZoneObject {
   };
 
   // Keep track of all nodes ready to be scheduled (i.e. all their dependencies
-  // have been scheduled. Note that this class is inteded to be extended by
-  // concrete implementation of the scheduling queue which define the policy
-  // to pop node from the queue.
+  // have been scheduled.
+  template <SchedulingDirection kDirection>
   class SchedulingQueue {
    public:
     explicit SchedulingQueue(ResourceAllocation resource_table, Zone* zone);
@@ -259,6 +265,7 @@ class InstructionScheduler final : public ZoneObject {
     bool IsEmpty() const { return IsWaitingEmpty() && IsReadyEmpty(); }
     bool IsReadyEmpty() const { return ready_.empty(); }
     bool IsWaitingEmpty() const { return waiting_.empty(); }
+    template <UseTieBreaker kUseTieBreaker>
     ScheduleGraphNode* PopBestCandidate(int cycle);
 
    protected:
@@ -277,9 +284,39 @@ class InstructionScheduler final : public ZoneObject {
       resource_table().MarkIssue(ArchInstResource::kFetch);
     }
 
-    virtual int GetTotalLatency(const ScheduleGraphNode* node) const = 0;
+    int GetTotalLatency(const ScheduleGraphNode* node) const {
+      if constexpr (kDirection == SchedulingDirection::kForward) {
+        return node->total_forward_latency();
+      } else {
+        return node->total_backward_latency();
+      }
+    }
+
     // Use this heuristic when total latencies are the same.
-    virtual size_t GetTieBreakLatency(const ScheduleGraphNode* node) const = 0;
+    size_t GetTieBreakLatency(const ScheduleGraphNode* node) const {
+      // The main heuristic looks at total latency, so start with only the
+      // latency of the node for the tie-breaker.
+      int latency = node->latency();
+      if constexpr (kDirection == SchedulingDirection::kForward) {
+        // Accumulate the total latency of all the successors that are just
+        // waiting for node to be scheduled.
+        for (ScheduleGraphNode* successor : node->data_successors()) {
+          if (successor->unscheduled_predecessors_count() == 1) {
+            latency += successor->total_forward_latency();
+          }
+        }
+      } else {
+        // Accumulate the total latency of all the predecessors that are just
+        // waiting for node to be scheduled.
+        for (ScheduleGraphNode* predecessor : node->data_predecessors()) {
+          if (predecessor->unscheduled_successor_count() == 1) {
+            latency += predecessor->total_backward_latency();
+          }
+        }
+      }
+      return latency;
+    }
+
     ResourceAllocation& resource_table() { return resource_table_; }
 
    private:
@@ -289,66 +326,20 @@ class InstructionScheduler final : public ZoneObject {
     std::optional<base::RandomNumberGenerator> random_number_generator_;
   };
 
-  // Schedule from the beginning of the scheduling region to the end.
-  class ForwardSchedulingQueue final : public SchedulingQueue {
-   public:
-    explicit ForwardSchedulingQueue(ResourceAllocation resource_table,
-                                    Zone* zone)
-        : SchedulingQueue(resource_table, zone) {}
-
-   private:
-    int GetTotalLatency(const ScheduleGraphNode* node) const override {
-      return node->total_forward_latency();
-    }
-
-    size_t GetTieBreakLatency(const ScheduleGraphNode* node) const override {
-      // The main heuristic looks at total latency, so start with only the
-      // latency of the node for the tie-breaker.
-      int latency = node->latency();
-      // Accumulate the total latency of all the successors that are just
-      // waiting for node to be scheduled.
-      for (ScheduleGraphNode* successor : node->data_successors()) {
-        if (successor->unscheduled_predecessors_count() == 1) {
-          latency += successor->total_forward_latency();
-        }
-      }
-      return latency;
-    }
-  };
-
-  // Schedule from the end of the scheduling region to the beginning.
-  class BackwardSchedulingQueue final : public SchedulingQueue {
-   public:
-    explicit BackwardSchedulingQueue(ResourceAllocation resource_table,
-                                     Zone* zone)
-        : SchedulingQueue(resource_table, zone) {}
-
-   private:
-    int GetTotalLatency(const ScheduleGraphNode* node) const override {
-      return node->total_backward_latency();
-    }
-
-    size_t GetTieBreakLatency(const ScheduleGraphNode* node) const override {
-      // The main heuristic looks at total latency, so start with only the
-      // latency of the node for the tie-breaker.
-      int latency = node->latency();
-      // Accumulate the total latency of all the predecessors that are just
-      // waiting for node to be scheduled.
-      for (ScheduleGraphNode* predecessor : node->data_predecessors()) {
-        if (predecessor->unscheduled_successor_count() == 1) {
-          latency += predecessor->total_backward_latency();
-        }
-      }
-      return latency;
-    }
-  };
+  using ForwardSchedulingQueue = SchedulingQueue<SchedulingDirection::kForward>;
+  using BackwardSchedulingQueue =
+      SchedulingQueue<SchedulingDirection::kBackward>;
 
   // Perform scheduling for the current block specifying the queue type to
   // use to determine the next best candidate.
   void Schedule();
+  // Reset own state.
+  void Reset();
   // Perform forward scheduling for the current block.
+  template <UseTieBreaker kUseTieBreaker>
   int ScheduleForward();
   // Perform backwardscheduling for the current block.
+  template <UseTieBreaker kUseTieBreaker>
   int ScheduleBackward();
 
   // Return the scheduling properties of the given instruction.

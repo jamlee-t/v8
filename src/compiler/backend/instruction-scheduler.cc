@@ -4,6 +4,7 @@
 
 #include "src/compiler/backend/instruction-scheduler.h"
 
+#include <algorithm>
 #include <optional>
 #include <sstream>
 
@@ -44,7 +45,8 @@ void ResourceAllocation::PrintState() const {
 #undef RESOURCE_NAME
 }
 
-InstructionScheduler::SchedulingQueue::SchedulingQueue(
+template <SchedulingDirection direction>
+InstructionScheduler::SchedulingQueue<direction>::SchedulingQueue(
     ResourceAllocation resource_table, Zone* zone)
     : ready_(zone),
       waiting_(zone),
@@ -52,15 +54,20 @@ InstructionScheduler::SchedulingQueue::SchedulingQueue(
       random_number_generator_(
           base::RandomNumberGenerator(v8_flags.random_seed)) {}
 
-void InstructionScheduler::SchedulingQueue::AddNode(ScheduleGraphNode* node) {
+template <SchedulingDirection direction>
+void InstructionScheduler::SchedulingQueue<direction>::AddNode(
+    ScheduleGraphNode* node) {
   waiting_.push_back(node);
 }
 
-void InstructionScheduler::SchedulingQueue::AddReady(ScheduleGraphNode* node) {
+template <SchedulingDirection direction>
+void InstructionScheduler::SchedulingQueue<direction>::AddReady(
+    ScheduleGraphNode* node) {
   ready_.push_back(node);
 }
 
-void InstructionScheduler::SchedulingQueue::Advance(int cycle) {
+template <SchedulingDirection direction>
+void InstructionScheduler::SchedulingQueue<direction>::Advance(int cycle) {
   TRACE("Advancing Cycle\n");
   auto IsReady = [cycle](ScheduleGraphNode* n) {
     return cycle >= n->start_cycle();
@@ -71,8 +78,10 @@ void InstructionScheduler::SchedulingQueue::Advance(int cycle) {
   resource_table().Reset();
 }
 
+template <SchedulingDirection kDirection>
+template <UseTieBreaker kUseTieBreaker>
 InstructionScheduler::ScheduleGraphNode*
-InstructionScheduler::SchedulingQueue::PopBestCandidate(int cycle) {
+InstructionScheduler::SchedulingQueue<kDirection>::PopBestCandidate(int cycle) {
   DCHECK(!IsEmpty());
 
   if (ready_.empty()) {
@@ -80,7 +89,7 @@ InstructionScheduler::SchedulingQueue::PopBestCandidate(int cycle) {
     return nullptr;
   }
 
-  if (v8_flags.trace_turbo_instruction_scheduling) {
+  if (V8_UNLIKELY(v8_flags.trace_turbo_instruction_scheduling)) {
     TRACE("Ready instructions:\n");
     for (auto& candidate : ready_) {
       TRACE_INST(candidate->instruction());
@@ -96,7 +105,7 @@ InstructionScheduler::SchedulingQueue::PopBestCandidate(int cycle) {
   // Filter the ready queue to only look at instructions for which we can issue.
   base::SmallVector<ScheduleGraphNode*, 8> issuable;
   std::copy_if(ready_.begin(), ready_.end(), std::back_inserter(issuable),
-               [this](auto c) { return CanIssue(c); });
+               [this](auto c) { return this->CanIssue(c); });
 
   if (issuable.empty()) {
     TRACE("None of ready queue can issue.\n");
@@ -119,7 +128,7 @@ InstructionScheduler::SchedulingQueue::PopBestCandidate(int cycle) {
   // the end of the graph.
   auto best_candidate = std::max_element(
       issuable.begin(), issuable.end(), [this](auto l, auto r) {
-        if (v8_flags.experimental_turbo_instruction_scheduling) {
+        if constexpr (kUseTieBreaker == UseTieBreaker::kEnable) {
           if (GetTotalLatency(l) == GetTotalLatency(r)) {
             // Tie-breaking strategies.
             return GetTieBreakLatency(l) < GetTieBreakLatency(r);
@@ -181,7 +190,7 @@ InstructionScheduler::InstructionScheduler(Zone* zone,
       sequence_(sequence),
       forward_sequence_(zone),
       backward_sequence_(zone),
-      graph_(sequence->instructions().size(), zone),
+      graph_(zone),
       forward_ready_list_(GetResourceTable(), zone),
       backward_ready_list_(GetResourceTable(), zone),
       last_side_effect_instr_(nullptr),
@@ -298,12 +307,23 @@ void InstructionScheduler::AddInstruction(Instruction* instr) {
 }
 
 void InstructionScheduler::Schedule() {
+  TRACE("Graph size: %zu\n", graph_.size());
+  if (graph_.size() == 0) return;
+
+  if (graph_.size() == 1) {
+    sequence()->AddInstruction(graph_[0]->instruction());
+    Reset();
+    return;
+  }
+
   // Compute total latencies so that we can schedule the critical path first.
   ComputeTotalLatencies();
 
-  if (v8_flags.experimental_turbo_instruction_scheduling) {
-    int forward_cycles = ScheduleForward();
-    int backward_cycles = ScheduleBackward();
+  constexpr size_t kMinGraphSizeForBackwards = 4;
+  if (graph_.size() >= kMinGraphSizeForBackwards &&
+      v8_flags.experimental_turbo_instruction_scheduling) {
+    int forward_cycles = ScheduleForward<UseTieBreaker::kEnable>();
+    int backward_cycles = ScheduleBackward<UseTieBreaker::kEnable>();
     if (forward_cycles <= backward_cycles) {
       TRACE("Selecting forward, saves %d cycles.\n",
             backward_cycles - forward_cycles);
@@ -318,13 +338,21 @@ void InstructionScheduler::Schedule() {
           [this](Instruction* inst) { sequence()->AddInstruction(inst); });
     }
   } else {
-    ScheduleForward();
+    // Only perform forward scheduling, with the experimental flag governing
+    // whether we use the tie-breaking heuristic.
+    if (v8_flags.experimental_turbo_instruction_scheduling) {
+      ScheduleForward<UseTieBreaker::kEnable>();
+    } else {
+      ScheduleForward<UseTieBreaker::kDisable>();
+    }
     std::for_each(
         forward_sequence().begin(), forward_sequence().end(),
         [this](Instruction* inst) { sequence()->AddInstruction(inst); });
   }
+  Reset();
+}
 
-  // Reset own state.
+void InstructionScheduler::Reset() {
   graph_.clear();
   operands_map_.clear();
   pending_loads_.clear();
@@ -334,6 +362,7 @@ void InstructionScheduler::Schedule() {
   backward_sequence_.clear();
 }
 
+template <UseTieBreaker kUseTieBreaker>
 int InstructionScheduler::ScheduleForward() {
   TRACE("Trying forward scheduling\n");
   // Add nodes which don't have dependencies to the ready list.
@@ -349,7 +378,7 @@ int InstructionScheduler::ScheduleForward() {
     while (!forward_ready_list_.IsReadyEmpty()) {
       TRACE("Cycle: %d\n", cycle);
       if (ScheduleGraphNode* candidate =
-              forward_ready_list_.PopBestCandidate(cycle)) {
+              forward_ready_list_.PopBestCandidate<kUseTieBreaker>(cycle)) {
         forward_sequence().push_back(candidate->instruction());
 
         for (ScheduleGraphNode* successor : candidate->successors()) {
@@ -372,6 +401,7 @@ int InstructionScheduler::ScheduleForward() {
   return cycle;
 }
 
+template <UseTieBreaker kUseTieBreaker>
 int InstructionScheduler::ScheduleBackward() {
   DCHECK(v8_flags.experimental_turbo_instruction_scheduling);
   TRACE("Trying backward scheduling\n");
@@ -388,7 +418,7 @@ int InstructionScheduler::ScheduleBackward() {
     while (!backward_ready_list_.IsReadyEmpty()) {
       TRACE("Cycle: %d\n", cycle);
       if (ScheduleGraphNode* candidate =
-              backward_ready_list_.PopBestCandidate(cycle)) {
+              backward_ready_list_.PopBestCandidate<kUseTieBreaker>(cycle)) {
         backward_sequence().push_back(candidate->instruction());
 
         for (ScheduleGraphNode* predecessor : candidate->predecessors()) {
