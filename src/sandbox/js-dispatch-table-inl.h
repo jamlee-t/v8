@@ -16,9 +16,6 @@
 #include "src/sandbox/external-entity-table-inl.h"
 #include "src/snapshot/embedded/embedded-data.h"
 
-#ifdef V8_ENABLE_GENERATED_CODE_VALIDATOR
-#include "src/sandbox/generated-code-validator.h"
-#endif
 
 namespace v8 {
 namespace internal {
@@ -110,12 +107,6 @@ void JSDispatchTable::SetCodeAndEntrypointNoWriteBarrier(
   // The object should be in old space to avoid creating old-to-new references.
   DCHECK(!HeapLayout::InYoungGeneration(new_code));
 
-#ifdef V8_ENABLE_GENERATED_CODE_VALIDATOR
-  // TODO(523128533): Consider validating on code allocating/building rather
-  // than publishing to avoid validating the same code multiple times.
-  GeneratedCodeValidator::Validate(new_code);
-#endif
-
   uint32_t index = HandleToIndex(handle);
   DCHECK_GE(index, kEndOfReadOnlyIndex);
   CFIMetadataWriteScope write_scope("JSDispatchTable update");
@@ -178,12 +169,6 @@ std::optional<JSDispatchHandle> JSDispatchTable::TryAllocateAndInitializeEntry(
   // will catch disabled builtins anyway.
   DCHECK(!new_code->is_disabled_builtin());
   SBXCHECK(IsCompatibleCode(new_code, parameter_count));
-
-#ifdef V8_ENABLE_GENERATED_CODE_VALIDATOR
-  // TODO(523128533): Consider validating on code allocating/building rather
-  // than publishing to avoid validating the same code multiple times.
-  GeneratedCodeValidator::Validate(new_code);
-#endif
 
   uint32_t index;
   if (auto maybe_index = TryAllocateEntry(space)) {
