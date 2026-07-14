@@ -164,6 +164,7 @@ ALL_VARIANT_FLAGS = {
         # TODO(nicohartmann): Enable randomized JS rescheduling.
         "--wasm-random-rescheduling"
     ],
+    "validate_generated_code": ["--validate-generated-code"],
     # Google3 variant.
     "google3": [],
 }
