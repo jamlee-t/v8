@@ -1574,26 +1574,9 @@ class AssemblerOpInterface : public Next {
   // Methods to be used by the reducers to reducer operations with the whole
   // reducer stack.
 
-  V<Float64OrWord32> TypeHint(V<Float64OrWord32> input, TypeHintOp::Type type) {
-    return ReduceIfReachableTypeHint(input, type);
-  }
-
   void PrepareForLoop(V<EagerFrameState> frame_state,
                       FeedbackSource feedback = FeedbackSource()) {
     ReduceIfReachablePrepareForLoop(frame_state, feedback);
-  }
-
-  V<Word32> TypeHintUint32(V<Word32> input) {
-    return V<Word32>::Cast(TypeHint(input, TypeHintOp::Type::kUint32));
-  }
-  V<Word32> TypeHintInt32(V<Word32> input) {
-    return V<Word32>::Cast(TypeHint(input, TypeHintOp::Type::kInt32));
-  }
-  V<Float64> TypeHintFloat64(V<Float64> input) {
-    return V<Float64>::Cast(TypeHint(input, TypeHintOp::Type::kFloat64));
-  }
-  V<Float64> TypeHintHoleyFloat64(V<Float64> input) {
-    return V<Float64>::Cast(TypeHint(input, TypeHintOp::Type::kHoleyFloat64));
   }
 
   V<Object> GenericBinop(V<Object> left, V<Object> right,

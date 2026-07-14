@@ -72,13 +72,6 @@ class MachineLoweringReducer : public Next {
     UNREACHABLE();
   }
 
-  V<Float64OrWord32> REDUCE(TypeHint)(V<Float64OrWord32> input,
-                                      TypeHintOp::Type) {
-    // As far as Machine operations are concerned, Int32/Uint32 are both Word32,
-    // and Float64/HoleyFloat64 are both Float64.
-    return input;
-  }
-
   V<Untagged> REDUCE(ChangeOrDeopt)(V<Untagged> input,
                                     V<EagerFrameState> frame_state,
                                     ChangeOrDeoptOp::Kind kind,

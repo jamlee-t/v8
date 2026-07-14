@@ -188,20 +188,6 @@ std::ostream& operator<<(std::ostream& os, GenericUnopOp::Kind kind) {
   UNREACHABLE();
 }
 
-std::ostream& operator<<(std::ostream& os, TypeHintOp::Type type) {
-  switch (type) {
-    case TypeHintOp::Type::kInt32:
-      return os << "Int32";
-    case TypeHintOp::Type::kUint32:
-      return os << "Uint32";
-    case TypeHintOp::Type::kFloat64:
-      return os << "Float64";
-    case TypeHintOp::Type::kHoleyFloat64:
-      return os << "HoleyFloat64";
-  }
-  UNREACHABLE();
-}
-
 std::ostream& operator<<(std::ostream& os, WordUnaryOp::Kind kind) {
   switch (kind) {
     case WordUnaryOp::Kind::kReverseBytes:
