@@ -138,6 +138,7 @@ class RecomputeKnownNodeAspectsProcessor {
         NodeType old_type = info->type();
         info->IntersectType(new_type);
         changed |= info->type() != old_type;
+        phi->set_type(info->type());
       }
     } while (changed && block->is_loop());
   }
