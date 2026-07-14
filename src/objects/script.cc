@@ -122,6 +122,29 @@ int Script::GetEvalPosition(Isolate* isolate, DirectHandle<Script> script) {
   return position;
 }
 
+void Script::set_eval_from_shared(Tagged<SharedFunctionInfo> shared,
+                                  WriteBarrierMode mode) {
+  DCHECK(!is_wrapped());
+  set_eval_from_shared_or_wrapped_arguments(shared, mode);
+}
+
+Tagged<SharedFunctionInfo> Script::eval_from_shared() const {
+  DCHECK(has_eval_from_shared());
+  return Cast<SharedFunctionInfo>(eval_from_shared_or_wrapped_arguments());
+}
+
+Tagged<Script> Script::GetEvalOrigin() {
+  DisallowGarbageCollection no_gc;
+  Tagged<Script> origin_script = this;
+  while (origin_script->has_eval_from_shared()) {
+    Tagged<HeapObject> maybe_script =
+        origin_script->eval_from_shared()->script();
+    CHECK(IsScript(maybe_script));
+    origin_script = Cast<Script>(maybe_script);
+  }
+  return origin_script;
+}
+
 String::LineEndsVector Script::GetLineEnds(Isolate* isolate,
                                            DirectHandle<Script> script) {
   DCHECK(!script->has_line_ends());
