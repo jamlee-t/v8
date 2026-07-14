@@ -3544,27 +3544,26 @@ void MacroAssembler::CallWasmCodePointer(Register target,
   shll(target, Immediate(kNumClearedHighBits));
   shrl(target, Immediate(kNumClearedHighBits - kLeftShift));
 
-  // Add `target` and `kScratchRegister` early to free `kScratchRegister` again.
-  addq(target, kScratchRegister);
-
-  Operand signature_hash_op{target,
-                            wasm::WasmCodePointerTable::kOffsetOfSignatureHash};
+  // `target_op` is overwritten for the `!is_int32(signature_hash)` case below.
+  Operand target_op{kScratchRegister, target, ScaleFactor::times_1, 0};
   if (is_int32(signature_hash)) {
+    Operand signature_hash_op{
+        kScratchRegister, target, ScaleFactor::times_1,
+        wasm::WasmCodePointerTable::kOffsetOfSignatureHash};
     // cmpq sign-extends the 32-bit immediate.
     cmpq(signature_hash_op, Immediate(static_cast<int32_t>(signature_hash)));
+    SbxCheck(equal, AbortReason::kWasmSignatureMismatch);
   } else {
+    // Add `target` and `kScratchRegister` early to free `kScratchRegister`
+    // again.
+    addq(target, kScratchRegister);
+    Operand signature_hash_op{
+        target, wasm::WasmCodePointerTable::kOffsetOfSignatureHash};
     Move(kScratchRegister, signature_hash);
     cmpq(kScratchRegister, signature_hash_op);
+    SbxCheck(equal, AbortReason::kWasmSignatureMismatch);
+    target_op = Operand{target, 0};
   }
-  Label fail, ok;
-  j(Condition::kNotEqual, &fail, Label::Distance::kNear);
-  jmp(&ok, Label::Distance::kNear);
-
-  bind(&fail);
-  Abort(AbortReason::kWasmSignatureMismatch);
-
-  bind(&ok);
-  Operand target_op{target, 0};
 #else
   static_assert(sizeof(wasm::WasmCodePointerTableEntry) == 8);
   Operand target_op{kScratchRegister, target, ScaleFactor::times_8, 0};
