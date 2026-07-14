@@ -51,6 +51,10 @@ Tagged<InstructionStream> InstructionStream::Initialize(
 
     writable_allocation.WriteHeaderSlot<uint32_t, kBodySizeOffset>(body_size);
 
+#ifdef V8_ENABLE_GENERATED_CODE_VALIDATOR
+    writable_allocation.WriteHeaderSlot<bool, kIsValidatedOffset>(false);
+#endif
+
     if constexpr (V8_EMBEDDED_CONSTANT_POOL_BOOL) {
       writable_allocation.WriteHeaderSlot<int, kConstantPoolOffsetOffset>(
           kHeaderSize + constant_pool_offset);

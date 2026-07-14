@@ -236,6 +236,9 @@ MaybeHandle<Code> Factory::CodeBuilder::BuildInternal(
         HeapObject::VerifyCodePointer(isolate_, raw_istream);
       }
 #endif
+#ifdef V8_ENABLE_GENERATED_CODE_VALIDATOR
+      GeneratedCodeValidator::Validate(isolate_, *code);
+#endif
     }
   }
 

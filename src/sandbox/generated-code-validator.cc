@@ -11,12 +11,32 @@
 
 namespace v8::internal {
 
-void GeneratedCodeValidator::Validate(Tagged<Code> code) {
-  if (!v8_flags.validate_generated_code) {
+namespace {
+bool ShouldValidateCode(Tagged<Code> code) {
+  return v8_flags.validate_generated_code && code->has_instruction_stream();
+}
+}  // namespace
+
+// static
+void GeneratedCodeValidator::Validate(IsolateForSandbox isolate,
+                                      Tagged<Code> code) {
+  if (!ShouldValidateCode(code)) {
     return;
   }
 
-  ValidateImpl(GetCurrentIsolateForSandbox(), code);
+  DCHECK(!IsValidated(code));
+
+  ValidateImpl(isolate, code);
+
+  code->instruction_stream()->SetValidated();
+}
+
+// static
+bool GeneratedCodeValidator::IsValidated(Tagged<Code> code) {
+  if (!ShouldValidateCode(code)) {
+    return true;
+  }
+  return code->instruction_stream()->IsValidated();
 }
 
 GeneratedCodeValidator::InstructionIteratorSkippingData::

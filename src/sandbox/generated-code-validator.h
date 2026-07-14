@@ -18,7 +18,9 @@ namespace v8::internal {
 
 class GeneratedCodeValidator {
  public:
-  static V8_EXPORT_PRIVATE void Validate(Tagged<Code> code);
+  static V8_EXPORT_PRIVATE void Validate(IsolateForSandbox isolate,
+                                         Tagged<Code> code);
+  static V8_EXPORT_PRIVATE bool IsValidated(Tagged<Code> code);
 
  private:
   // Helper class to iterate over the instructions of a Code object while

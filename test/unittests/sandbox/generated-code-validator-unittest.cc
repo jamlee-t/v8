@@ -19,7 +19,8 @@ using GeneratedCodeValidatorTest = TestWithContext;
 #define __ masm.
 
 TEST_F(GeneratedCodeValidatorTest, ValidateValidCode) {
-  v8_flags.validate_generated_code = true;
+  // This validation until we're ready to call it explicitly.
+  v8_flags.validate_generated_code = false;
   Isolate* i_isolate = this->i_isolate();
   auto buffer = AllocateAssemblerBuffer();
   MacroAssembler masm(i_isolate, CodeObjectRequired{false},
@@ -41,11 +42,13 @@ TEST_F(GeneratedCodeValidatorTest, ValidateValidCode) {
       Factory::CodeBuilder(i_isolate, desc, CodeKind::FOR_TESTING).Build();
 
   // This should not crash.
-  GeneratedCodeValidator::Validate(*code);
+  v8_flags.validate_generated_code = true;
+  GeneratedCodeValidator::Validate(i_isolate, *code);
 }
 
 TEST_F(GeneratedCodeValidatorTest, ValidateInvalidCode) {
-  v8_flags.validate_generated_code = true;
+  // This validation until we're ready to call it explicitly.
+  v8_flags.validate_generated_code = false;
   Isolate* i_isolate = this->i_isolate();
   auto buffer = AllocateAssemblerBuffer();
   MacroAssembler masm(i_isolate, CodeObjectRequired{false},
@@ -71,7 +74,8 @@ TEST_F(GeneratedCodeValidatorTest, ValidateInvalidCode) {
       Factory::CodeBuilder(i_isolate, desc, CodeKind::FOR_TESTING).Build();
 
   // This should crash.
-  ASSERT_DEATH_IF_SUPPORTED(GeneratedCodeValidator::Validate(*code),
+  v8_flags.validate_generated_code = true;
+  ASSERT_DEATH_IF_SUPPORTED(GeneratedCodeValidator::Validate(i_isolate, *code),
                             "Generated code validator failed");
 }
 

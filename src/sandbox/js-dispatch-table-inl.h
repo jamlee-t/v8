@@ -131,10 +131,8 @@ void JSDispatchTable::SetCodeAndEntrypointNoWriteBarrier(
   DCHECK(!HeapLayout::InYoungGeneration(new_code));
 
 #ifdef V8_ENABLE_GENERATED_CODE_VALIDATOR
-  // TODO(523128533): Consider validating on code allocating/building rather
-  // than publishing to avoid validating the same code multiple times.
-  GeneratedCodeValidator::Validate(new_code);
-#endif
+  CHECK(GeneratedCodeValidator::IsValidated(new_code));
+#endif  // V8_ENABLE_GENERATED_CODE_VALIDATOR
 
   uint32_t index = HandleToIndex(handle);
   DCHECK_GE(index, kEndOfReadOnlyIndex);
@@ -201,10 +199,8 @@ std::optional<JSDispatchHandle> JSDispatchTable::TryAllocateAndInitializeEntry(
   SBXCHECK(IsCompatibleCode(new_code, parameter_count));
 
 #ifdef V8_ENABLE_GENERATED_CODE_VALIDATOR
-  // TODO(523128533): Consider validating on code allocating/building rather
-  // than publishing to avoid validating the same code multiple times.
-  GeneratedCodeValidator::Validate(new_code);
-#endif
+  CHECK(GeneratedCodeValidator::IsValidated(new_code));
+#endif  // V8_ENABLE_GENERATED_CODE_VALIDATOR
 
   uint32_t index;
   if (auto maybe_index = TryAllocateEntry(space)) {
