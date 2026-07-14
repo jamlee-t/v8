@@ -1405,6 +1405,9 @@ class MaglevReducer {
                                                    int32_t cst_right);
   bool TryFoldInt32CompareOperation(Operation op, int32_t left, int32_t right);
 
+  std::optional<bool> TryFoldInt32Condition(AssertCondition condition,
+                                            ValueNode* left, ValueNode* right);
+
   std::optional<bool> TryFoldUint32CompareOperation(Operation op,
                                                     ValueNode* left,
                                                     ValueNode* right);

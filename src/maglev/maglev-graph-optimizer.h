@@ -92,6 +92,9 @@ class MaglevGraphOptimizer {
     CHECK(result.IsDoneWithAbort());
     return ProcessResult::kTruncateBlock;
   }
+  ProcessResult RemoveCheckOrDeopt(bool passed, DeoptimizeReason reason) {
+    return passed ? RemoveCurrentNode() : DeoptAndTruncate(reason);
+  }
   ProcessResult ThrowAndTruncate(Throw::Function function,
                                  ValueNode* input = nullptr) {
     ReduceResult result = reducer_.EmitThrow(function, input);

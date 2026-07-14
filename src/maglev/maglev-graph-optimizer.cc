@@ -78,6 +78,77 @@ ValueNode* Value(ValueNode* node) { return node; }
   }
 
 namespace {
+AssertCondition AssertConditionFromOperation(Operation op, bool is_unsigned) {
+  switch (op) {
+    case Operation::kEqual:
+    case Operation::kStrictEqual:
+      return AssertCondition::kEqual;
+    case Operation::kLessThan:
+      return is_unsigned ? AssertCondition::kUnsignedLessThan
+                         : AssertCondition::kLessThan;
+    case Operation::kLessThanOrEqual:
+      return is_unsigned ? AssertCondition::kUnsignedLessThanEqual
+                         : AssertCondition::kLessThanEqual;
+    case Operation::kGreaterThan:
+      return is_unsigned ? AssertCondition::kUnsignedGreaterThan
+                         : AssertCondition::kGreaterThan;
+    case Operation::kGreaterThanOrEqual:
+      return is_unsigned ? AssertCondition::kUnsignedGreaterThanEqual
+                         : AssertCondition::kGreaterThanEqual;
+    default:
+      UNREACHABLE();
+  }
+}
+
+std::optional<bool> TryFoldCompareWithRanges(AssertCondition condition,
+                                             Range r1, Range r2) {
+  switch (condition) {
+    case AssertCondition::kUnsignedLessThan:
+    case AssertCondition::kUnsignedLessThanEqual:
+    case AssertCondition::kUnsignedGreaterThan:
+    case AssertCondition::kUnsignedGreaterThanEqual:
+      if (!r1.IsUint32() || !r2.IsUint32()) return {};
+      break;
+    default:
+      break;
+  }
+  switch (condition) {
+    case AssertCondition::kLessThan:
+    case AssertCondition::kUnsignedLessThan:
+      if (r1 < r2) return true;
+      if (r1 >= r2) return false;
+      break;
+    case AssertCondition::kLessThanEqual:
+    case AssertCondition::kUnsignedLessThanEqual:
+      if (r1 <= r2) return true;
+      if (r1 > r2) return false;
+      break;
+    case AssertCondition::kGreaterThan:
+    case AssertCondition::kUnsignedGreaterThan:
+      if (r1 > r2) return true;
+      if (r1 <= r2) return false;
+      break;
+    case AssertCondition::kGreaterThanEqual:
+    case AssertCondition::kUnsignedGreaterThanEqual:
+      if (r1 >= r2) return true;
+      if (r1 < r2) return false;
+      break;
+    case AssertCondition::kEqual:
+      if (r1 < r2 || r1 > r2) return false;
+      if (r1.is_constant() && r2.is_constant() && *r1.min() == *r2.min()) {
+        return true;
+      }
+      break;
+    case AssertCondition::kNotEqual:
+      if (r1 < r2 || r1 > r2) return true;
+      if (r1.is_constant() && r2.is_constant() && *r1.min() == *r2.min()) {
+        return false;
+      }
+      break;
+  }
+  return {};
+}
+
 constexpr ValueRepresentation ValueRepresentationFromUse(
     UseRepresentation repr) {
   switch (repr) {
@@ -714,7 +785,6 @@ MaybeReduceResult MaglevGraphOptimizer::EnsureType(ValueNode* node,
 
 ProcessResult MaglevGraphOptimizer::VisitAssertInt32(
     AssertInt32* node, const ProcessingState& state) {
-  // TODO(b/424157317): Optimize.
   return ProcessResult::kContinue;
 }
 
@@ -802,19 +872,28 @@ ProcessResult MaglevGraphOptimizer::VisitCheckHeapObject(
 
 ProcessResult MaglevGraphOptimizer::VisitCheckInt32Condition(
     CheckInt32Condition* node, const ProcessingState& state) {
-  // TODO(b/424157317): Optimize.
-  if (node->condition() == AssertCondition::kUnsignedLessThan) {
-    ValueNode* lhs = node->input_node(0);
-    ValueNode* rhs = node->input_node(1);
-    auto r1 = GetRange(lhs);
-    auto r2 = GetRange(rhs);
-    if (r1 && r2 && r1->IsUint32()) {
-      if (*r1 < *r2 || IsRangeLessEqual(lhs, rhs)) {
-        return RemoveCurrentNode();
-      }
-    }
-    RecordBoundsCheckRefinement(lhs, rhs);
+  ValueNode* lhs = node->input_node(0);
+  ValueNode* rhs = node->input_node(1);
+
+  if (auto result =
+          reducer_.TryFoldInt32Condition(node->condition(), lhs, rhs)) {
+    return RemoveCheckOrDeopt(result.value(), node->deoptimize_reason());
   }
+
+  const auto r1 = GetRange(lhs);
+  const auto r2 = GetRange(rhs);
+  if (r1 && r2) {
+    if (const auto result =
+            TryFoldCompareWithRanges(node->condition(), *r1, *r2)) {
+      return RemoveCheckOrDeopt(result.value(), node->deoptimize_reason());
+    }
+    if (node->condition() == AssertCondition::kUnsignedLessThan &&
+        r1->IsUint32() && r2->IsUint32() && IsRangeLessEqual(lhs, rhs)) {
+      return RemoveCurrentNode();
+    }
+  }
+
+  RecordBoundsCheckRefinement(lhs, rhs);
   return ProcessResult::kContinue;
 }
 
@@ -3532,6 +3611,16 @@ ProcessResult MaglevGraphOptimizer::VisitBranchIfInt32Compare(
     FoldBranch(state.block(), node, result.value());
     return ProcessResult::kRevisit;
   }
+  auto r1 = GetRange(node->input_node(0));
+  auto r2 = GetRange(node->input_node(1));
+  if (r1 && r2) {
+    auto condition =
+        AssertConditionFromOperation(node->operation(), /*is_unsigned=*/false);
+    if (auto result = TryFoldCompareWithRanges(condition, *r1, *r2)) {
+      FoldBranch(state.block(), node, result.value());
+      return ProcessResult::kRevisit;
+    }
+  }
   return ProcessResult::kContinue;
 }
 
@@ -3541,6 +3630,16 @@ ProcessResult MaglevGraphOptimizer::VisitBranchIfUint32Compare(
           node->operation(), node->input_node(0), node->input_node(1))) {
     FoldBranch(state.block(), node, result.value());
     return ProcessResult::kRevisit;
+  }
+  auto r1 = GetRange(node->input_node(0));
+  auto r2 = GetRange(node->input_node(1));
+  if (r1 && r2) {
+    auto condition =
+        AssertConditionFromOperation(node->operation(), /*is_unsigned=*/true);
+    if (auto result = TryFoldCompareWithRanges(condition, *r1, *r2)) {
+      FoldBranch(state.block(), node, result.value());
+      return ProcessResult::kRevisit;
+    }
   }
   return ProcessResult::kContinue;
 }

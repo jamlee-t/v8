@@ -2727,16 +2727,11 @@ template <typename BaseT>
 ReduceResult MaglevReducer<BaseT>::TryBuildCheckInt32Condition(
     ValueNode* lhs, ValueNode* rhs, AssertCondition condition,
     DeoptimizeReason reason) {
-  auto lhs_const = TryGetInt32Constant(lhs);
-  if (lhs_const) {
-    auto rhs_const = TryGetInt32Constant(rhs);
-    if (rhs_const) {
-      if (detail::CheckConditionIn32(lhs_const.value(), rhs_const.value(),
-                                     condition)) {
-        return ReduceResult::Done();
-      }
-      return EmitUnconditionalDeopt(reason);
+  if (auto result = TryFoldInt32Condition(condition, lhs, rhs)) {
+    if (result.value()) {
+      return ReduceResult::Done();
     }
+    return EmitUnconditionalDeopt(reason);
   }
   return AddNewNode<CheckInt32Condition>({lhs, rhs}, condition, reason);
 }
@@ -3328,6 +3323,34 @@ bool MaglevReducer<BaseT>::TryFoldInt32CompareOperation(Operation op,
     default:
       UNREACHABLE();
   }
+}
+
+template <typename BaseT>
+std::optional<bool> MaglevReducer<BaseT>::TryFoldInt32Condition(
+    AssertCondition condition, ValueNode* left, ValueNode* right) {
+  if (left == right) {
+    switch (condition) {
+      case AssertCondition::kEqual:
+      case AssertCondition::kLessThanEqual:
+      case AssertCondition::kGreaterThanEqual:
+      case AssertCondition::kUnsignedLessThanEqual:
+      case AssertCondition::kUnsignedGreaterThanEqual:
+        return true;
+      case AssertCondition::kNotEqual:
+      case AssertCondition::kLessThan:
+      case AssertCondition::kGreaterThan:
+      case AssertCondition::kUnsignedLessThan:
+      case AssertCondition::kUnsignedGreaterThan:
+        return false;
+    }
+  }
+  const auto lhs_const = TryGetInt32Constant(left);
+  const auto rhs_const = TryGetInt32Constant(right);
+  if (lhs_const.has_value() && rhs_const.has_value()) {
+    return detail::CheckConditionIn32(lhs_const.value(), rhs_const.value(),
+                                      condition);
+  }
+  return {};
 }
 
 template <typename BaseT>
