@@ -418,13 +418,8 @@ std::optional<maglev::Graph*> TurbolevFrontendPipeline::Run() {
   if (v8_flags.maglev_truncation && graph_->may_have_truncation()) {
     Run<TruncationPhase>();
   }
-  // TODO(turbolev): sort out perf problems blocking
-  // https://chromium-review.git.corp.google.com/c/v8/v8/+/7595239 from landing.
   if (v8_flags.turbolev_untagged_phis) {
     Run<PrePhiUntaggingPhase>();
-  }
-  graph_->UnwrapDeoptFrames();
-  if (v8_flags.turbolev_untagged_phis) {
     Run<PhiUntaggingPhase>();
   }
   if (v8_flags.maglev_range_analysis) {
