@@ -1029,10 +1029,12 @@ MaybeReduceResult MaglevReducer<BaseT>::TryReduceArrayPrototypeAt(
                                     ? LoadType::kSmi
                                     : LoadType::kUnknown;
                 if (auto constant = TryGetInt32Constant(index)) {
-                  auto const_res = TryBuildLoadFixedArrayElementConstantIndex(
-                      elements, constant.value(), type);
-                  if (const_res.IsDone()) {
-                    element = const_res.value();
+                  std::optional<ValueNode*> maybe_element;
+                  GET_OPTVALUE_OR_ABORT(
+                      maybe_element, TryBuildLoadFixedArrayElementConstantIndex(
+                                         elements, constant.value(), type));
+                  if (maybe_element) {
+                    element = *maybe_element;
                   } else {
                     GET_VALUE_OR_ABORT(element,
                                        AddNewNode<LoadFixedArrayElement>(

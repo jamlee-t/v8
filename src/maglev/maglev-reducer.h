@@ -239,6 +239,23 @@ inline ReduceResult MaybeReduceResult::Checked() { return ReduceResult(*this); }
     variable = res.value()->Cast<T>();                                 \
   } while (false)
 
+#define GET_OPTVALUE_OR_ABORT(variable, result)            \
+  do {                                                     \
+    MaybeReduceResult res = (result);                      \
+    if (res.IsDoneWithAbort()) {                           \
+      return ReduceResult::DoneWithAbort();                \
+    }                                                      \
+    if (res.IsDoneWithValue()) {                           \
+      using OptT = std::decay_t<decltype(variable)>;       \
+      using ValT = typename OptT::value_type;              \
+      using T = std::remove_pointer_t<std::decay_t<ValT>>; \
+      variable = res.value()->Cast<T>();                   \
+    } else {                                               \
+      DCHECK(res.IsFail());                                \
+      variable = std::nullopt;                             \
+    }                                                      \
+  } while (false)
+
 // TODO(dmercadier): .Cast the result to the type of variable to avoid requiring
 // callers to use a generic `Node*` type for {variable}.
 #define GET_NODE_OR_ABORT(variable, result) \
