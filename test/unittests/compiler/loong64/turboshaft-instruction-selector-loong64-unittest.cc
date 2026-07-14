@@ -405,9 +405,10 @@ TEST_F(TurboshaftInstructionSelectorTest, Word32AndToClearBits) {
     Stream s = m.Build();
     ASSERT_EQ(1U, s.size());
     EXPECT_EQ(kLoong64Bstrins_w, s[0]->arch_opcode());
-    ASSERT_EQ(3U, s[0]->InputCount());
+    ASSERT_EQ(4U, s[0]->InputCount());
     EXPECT_EQ(0, s.ToInt32(s[0]->InputAt(1)));
-    EXPECT_EQ(shift, s.ToInt32(s[0]->InputAt(2)));
+    EXPECT_EQ(0, s.ToInt32(s[0]->InputAt(2)));
+    EXPECT_EQ(shift, s.ToInt32(s[0]->InputAt(3)));
   }
   TRACED_FORRANGE(int32_t, shift, 1, 31) {
     int32_t mask = ~((1 << shift) - 1);
@@ -416,9 +417,10 @@ TEST_F(TurboshaftInstructionSelectorTest, Word32AndToClearBits) {
     Stream s = m.Build();
     ASSERT_EQ(1U, s.size());
     EXPECT_EQ(kLoong64Bstrins_w, s[0]->arch_opcode());
-    ASSERT_EQ(3U, s[0]->InputCount());
+    ASSERT_EQ(4U, s[0]->InputCount());
     EXPECT_EQ(0, s.ToInt32(s[0]->InputAt(1)));
-    EXPECT_EQ(shift, s.ToInt32(s[0]->InputAt(2)));
+    EXPECT_EQ(0, s.ToInt32(s[0]->InputAt(2)));
+    EXPECT_EQ(shift, s.ToInt32(s[0]->InputAt(3)));
   }
 }
 
@@ -430,9 +432,10 @@ TEST_F(TurboshaftInstructionSelectorTest, Word64AndToClearBits) {
     Stream s = m.Build();
     ASSERT_EQ(1U, s.size());
     EXPECT_EQ(kLoong64Bstrins_d, s[0]->arch_opcode());
-    ASSERT_EQ(3U, s[0]->InputCount());
+    ASSERT_EQ(4U, s[0]->InputCount());
     EXPECT_EQ(0, s.ToInt32(s[0]->InputAt(1)));
-    EXPECT_EQ(shift, s.ToInt32(s[0]->InputAt(2)));
+    EXPECT_EQ(0, s.ToInt32(s[0]->InputAt(2)));
+    EXPECT_EQ(shift, s.ToInt32(s[0]->InputAt(3)));
   }
   TRACED_FORRANGE(int32_t, shift, 1, 31) {
     int64_t mask = ~((1 << shift) - 1);
@@ -441,9 +444,10 @@ TEST_F(TurboshaftInstructionSelectorTest, Word64AndToClearBits) {
     Stream s = m.Build();
     ASSERT_EQ(1U, s.size());
     EXPECT_EQ(kLoong64Bstrins_d, s[0]->arch_opcode());
-    ASSERT_EQ(3U, s[0]->InputCount());
+    ASSERT_EQ(4U, s[0]->InputCount());
     EXPECT_EQ(0, s.ToInt32(s[0]->InputAt(1)));
-    EXPECT_EQ(shift, s.ToInt32(s[0]->InputAt(2)));
+    EXPECT_EQ(0, s.ToInt32(s[0]->InputAt(2)));
+    EXPECT_EQ(shift, s.ToInt32(s[0]->InputAt(3)));
   }
 }
 

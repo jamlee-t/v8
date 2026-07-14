@@ -1235,10 +1235,10 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       break;
     case kMips64Ins:
       if (instr->InputAt(1)->IsImmediate() && i.InputInt8(1) == 0) {
-        __ Ins(i.OutputRegister(), zero_reg, i.InputInt8(1), i.InputInt8(2));
+        __ Ins(i.OutputRegister(), zero_reg, i.InputInt8(2), i.InputInt8(3));
       } else {
-        __ Ins(i.OutputRegister(), i.InputRegister(0), i.InputInt8(1),
-               i.InputInt8(2));
+        __ Ins(i.OutputRegister(), i.InputRegister(1), i.InputInt8(2),
+               i.InputInt8(3));
       }
       break;
     case kMips64Dext: {
@@ -1248,10 +1248,10 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
     }
     case kMips64Dins:
       if (instr->InputAt(1)->IsImmediate() && i.InputInt8(1) == 0) {
-        __ Dins(i.OutputRegister(), zero_reg, i.InputInt8(1), i.InputInt8(2));
+        __ Dins(i.OutputRegister(), zero_reg, i.InputInt8(2), i.InputInt8(3));
       } else {
-        __ Dins(i.OutputRegister(), i.InputRegister(0), i.InputInt8(1),
-                i.InputInt8(2));
+        __ Dins(i.OutputRegister(), i.InputRegister(1), i.InputInt8(2),
+                i.InputInt8(3));
       }
       break;
     case kMips64Dshl:
@@ -1728,9 +1728,6 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       break;
     case kMips64Float64ExtractHighWord32:
       __ FmoveHigh(i.OutputRegister(), i.InputDoubleRegister(0));
-      break;
-    case kMips64Float64FromWord32Pair:
-      __ Move(i.OutputDoubleRegister(), i.InputRegister(1), i.InputRegister(0));
       break;
     case kMips64Float64InsertLowWord32:
       __ FmoveLow(i.OutputDoubleRegister(), i.InputRegister(1));

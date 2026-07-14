@@ -918,7 +918,7 @@ void InstructionSelector::VisitWord32And(turboshaft::OpIndex node) {
       // and remove constant loading of inverted mask.
       Emit(kLoong64Bstrins_w, g.DefineSameAsFirst(node),
            g.UseRegister(bitwise_and.left()), g.TempImmediate(0),
-           g.TempImmediate(shift));
+           g.TempImmediate(0), g.TempImmediate(shift));
       return;
     }
   }
@@ -976,7 +976,7 @@ void InstructionSelector::VisitWord64And(OpIndex node) {
       // past word size, so shifts smaller than 32 are covered.
       Emit(kLoong64Bstrins_d, g.DefineSameAsFirst(node),
            g.UseRegister(bitwise_and.left()), g.TempImmediate(0),
-           g.TempImmediate(shift));
+           g.TempImmediate(0), g.TempImmediate(shift));
       return;
     }
   }
@@ -3060,9 +3060,10 @@ void InstructionSelector::VisitBitcastWord32PairToFloat64(OpIndex node) {
   OpIndex hi = bitcast.high_word32();
   OpIndex lo = bitcast.low_word32();
 
-  InstructionOperand temps[] = {g.TempRegister()};
-  Emit(kLoong64Float64FromWord32Pair, g.DefineAsRegister(node), g.Use(hi),
-       g.Use(lo), arraysize(temps), temps);
+  int vreg = g.AllocateVirtualRegister();
+  Emit(kLoong64Bstrins_d, g.DefineSameAsFirstForVreg(vreg), g.UseRegister(lo),
+       g.UseRegister(hi), g.TempImmediate(32), g.TempImmediate(32));
+  Emit(kLoong64BitcastLD, g.DefineAsRegister(node), g.UseRegisterForVreg(vreg));
 }
 
 void InstructionSelector::VisitFloat64SilenceNaN(OpIndex node) {

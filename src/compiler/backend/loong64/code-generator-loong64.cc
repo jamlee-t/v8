@@ -1551,10 +1551,10 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
     case kLoong64Bstrins_w:
       if (instr->InputAt(1)->IsImmediate() && i.InputInt8(1) == 0) {
         __ bstrins_w(i.OutputRegister(), zero_reg,
-                     i.InputInt8(1) + i.InputInt8(2) - 1, i.InputInt8(1));
+                     i.InputInt8(2) + i.InputInt8(3) - 1, i.InputInt8(2));
       } else {
-        __ bstrins_w(i.OutputRegister(), i.InputRegister(0),
-                     i.InputInt8(1) + i.InputInt8(2) - 1, i.InputInt8(1));
+        __ bstrins_w(i.OutputRegister(), i.InputRegister(1),
+                     i.InputInt8(2) + i.InputInt8(3) - 1, i.InputInt8(2));
       }
       break;
     case kLoong64Bstrpick_d: {
@@ -1565,10 +1565,10 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
     case kLoong64Bstrins_d:
       if (instr->InputAt(1)->IsImmediate() && i.InputInt8(1) == 0) {
         __ bstrins_d(i.OutputRegister(), zero_reg,
-                     i.InputInt8(1) + i.InputInt8(2) - 1, i.InputInt8(1));
+                     i.InputInt8(2) + i.InputInt8(3) - 1, i.InputInt8(2));
       } else {
-        __ bstrins_d(i.OutputRegister(), i.InputRegister(0),
-                     i.InputInt8(1) + i.InputInt8(2) - 1, i.InputInt8(1));
+        __ bstrins_d(i.OutputRegister(), i.InputRegister(1),
+                     i.InputInt8(2) + i.InputInt8(3) - 1, i.InputInt8(2));
       }
       break;
     case kLoong64Sll_d:
@@ -1965,10 +1965,6 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       break;
     case kLoong64Float64ExtractHighWord32:
       __ movfrh2gr_s(i.OutputRegister(), i.InputDoubleRegister(0));
-      break;
-    case kLoong64Float64FromWord32Pair:
-      __ movgr2fr_w(i.OutputDoubleRegister(), i.InputRegister(1));
-      __ movgr2frh_w(i.OutputDoubleRegister(), i.InputRegister(0));
       break;
     case kLoong64Float64InsertLowWord32:
       __ FmoveLow(i.OutputDoubleRegister(), i.InputRegister(1));
