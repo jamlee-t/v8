@@ -8798,7 +8798,8 @@ MaybeLocal<Promise> Promise::Catch(Local<Context> context,
   PrepareForExecutionScope api_scope{context, RCCId::kAPI_Promise_Catch};
   i::Isolate* i_isolate = api_scope.i_isolate();
   auto self = Utils::OpenDirectHandle(this);
-  i::Handle<i::JSPromise> return_promise = i_isolate->factory()->NewJSPromise();
+  i::Handle<i::JSPromise> return_promise =
+      i_isolate->factory()->NewJSPromise(self);
   i::DirectHandle<i::Object> args[] = {i_isolate->factory()->undefined_value(),
                                        Utils::OpenDirectHandle(*handler),
                                        return_promise};
@@ -8817,7 +8818,8 @@ MaybeLocal<Promise> Promise::Then(Local<Context> context,
   PrepareForExecutionScope api_scope{context, RCCId::kAPI_Promise_Then};
   i::Isolate* i_isolate = api_scope.i_isolate();
   auto self = Utils::OpenDirectHandle(this);
-  i::Handle<i::JSPromise> return_promise = i_isolate->factory()->NewJSPromise();
+  i::Handle<i::JSPromise> return_promise =
+      i_isolate->factory()->NewJSPromise(self);
   i::DirectHandle<i::Object> args[] = {Utils::OpenDirectHandle(*handler),
                                        i_isolate->factory()->undefined_value(),
                                        return_promise};
@@ -8837,7 +8839,8 @@ MaybeLocal<Promise> Promise::Then(Local<Context> context,
   PrepareForExecutionScope api_scope{context, RCCId::kAPI_Promise_Then};
   i::Isolate* i_isolate = api_scope.i_isolate();
   auto self = Utils::OpenDirectHandle(this);
-  i::Handle<i::JSPromise> return_promise = i_isolate->factory()->NewJSPromise();
+  i::Handle<i::JSPromise> return_promise =
+      i_isolate->factory()->NewJSPromise(self);
   i::DirectHandle<i::Object> args[] = {Utils::OpenDirectHandle(*on_fulfilled),
                                        Utils::OpenDirectHandle(*on_rejected),
                                        return_promise};

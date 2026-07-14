@@ -1216,7 +1216,10 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
   DirectHandle<String> ToPrimitiveHintString(ToPrimitiveHint hint);
 
   Handle<JSPromise> NewJSPromiseWithoutHook();
-  Handle<JSPromise> NewJSPromise();
+  // Creates a new JSPromise and runs the PromiseHook kInit event. If `parent`
+  // is non-null it is reported as the parent promise (e.g. for promise chains
+  // created via Promise.prototype.then); otherwise the parent is undefined.
+  Handle<JSPromise> NewJSPromise(DirectHandle<Object> parent = {});
 
   DirectHandle<Context> CreatePromiseAllResolveElementContext(
       DirectHandle<PromiseCapability> capability);

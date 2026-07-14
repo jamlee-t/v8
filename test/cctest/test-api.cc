@@ -17367,6 +17367,77 @@ TEST(PromiseHook) {
   isolate->SetPromiseHook(nullptr);
 }
 
+struct ChainParentHookData {
+  int init_count = 0;
+  v8::Global<v8::Promise> last_promise;
+  v8::Global<v8::Value> last_parent;
+};
+
+ChainParentHookData* chain_parent_hook_data = nullptr;
+
+void ChainParentPromiseHook(v8::PromiseHookType type,
+                            v8::Local<v8::Promise> promise,
+                            v8::Local<v8::Value> parent) {
+  if (type != v8::PromiseHookType::kInit) return;
+  v8::Isolate* isolate = CcTest::isolate();
+  chain_parent_hook_data->init_count++;
+  chain_parent_hook_data->last_promise.Reset(isolate, promise);
+  chain_parent_hook_data->last_parent.Reset(isolate, parent);
+}
+
+// The C++ v8::Promise::Then and v8::Promise::Catch APIs must report the
+// receiver as the parent promise in the PromiseHook kInit event,
+// matching JS Promise.prototype.then.
+TEST(PromiseHookChainParent) {
+  LocalContext env;
+  v8::Isolate* isolate = env.isolate();
+  v8::HandleScope scope(isolate);
+  v8::Local<v8::Context> context = env.local();
+
+  chain_parent_hook_data = new ChainParentHookData();
+  isolate->SetPromiseHook(ChainParentPromiseHook);
+
+  // A root promise has no parent.
+  v8::Local<v8::Promise::Resolver> resolver =
+      v8::Promise::Resolver::New(context).ToLocalChecked();
+  v8::Local<v8::Promise> root = resolver->GetPromise();
+  CHECK_EQ(chain_parent_hook_data->init_count, 1);
+  CHECK(chain_parent_hook_data->last_promise.Get(isolate) == root);
+  CHECK(chain_parent_hook_data->last_parent.Get(isolate)->IsUndefined());
+
+  v8::Local<v8::Function> noop =
+      v8::Function::New(context,
+                        [](const v8::FunctionCallbackInfo<v8::Value>& info) {})
+          .ToLocalChecked();
+
+  // Promise::Then(handler) reports the receiver as the parent.
+  v8::Local<v8::Promise> then_promise =
+      root->Then(context, noop).ToLocalChecked();
+  CHECK_EQ(chain_parent_hook_data->init_count, 2);
+  CHECK(chain_parent_hook_data->last_promise.Get(isolate) == then_promise);
+  CHECK(chain_parent_hook_data->last_parent.Get(isolate) == root);
+
+  // Promise::Catch(handler) reports the receiver as the parent.
+  v8::Local<v8::Promise> catch_promise =
+      root->Catch(context, noop).ToLocalChecked();
+  CHECK_EQ(chain_parent_hook_data->init_count, 3);
+  CHECK(chain_parent_hook_data->last_promise.Get(isolate) == catch_promise);
+  CHECK(chain_parent_hook_data->last_parent.Get(isolate) == root);
+
+  // Promise::Then(on_fulfilled, on_rejected) reports the receiver as the
+  // parent.
+  v8::Local<v8::Promise> then2_promise =
+      root->Then(context, noop, noop).ToLocalChecked();
+  CHECK_EQ(chain_parent_hook_data->init_count, 4);
+  CHECK(chain_parent_hook_data->last_promise.Get(isolate) == then2_promise);
+  CHECK(chain_parent_hook_data->last_parent.Get(isolate) == root);
+
+  isolate->SetPromiseHook(nullptr);
+  chain_parent_hook_data->last_promise.Reset();
+  chain_parent_hook_data->last_parent.Reset();
+  delete chain_parent_hook_data;
+  chain_parent_hook_data = nullptr;
+}
 
 TEST(EvalWithSourceURLInMessageScriptResourceNameOrSourceURL) {
   LocalContext context;

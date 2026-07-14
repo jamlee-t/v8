@@ -5125,10 +5125,11 @@ Handle<JSPromise> Factory::NewJSPromiseWithoutHook() {
   return promise;
 }
 
-Handle<JSPromise> Factory::NewJSPromise() {
+Handle<JSPromise> Factory::NewJSPromise(DirectHandle<Object> parent) {
   Handle<JSPromise> promise = NewJSPromiseWithoutHook();
-  isolate()->RunAllPromiseHooks(PromiseHookType::kInit, promise,
-                                undefined_value());
+  DirectHandle<Object> hook_parent =
+      parent.is_null() ? DirectHandle<Object>(undefined_value()) : parent;
+  isolate()->RunAllPromiseHooks(PromiseHookType::kInit, promise, hook_parent);
   return promise;
 }
 
