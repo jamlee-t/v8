@@ -236,7 +236,7 @@ using IsNullableField = TypeKindField::Next<Nullability, 1>;
 using IsExactField = IsNullableField::Next<Exactness, 1>;
 // For reference types, we cache some information about the referenced type.
 // Non-reference types don't use these bits.
-using IsSharedField = IsExactField::Next<bool, 1>;
+using IsSharedField = IsExactField::Next<SharedFlag, 1>;
 using RefTypeKindField = IsSharedField::Next<RefTypeKind, 3>;
 static_assert(RefTypeKindField::is_valid(RefTypeKind::kLastValue));
 
@@ -253,7 +253,8 @@ static constexpr uint32_t kGenericKindMask =
 // Useful for numeric types which are always considered "shared".
 static constexpr uint32_t kNumericKindMask =
     kGenericKindMask | IsSharedField::kMask;
-static constexpr uint32_t kNumericExtraBits = IsSharedField::encode(true);
+static constexpr uint32_t kNumericExtraBits =
+    IsSharedField::encode(SharedFlag{true});
 
 #define COUNT(...) +1
 static constexpr uint32_t kNumberOfGenericKinds = 0 FOREACH_GENERIC_TYPE(COUNT);
@@ -358,8 +359,7 @@ class ValueTypeBase {
   // Once we know more about the referenced type, this function updates those
   // bits to their correct values.
   void Populate(SharedFlag shared, RefTypeKind kind) {
-    uint32_t bits =
-        value_type_impl::IsSharedField::update(bit_field_, shared.value());
+    uint32_t bits = value_type_impl::IsSharedField::update(bit_field_, shared);
     bit_field_ = value_type_impl::RefTypeKindField::update(bits, kind);
   }
 
@@ -403,7 +403,7 @@ class ValueTypeBase {
   }
   constexpr bool is_exact() const { return exactness() == Exactness::kExact; }
   constexpr SharedFlag is_shared() const {
-    return SharedFlag{value_type_impl::IsSharedField::decode(bit_field_)};
+    return value_type_impl::IsSharedField::decode(bit_field_);
   }
   constexpr RefTypeKind ref_type_kind() const {
     return value_type_impl::RefTypeKindField::decode(bit_field_);
@@ -696,7 +696,7 @@ class ValueTypeBase {
                                    SharedFlag is_shared)
       : bit_field_(static_cast<uint32_t>(kind) |
                    value_type_impl::IsNullableField::encode(nullable) |
-                   value_type_impl::IsSharedField::encode(is_shared.value())) {
+                   value_type_impl::IsSharedField::encode(is_shared)) {
     DCHECK(is_generic());
   }
 
@@ -707,7 +707,7 @@ class ValueTypeBase {
             value_type_impl::TypeKindField::encode(TypeKind::kIndexedRef) |
             value_type_impl::IsNullableField::encode(nullable) |
             value_type_impl::IsExactField::encode(exact) |
-            value_type_impl::IsSharedField::encode(shared.value()) |
+            value_type_impl::IsSharedField::encode(shared) |
             value_type_impl::RefTypeKindField::encode(ref_type_kind) |
             value_type_impl::PayloadField::encode(index.index)) {
     // We shouldn't need this, but experience has shown that having an extra
@@ -876,7 +876,7 @@ class ValueType : public ValueTypeBase {
   constexpr ValueType AsNonShared() const {
     if (!is_ref()) return *this;
     return ValueType{ValueTypeBase(value_type_impl::IsSharedField::update(
-        raw_bit_field(), SharedFlag{false}.value()))};
+        raw_bit_field(), SharedFlag{false}))};
   }
 
   constexpr ValueType Unpacked() const {
