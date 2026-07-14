@@ -2129,6 +2129,11 @@ ProcessResult MaglevGraphOptimizer::VisitCheckedObjectToIndex(
 
 ProcessResult MaglevGraphOptimizer::VisitCheckedInt32ToUint32(
     CheckedInt32ToUint32* node, const ProcessingState& state) {
+  if (auto constant = reducer_.TryGetInt32Constant(node->input_node(0))) {
+    return *constant >= 0 ? ReplaceWith(reducer_.GetUint32Constant(
+                                static_cast<uint32_t>(*constant)))
+                          : DeoptAndTruncate(DeoptimizeReason::kNotUint32);
+  }
   // A non-negative int32 value converts to uint32 without deopting.
   if (auto range = GetRange(node->input_node(0))) {
     if (range->min().has_value() && *range->min() >= 0) {
@@ -2140,7 +2145,10 @@ ProcessResult MaglevGraphOptimizer::VisitCheckedInt32ToUint32(
 
 ProcessResult MaglevGraphOptimizer::VisitUnsafeInt32ToUint32(
     UnsafeInt32ToUint32* node, const ProcessingState& state) {
-  // TODO(b/424157317): Optimize.
+  if (auto constant = reducer_.TryGetInt32Constant(node->input_node(0))) {
+    return ReplaceWith(
+        reducer_.GetUint32Constant(static_cast<uint32_t>(*constant)));
+  }
   return ProcessResult::kContinue;
 }
 
