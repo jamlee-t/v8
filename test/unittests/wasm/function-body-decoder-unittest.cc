@@ -293,8 +293,7 @@ class FunctionBodyDecoderTestBase : public WithZoneMixin<BaseTest> {
         PrepareBytecode(CodeToVector(std::forward<Code>(raw_code)), append_end);
 
     // Validate the code.
-    // TODO(14616): Extend this to shared functions.
-    FunctionBody body(sig, 0, code.begin(), code.end(), SharedFlag{false});
+    FunctionBody body(sig, 0, code.begin(), code.end());
     WasmDetectedFeatures unused_detected_features;
     DecodeResult result =
         ValidateFunctionBody(this->zone(), enabled_features_, module,
@@ -3318,7 +3317,7 @@ TEST_F(FunctionBodyDecoderTest, Regression709741) {
   uint8_t code[] = {WASM_NOP, WASM_END};
 
   for (size_t i = 0; i < arraysize(code); ++i) {
-    FunctionBody body(sigs.v_v(), 0, code, code + i, SharedFlag{false});
+    FunctionBody body(sigs.v_v(), 0, code, code + i);
     WasmDetectedFeatures unused_detected_features;
     DecodeResult result =
         ValidateFunctionBody(this->zone(), WasmEnabledFeatures::All(), module,
@@ -5205,10 +5204,9 @@ class WasmOpcodeLengthTest : public TestWithZone {
     const uint8_t code[] = {
         static_cast<uint8_t>(bytes)..., 0, 0, 0, 0, 0, 0, 0, 0};
     WasmDetectedFeatures detected_features;
-    // TODO(14616): Extend this to shared functions.
     WasmDecoder<Decoder::FullValidationTag> decoder(
         this->zone(), nullptr, WasmEnabledFeatures::None(), &detected_features,
-        nullptr, SharedFlag{false}, code, code + sizeof(code), 0);
+        nullptr, code, code + sizeof(code), 0);
     WasmDecoder<Decoder::FullValidationTag>::OpcodeLength(&decoder, code);
     EXPECT_TRUE(decoder.failed());
   }
@@ -5231,10 +5229,9 @@ class WasmOpcodeLengthTest : public TestWithZone {
       }
     }
     WasmDetectedFeatures detected;
-    // TODO(14616): Extend this to shared functions.
     WasmDecoder<Decoder::FullValidationTag> decoder(
         this->zone(), nullptr, WasmEnabledFeatures::All(), &detected, nullptr,
-        SharedFlag{false}, bytes, bytes + sizeof(bytes), 0);
+        bytes, bytes + sizeof(bytes), 0);
     WasmDecoder<Decoder::FullValidationTag>::OpcodeLength(&decoder, bytes);
     EXPECT_TRUE(decoder.ok())
         << opcode << " aka " << WasmOpcodes::OpcodeName(opcode) << ": "
@@ -5517,10 +5514,8 @@ class LocalDeclDecoderTest : public TestWithZone {
   bool DecodeLocalDecls(BodyLocalDecls* decls, const uint8_t* start,
                         const uint8_t* end) {
     WasmModule module;
-    // TODO(14616): Extend this to shared functions.
     return ValidateAndDecodeLocalDeclsForTesting(enabled_features_, decls,
-                                                 &module, SharedFlag{false},
-                                                 start, end, zone());
+                                                 &module, start, end, zone());
   }
 };
 

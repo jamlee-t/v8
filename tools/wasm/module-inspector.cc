@@ -222,12 +222,11 @@ class InstructionStatistics {
 class ExtendedFunctionDis : public FunctionBodyDisassembler {
  public:
   ExtendedFunctionDis(Zone* zone, const WasmModule* module, uint32_t func_index,
-                      SharedFlag shared, WasmDetectedFeatures* detected,
-                      const FunctionSig* sig, const uint8_t* start,
-                      const uint8_t* end, uint32_t offset,
+                      WasmDetectedFeatures* detected, const FunctionSig* sig,
+                      const uint8_t* start, const uint8_t* end, uint32_t offset,
                       const ModuleWireBytes wire_bytes, NamesProvider* names)
-      : FunctionBodyDisassembler(zone, module, func_index, shared, detected,
-                                 sig, start, end, offset, wire_bytes, names) {}
+      : FunctionBodyDisassembler(zone, module, func_index, detected, sig, start,
+                                 end, offset, wire_bytes, names) {}
 
   void HexDump(MultiLineStringBuilder& out, FunctionHeader include_header) {
     out_ = &out;
@@ -585,8 +584,8 @@ class HexDumpModuleDis : public ITracer {
     uint32_t offset = decoder_.pc_offset();
     const WasmModule* module = module_;
     if (!module) module = decoder_.shared_module().get();
-    ExtendedFunctionDis d(&zone_, module, 0, SharedFlag{false}, &detected, &sig,
-                          start, end, offset, wire_bytes_, names_);
+    ExtendedFunctionDis d(&zone_, module, 0, &detected, &sig, start, end,
+                          offset, wire_bytes_, names_);
     d.HexdumpConstantExpression(out_);
     total_bytes_ += static_cast<size_t>(end - start);
   }
@@ -598,8 +597,7 @@ class HexDumpModuleDis : public ITracer {
     uint32_t offset = pc_offset();
     const WasmModule* module = module_;
     if (!module) module = decoder_.shared_module().get();
-    SharedFlag shared = module->type(func->sig_index).is_shared;
-    ExtendedFunctionDis d(&zone_, module, func->func_index, shared, &detected,
+    ExtendedFunctionDis d(&zone_, module, func->func_index, &detected,
                           func->sig, start, end, offset, wire_bytes_, names_);
     d.HexDump(out_, FunctionBodyDisassembler::kSkipHeader);
     total_bytes_ += func->code.length();
@@ -928,10 +926,9 @@ class FormatConverter {
     for (uint32_t i = module()->num_imported_functions;
          i < module()->functions.size(); i++) {
       const WasmFunction* func = &module()->functions[i];
-      SharedFlag shared = module()->type(func->sig_index).is_shared;
       WasmDetectedFeatures detected;
       base::Vector<const uint8_t> code = wire_bytes_.GetFunctionBytes(func);
-      ExtendedFunctionDis d(&zone, module(), i, shared, &detected, func->sig,
+      ExtendedFunctionDis d(&zone, module(), i, &detected, func->sig,
                             code.begin(), code.end(), func->code.offset(),
                             wire_bytes_, names());
       d.CollectInstructionStats(stats);
@@ -1049,13 +1046,12 @@ class FormatConverter {
     }
     const WasmFunction* func = &module()->functions[func_index];
     Zone zone(&allocator_, "disassembler");
-    SharedFlag shared = module()->type(func->sig_index).is_shared;
     WasmDetectedFeatures detected;
     base::Vector<const uint8_t> code = wire_bytes_.GetFunctionBytes(func);
 
-    ExtendedFunctionDis d(&zone, module(), func_index, shared, &detected,
-                          func->sig, code.begin(), code.end(),
-                          func->code.offset(), wire_bytes_, names());
+    ExtendedFunctionDis d(&zone, module(), func_index, &detected, func->sig,
+                          code.begin(), code.end(), func->code.offset(),
+                          wire_bytes_, names());
     sb.set_current_line_bytecode_offset(func->code.offset());
     if (mode == OutputMode::kWat) {
       d.DecodeAsWat(sb, {0, 1});

@@ -518,15 +518,10 @@ class WasmLoweringReducer : public Next {
 
     Label<WasmFuncRef> done(&Asm());
     IF (UNLIKELY(__ IsSmi(maybe_func_ref))) {
-      bool extract_shared_data =
-          !shared_ && module_->function_is_shared(function_index);
-
       V<WasmFuncRef> from_builtin =
           __ template CallWasmBuiltin<builtin::WasmRefFunc>(
               {.wasm_instance = wasm_instance,
-               .function_index = __ Word32Constant(function_index),
-               .extract_shared_data =
-                   __ Word32Constant(extract_shared_data ? 1 : 0)});
+               .function_index = __ Word32Constant(function_index)});
 
       GOTO(done, from_builtin);
     } ELSE {
@@ -1175,7 +1170,6 @@ class WasmLoweringReducer : public Next {
 
   const wasm::WasmModule* module_ = __ data() -> wasm_module();
 
-  const SharedFlag shared_ = __ data() -> wasm_shared();
   // Wasm-in-JS inlining runs in the JS pipeline where we cannot use the
   // trap handler. For these cases, `is_wasm()` ensures we use explicit checks.
   const NullCheckStrategy null_check_strategy_ =

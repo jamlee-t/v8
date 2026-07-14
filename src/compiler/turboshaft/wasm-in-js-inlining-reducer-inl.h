@@ -1082,14 +1082,6 @@ WasmBodyInliningResult WasmInJSInliningReducer<Next>::TryInlineWasmBody(
   DCHECK_LT(func_idx - module->num_imported_functions,
             module->num_declared_functions);
 
-  // TODO(42204563): Support shared-everything proposal (at some point, or
-  // possibly never).
-  SharedFlag is_shared = module->type(func.sig_index).is_shared;
-  if (is_shared) {
-    TRACE("- not inlining: shared everything is not supported");
-    return WasmBodyInliningResult::Failed();
-  }
-
   const bool has_current_catch_block = __ current_catch_block();
   if (lazy_deopt_on_throw) {
     // Maglev either emits a catch block or uses lazy deopt on throw, but never
@@ -1114,8 +1106,7 @@ WasmBodyInliningResult WasmInJSInliningReducer<Next>::TryInlineWasmBody(
   const uint8_t* start = module_bytes.begin() + func.code.offset();
   const uint8_t* end = module_bytes.begin() + func.code.end_offset();
 
-  wasm::FunctionBody func_body{func.sig, func.code.offset(), start, end,
-                               is_shared};
+  wasm::FunctionBody func_body{func.sig, func.code.offset(), start, end};
 
   auto env = wasm::CompilationEnv::ForModule(native_module);
   wasm::WasmDetectedFeatures detected{};

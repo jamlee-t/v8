@@ -98,7 +98,7 @@ void CreateMapForType(Isolate* isolate, const WasmModule* module,
       break;
     case TypeDefinition::kFunction:
       map = CreateFuncRefMap(isolate, canonical_type_index, rtt_parent,
-                             num_supertypes, type.is_shared);
+                             num_supertypes);
       break;
     case TypeDefinition::kCont:
       map = CreateContRefMap(isolate, canonical_type_index);
@@ -1427,11 +1427,9 @@ Maybe<bool> InstanceBuilder::Build_Phase1(
     if (start_function_.is_null()) {
       // TODO(clemensb): Don't generate an exported function for the start
       // function. Use CWasmEntry instead.
-      SharedFlag function_is_shared =
-          module_->type(function.sig_index).is_shared;
       DirectHandle<WasmFuncRef> func_ref =
           WasmTrustedInstanceData::GetOrCreateFuncRef(
-              isolate_, trusted_data(function_is_shared), start_index,
+              isolate_, trusted_data(SharedFlag{false}), start_index,
               kPrecreateExternal);
       DirectHandle<WasmInternalFunction> internal{func_ref->internal(isolate_),
                                                   isolate_};
@@ -2546,10 +2544,10 @@ void InstanceBuilder::ProcessExports() {
     switch (exp.kind) {
       case kExternalFunction: {
         // Wrap and export the code as a JSFunction.
-        SharedFlag shared = module_->function_is_shared(exp.index);
         DirectHandle<WasmFuncRef> func_ref =
             WasmTrustedInstanceData::GetOrCreateFuncRef(
-                isolate_, trusted_data(shared), exp.index, kPrecreateExternal);
+                isolate_, trusted_data(SharedFlag{false}), exp.index,
+                kPrecreateExternal);
         DirectHandle<WasmInternalFunction> internal_function{
             func_ref->internal(isolate_), isolate_};
         DirectHandle<JSFunction> wasm_external_function =
@@ -2823,8 +2821,7 @@ ValueOrError ConsumeElementSegmentEntry(
 
   auto sig = FixedSizeSignature<ValueType>::Returns(segment.type);
   // TODO(14616): Consider shared element segments.
-  FunctionBody body(&sig, decoder.pc_offset(), decoder.pc(), decoder.end(),
-                    SharedFlag{false});
+  FunctionBody body(&sig, decoder.pc_offset(), decoder.pc(), decoder.end());
   WasmDetectedFeatures detected;
   ValueOrError result;
   {

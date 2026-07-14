@@ -3420,11 +3420,9 @@ class LiftoffCompiler {
       __ LoadInstanceDataFromFrame(instance_data);
     }
     CallBuiltin(Builtin::kWasmRefFunc,
-                MakeSig::Returns(kRef).Params(kRef, kI32, kI32),
+                MakeSig::Returns(kRef).Params(kRef, kI32),
                 {VarState{kRef, LiftoffRegister{instance_data}, 0},
-                 VarState{kI32, static_cast<int>(function_index), 0},
-                 // TODO(42204563): Support shared-everything proposal.
-                 VarState{kI32, 0, 0}},
+                 VarState{kI32, static_cast<int>(function_index), 0}},
                 decoder->position());
     __ PushRegister(kRef, LiftoffRegister(kReturnRegister0));
   }
@@ -11496,10 +11494,8 @@ std::unique_ptr<DebugSideTable> GenerateLiftoffDebugSideTable(
   base::Vector<const uint8_t> function_bytes =
       wire_bytes.GetFunctionBytes(function);
   CompilationEnv env = CompilationEnv::ForModule(native_module);
-  SharedFlag is_shared =
-      native_module->module()->type(function->sig_index).is_shared;
   FunctionBody func_body{function->sig, 0, function_bytes.begin(),
-                         function_bytes.end(), is_shared};
+                         function_bytes.end()};
 
   Zone zone(GetWasmEngine()->allocator(), "LiftoffDebugSideTableZone");
   auto call_descriptor = compiler::GetWasmCallDescriptor(&zone, function->sig);

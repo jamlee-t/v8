@@ -2105,7 +2105,7 @@ DirectHandle<Map> CreateArrayMap(Isolate* isolate,
 DirectHandle<Map> CreateFuncRefMap(Isolate* isolate,
                                    wasm::CanonicalTypeIndex type,
                                    DirectHandle<Map> opt_rtt_parent,
-                                   int num_supertypes, SharedFlag shared);
+                                   int num_supertypes);
 
 DirectHandle<Map> CreateContRefMap(Isolate* isolate,
                                    wasm::CanonicalTypeIndex type);

@@ -309,7 +309,7 @@ class ReducerTest : public TestWithNativeContextAndZone {
       const Builder& builder, const wasm::WasmModule* module,
       const wasm::FunctionSig* sig) {
     Initialize(true);
-    pipeline_data_->SetIsWasmFunction(module, sig, SharedFlag{false});
+    pipeline_data_->SetIsWasmFunction(module, sig);
     Handle<Context> context = indirect_handle(native_context());
     return TestInstance::CreateFromGraph(pipeline_data_.get(), parameter_reps,
                                          builder, isolate(), zone(), context);
@@ -320,7 +320,7 @@ class ReducerTest : public TestWithNativeContextAndZone {
                                const wasm::WasmModule* module,
                                const wasm::FunctionSig* sig) {
     Initialize(true);
-    pipeline_data_->SetIsWasmFunction(module, sig, SharedFlag{false});
+    pipeline_data_->SetIsWasmFunction(module, sig);
     Handle<Context> context = indirect_handle(native_context());
     return TestInstance::CreateFromGraph(pipeline_data_.get(), parameter_count,
                                          builder, isolate(), zone(), context);

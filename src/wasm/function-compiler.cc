@@ -31,9 +31,8 @@ WasmCompilationResult WasmCompilationUnit::ExecuteCompilation(
   DCHECK_GE(func_index_, static_cast<int>(env->module->num_imported_functions));
   const WasmFunction* func = &env->module->functions[func_index_];
   base::Vector<const uint8_t> code = wire_bytes_storage->GetCode(func->code);
-  SharedFlag is_shared = env->module->type(func->sig_index).is_shared;
   wasm::FunctionBody func_body{func->sig, func->code.offset(), code.begin(),
-                               code.end(), is_shared};
+                               code.end()};
 
   base::ElapsedTimer compile_timer;
   if (base::TimeTicks::IsHighResolution()) compile_timer.Start();
@@ -173,12 +172,9 @@ void WasmCompilationUnit::CompileWasmFunction(NativeModule* native_module,
                                               const WasmFunction* function,
                                               ExecutionTier tier) {
   ModuleWireBytes wire_bytes(native_module->wire_bytes());
-  SharedFlag is_shared =
-      native_module->module()->type(function->sig_index).is_shared;
   FunctionBody function_body{function->sig, function->code.offset(),
                              wire_bytes.start() + function->code.offset(),
-                             wire_bytes.start() + function->code.end_offset(),
-                             is_shared};
+                             wire_bytes.start() + function->code.end_offset()};
 
   DCHECK_LE(native_module->num_imported_functions(), function->func_index);
   DCHECK_LT(function->func_index, native_module->num_functions());

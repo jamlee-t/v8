@@ -133,10 +133,9 @@ void ConstantExpressionInterface::RefFunc(FullDecoder* decoder,
   }
   if (!generate_value()) return;
   ModuleTypeIndex sig_index = module_->functions[function_index].sig_index;
-  SharedFlag function_is_shared = module_->type(sig_index).is_shared;
   CanonicalValueType type =
       CanonicalValueType::Ref(module_->canonical_type_id(sig_index),
-                              function_is_shared, RefTypeKind::kFunction);
+                              SharedFlag{false}, RefTypeKind::kFunction);
   // Imported functions can be subtypes of their static import type; for
   // non-imported or exactly imported functions we can return an exact type.
   if (decoder->enabled_.has_custom_descriptors() &&
@@ -146,10 +145,7 @@ void ConstantExpressionInterface::RefFunc(FullDecoder* decoder,
   }
   DirectHandle<WasmFuncRef> func_ref =
       WasmTrustedInstanceData::GetOrCreateFuncRef(
-          isolate_,
-          function_is_shared ? shared_trusted_instance_data_
-                             : trusted_instance_data_,
-          function_index);
+          isolate_, trusted_instance_data_, function_index);
   result->runtime_value = WasmValue(func_ref, type);
 }
 

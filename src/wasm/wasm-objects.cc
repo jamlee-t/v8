@@ -2996,22 +2996,23 @@ DirectHandle<Map> CreateArrayMap(Isolate* isolate,
 DirectHandle<Map> CreateFuncRefMap(Isolate* isolate,
                                    wasm::CanonicalTypeIndex type,
                                    DirectHandle<Map> opt_rtt_parent,
-                                   int num_supertypes, SharedFlag shared) {
+                                   int num_supertypes) {
   const int inobject_properties = 0;
   const InstanceType instance_type = WASM_FUNC_REF_TYPE;
   const ElementsKind elements_kind = TERMINAL_FAST_ELEMENTS_KIND;
   const wasm::CanonicalValueType no_array_element = wasm::kWasmBottom;
-  wasm::CanonicalValueType heaptype =
-      wasm::CanonicalValueType::Ref(type, shared, wasm::RefTypeKind::kFunction);
+  wasm::CanonicalValueType heaptype = wasm::CanonicalValueType::Ref(
+      type, SharedFlag{false}, wasm::RefTypeKind::kFunction);
   DirectHandle<WasmTypeInfo> type_info = isolate->factory()->NewWasmTypeInfo(
-      heaptype, no_array_element, opt_rtt_parent, num_supertypes, shared);
+      heaptype, no_array_element, opt_rtt_parent, num_supertypes,
+      SharedFlag{false});
   constexpr int kInstanceSize = WasmFuncRef::kSize;
   DCHECK_EQ(
       kInstanceSize,
       Cast<Map>(isolate->root(RootIndex::kWasmFuncRefMap))->instance_size());
   DirectHandle<Map> map = isolate->factory()->NewContextlessMap(
       instance_type, kInstanceSize, elements_kind, inobject_properties,
-      shared ? AllocationType::kSharedMap : AllocationType::kMap);
+      AllocationType::kMap);
   map->set_wasm_type_info(*type_info);
   return map;
 }

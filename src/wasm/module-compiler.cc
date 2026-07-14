@@ -1084,9 +1084,7 @@ DecodeResult ValidateSingleFunction(Zone* zone, const WasmModule* module,
                                     WasmEnabledFeatures enabled_features,
                                     WasmDetectedFeatures* detected_features) {
   const WasmFunction* func = &module->functions[func_index];
-  SharedFlag is_shared = module->type(func->sig_index).is_shared;
-  FunctionBody body{func->sig, func->code.offset(), code.begin(), code.end(),
-                    is_shared};
+  FunctionBody body{func->sig, func->code.offset(), code.begin(), code.end()};
   return ValidateFunctionBody(zone, enabled_features, module, detected_features,
                               body);
 }

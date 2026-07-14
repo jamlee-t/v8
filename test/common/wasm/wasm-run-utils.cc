@@ -542,10 +542,8 @@ void WasmFunctionCompiler::Build(base::Vector<const uint8_t> bytes) {
   memcpy(func_wire_bytes.begin(), wire_bytes.begin() + function_->code.offset(),
          func_wire_bytes.size());
 
-  // TODO(14616): Extend this to shared functions.
   FunctionBody func_body{function_->sig, function_->code.offset(),
-                         func_wire_bytes.begin(), func_wire_bytes.end(),
-                         SharedFlag{false}};
+                         func_wire_bytes.begin(), func_wire_bytes.end()};
   ForDebugging for_debugging =
       native_module->IsInDebugState() ? kForDebugging : kNotForDebugging;
 

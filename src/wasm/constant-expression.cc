@@ -44,14 +44,9 @@ ValueOrError EvaluateConstantExpression(
                        module->canonical_type(ValueType::RefNull(expr.type())));
     case ConstantExpression::Kind::kRefFunc: {
       uint32_t index = expr.index();
-      SharedFlag function_is_shared =
-          module->type(module->functions[index].sig_index).is_shared;
       DirectHandle<WasmFuncRef> value =
           WasmTrustedInstanceData::GetOrCreateFuncRef(
-              isolate,
-              function_is_shared ? shared_trusted_instance_data
-                                 : trusted_instance_data,
-              index);
+              isolate, trusted_instance_data, index);
       return WasmValue(value, module->canonical_type(expected));
     }
     case ConstantExpression::Kind::kWireBytesRef: {
@@ -64,10 +59,7 @@ ValueOrError EvaluateConstantExpression(
       const uint8_t* end = module_bytes.begin() + ref.end_offset();
 
       auto sig = FixedSizeSignature<ValueType>::Returns(expected);
-      // We have already validated the expression, so we might as well
-      // revalidate it as non-shared, which is strictly more permissive.
-      // TODO(14616): Rethink this.
-      FunctionBody body(&sig, ref.offset(), start, end, SharedFlag{false});
+      FunctionBody body(&sig, ref.offset(), start, end);
       WasmDetectedFeatures detected;
       ValueOrError result;
       {

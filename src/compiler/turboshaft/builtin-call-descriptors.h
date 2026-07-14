@@ -853,7 +853,6 @@ struct builtin : CallDescriptorBuilder {
     struct Arguments : ArgumentsBase {
       ARG(V<WasmTrustedInstanceData>, wasm_instance)
       ARG(V<Word32>, function_index)
-      ARG(V<Word32>, extract_shared_data)
     };
     using returns_t = std::tuple<V<WasmFuncRef>>;
 

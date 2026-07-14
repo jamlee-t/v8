@@ -74,12 +74,10 @@ void DisassembleFunctionImpl(const WasmModule* module, int func_index,
   const wasm::WasmFunction& func = module->functions[func_index];
   AccountingAllocator allocator;
   Zone zone(&allocator, "Wasm disassembler");
-  SharedFlag shared = module->type(func.sig_index).is_shared;
   WasmDetectedFeatures detected;
-  FunctionBodyDisassembler d(&zone, module, func_index, shared, &detected,
-                             func.sig, function_body.begin(),
-                             function_body.end(), func.code.offset(),
-                             module_bytes, names);
+  FunctionBodyDisassembler d(&zone, module, func_index, &detected, func.sig,
+                             function_body.begin(), function_body.end(),
+                             func.code.offset(), module_bytes, names);
   d.DecodeAsWat(sb, {0, 2}, FunctionBodyDisassembler::kPrintHeader);
   const bool print_offsets = false;
   sb.WriteTo(os, print_offsets, offsets);
@@ -1122,10 +1120,9 @@ void ModuleDisassembler::PrintModule(Indentation indentation, size_t max_mb) {
     if (func->exported) PrintExportName(kExternalFunction, i);
     PrintSignatureOneLine(out_, func->sig, i, names_, true, kIndicesAsComments);
     out_.NextLine(func->code.offset());
-    SharedFlag shared = module_->type(func->sig_index).is_shared;
     WasmDetectedFeatures detected;
     base::Vector<const uint8_t> code = wire_bytes_.GetFunctionBytes(func);
-    FunctionBodyDisassembler d(&zone_, module_, i, shared, &detected, func->sig,
+    FunctionBodyDisassembler d(&zone_, module_, i, &detected, func->sig,
                                code.begin(), code.end(), func->code.offset(),
                                wire_bytes_, names_);
     uint32_t first_instruction_offset;
@@ -1243,9 +1240,8 @@ void ModuleDisassembler::PrintInitExpression(const ConstantExpression& init,
 
       auto sig = FixedSizeSignature<ValueType>::Returns(expected_type);
       WasmDetectedFeatures detected;
-      FunctionBodyDisassembler d(&zone_, module_, 0, SharedFlag{false},
-                                 &detected, &sig, start, end, ref.offset(),
-                                 wire_bytes_, names_);
+      FunctionBodyDisassembler d(&zone_, module_, 0, &detected, &sig, start,
+                                 end, ref.offset(), wire_bytes_, names_);
       d.DecodeGlobalInitializer(out_);
       break;
   }

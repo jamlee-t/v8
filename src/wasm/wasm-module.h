@@ -1012,10 +1012,6 @@ struct V8_EXPORT_PRIVATE WasmModule {
                              isorecursive_canonical_type_ids.end());
   }
 
-  SharedFlag function_is_shared(int func_index) const {
-    return type(functions[func_index].sig_index).is_shared;
-  }
-
   base::Vector<const WasmFunction> declared_functions() const {
     return base::VectorOf(functions) + num_imported_functions;
   }

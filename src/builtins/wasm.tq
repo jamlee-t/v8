@@ -435,13 +435,9 @@ builtin WasmTableSetFuncRef(
   }
 }
 
-builtin WasmRefFunc(
-    instance: WasmTrustedInstanceData, index: uint32,
-    extractSharedData: bool): Object {
-  const trustedData: WasmTrustedInstanceData =
-      extractSharedData ? LoadSharedPartFromInstanceData(instance) : instance;
+builtin WasmRefFunc(instance: WasmTrustedInstanceData, index: uint32): Object {
   try {
-    const funcRefs: FixedArray = LoadFuncRefsFromInstanceData(trustedData);
+    const funcRefs: FixedArray = LoadFuncRefsFromInstanceData(instance);
     const funcref: Object = funcRefs.objects[index];
     // {funcref} is either a WasmFuncRef or Smi::zero(). A Smi check is the
     // fastest way to distinguish these two cases.
@@ -450,8 +446,7 @@ builtin WasmRefFunc(
     return funcref;
   } label CallRuntime deferred {
     tail runtime::WasmRefFunc(
-        LoadContextFromInstanceData(trustedData), trustedData,
-        SmiFromUint32(index));
+        LoadContextFromInstanceData(instance), instance, SmiFromUint32(index));
   }
 }
 

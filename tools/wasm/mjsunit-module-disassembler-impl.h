@@ -550,13 +550,12 @@ class MjsunitFunctionDis : public WasmDecoder<Decoder::FullValidationTag> {
   using ValidationTag = Decoder::FullValidationTag;
 
   MjsunitFunctionDis(Zone* zone, const WasmModule* module, uint32_t func_index,
-                     SharedFlag shared, WasmDetectedFeatures* detected,
-                     const FunctionSig* sig, const uint8_t* start,
-                     const uint8_t* end, uint32_t offset,
+                     WasmDetectedFeatures* detected, const FunctionSig* sig,
+                     const uint8_t* start, const uint8_t* end, uint32_t offset,
                      MjsunitNamesProvider* mjsunit_names,
                      Indentation indentation)
       : WasmDecoder<ValidationTag>(zone, module, WasmEnabledFeatures::All(),
-                                   detected, sig, shared, start, end, offset),
+                                   detected, sig, start, end, offset),
         names_(mjsunit_names),
         indentation_(indentation) {}
 
@@ -1788,9 +1787,8 @@ class MjsunitModuleDis {
           wire_bytes_.GetFunctionBytes(&func);
 
       // Locals and body.
-      SharedFlag shared = module_->type(func.sig_index).is_shared;
       WasmDetectedFeatures detected;
-      MjsunitFunctionDis d(&zone_, module_, index, shared, &detected, func.sig,
+      MjsunitFunctionDis d(&zone_, module_, index, &detected, func.sig,
                            func_code.begin(), func_code.end(),
                            func.code.offset(), &mjsunit_names_,
                            Indentation{2, 2});
@@ -1920,9 +1918,8 @@ class MjsunitModuleDis {
         const uint8_t* end = start + ref.length();
         auto sig = FixedSizeSignature<ValueType>::Returns(expected);
         WasmDetectedFeatures detected;
-        MjsunitFunctionDis d(&zone_, module_, 0, SharedFlag{false}, &detected,
-                             &sig, start, end, ref.offset(), &mjsunit_names_,
-                             Indentation{0, 0});
+        MjsunitFunctionDis d(&zone_, module_, 0, &detected, &sig, start, end,
+                             ref.offset(), &mjsunit_names_, Indentation{0, 0});
         d.DecodeGlobalInitializer(out_);
         if (d.failed()) has_error_ = true;
         break;

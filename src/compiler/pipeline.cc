@@ -3056,8 +3056,7 @@ wasm::WasmCompilationResult Pipeline::GenerateWasmCode(
       options);
   turboshaft_data.set_pipeline_statistics(pipeline_statistics.get());
   const wasm::FunctionSig* sig = compilation_data.func_body.sig;
-  turboshaft_data.SetIsWasmFunction(env->module, sig,
-                                    compilation_data.func_body.is_shared);
+  turboshaft_data.SetIsWasmFunction(env->module, sig);
   DCHECK_NOT_NULL(turboshaft_data.wasm_module());
 
   // TODO(nicohartmann): This only works here because source positions are not
