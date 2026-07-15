@@ -207,6 +207,19 @@ void DisassemblePreviousInstruction(struct user_regs_struct& regs,
     memcpy(bytes_around_rip + offset, &data, i::kSystemPointerSize);
   }
 
+  if (g_support.tracing_enabled) {
+    constexpr size_t kHexDumpSize = sizeof(bytes_around_rip) * 3 + 1;
+    char hex_dump[kHexDumpSize];
+    int outp = 0;
+    for (uint8_t b : bytes_around_rip) {
+      CHECK_EQ(3,
+               snprintf(hex_dump + outp, sizeof(hex_dump) - outp, " %02x", b));
+      outp += 3;
+    }
+    TRACE("[debugger] Bytes around rip (offset %zu):%s\n", rip_offset,
+          hex_dump);
+  }
+
   // Try disassembling at increasing offsets. Eventually this should synchronize
   // with the instruction stream and find the instruction ending at `rip`.
   for (size_t start_offset = 0; start_offset < rip_offset; ++start_offset) {
@@ -221,12 +234,6 @@ void DisassemblePreviousInstruction(struct user_regs_struct& regs,
     TRACE("[debugger] Executed instruction was: %s\n", buffer.data());
     return;
   }
-
-  fprintf(stderr, "Bytes around rip (offset %zu):", rip_offset);
-  for (uint8_t b : bytes_around_rip) {
-    fprintf(stderr, " %02x", b);
-  }
-  fprintf(stderr, "\n");
 
   FATAL("Failed to disassemble instruction before 0x%" PRIx64,
         static_cast<uint64_t>(regs.rip));
