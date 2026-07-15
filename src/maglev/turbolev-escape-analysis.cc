@@ -1173,8 +1173,8 @@ class DeoptFrameUpdater {
 
   template <class NodeT>
   ProcessResult Process(NodeT* node, const ProcessingState& state) {
-    DCHECK_IMPLIES(node->properties().can_eager_deopt(),
-                   NodeT::kProperties.can_eager_deopt());
+    DCHECK_IMPLIES(node->properties().has_eager_deopt_info(),
+                   NodeT::kProperties.has_eager_deopt_info());
     DCHECK_IMPLIES(node->properties().can_lazy_deopt(),
                    NodeT::kProperties.can_lazy_deopt());
 
@@ -1183,7 +1183,7 @@ class DeoptFrameUpdater {
     // if they have elided object inputs that would warrant cloning them. We
     // should instead first inspect the DeoptInfo to see if it has any input
     // that needs to be updated, and only then clone it.
-    if constexpr (NodeT::kProperties.can_eager_deopt()) {
+    if constexpr (NodeT::kProperties.has_eager_deopt_info()) {
       TRACE("> Will UpdateEagerDeoptInfo");
       UpdateEagerDeoptInfo(node);
     }
@@ -1198,7 +1198,7 @@ class DeoptFrameUpdater {
 
   template <class NodeT>
   void UpdateEagerDeoptInfo(NodeT* node) {
-    static_assert(NodeT::kProperties.can_eager_deopt());
+    static_assert(NodeT::kProperties.has_eager_deopt_info());
     DeoptFrame* new_frame_state =
         DeepClone(node->eager_deopt_info()->top_frame(), zone());
     node->SetEagerDeoptInfo(zone(), new_frame_state,
