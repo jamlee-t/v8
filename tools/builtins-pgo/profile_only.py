@@ -6,6 +6,7 @@
 
 from pathlib import Path
 import argparse
+import contextlib
 import subprocess
 import sys
 
@@ -55,11 +56,63 @@ def run_benchmark(benchmark_path, d8_path, output_dir):
   log_path = benchmark_log_path(output_dir)
   cmd = [d8_path_abs, f"--turbo-profiling-output={log_path}"]
   if "JetStream3" in str(benchmark_path):
+    # TODO: remove once PGO builder works again.
+    print_proc_stats()
+    print_memory_stats()
     cmd.append("--trace-gc")
   cmd.append(benchmark_file)
-  run(cmd, cwd=benchmark_dir)
+  try:
+    run(cmd, cwd=benchmark_dir)
+  except:
+    if "JetStream3" in str(benchmark_path):
+      # TODO: remove once PGO builder works again.
+      print_proc_stats()
+      print_memory_stats()
+    raise
   assert log_path.exists(), "Could not find benchmark logs path!"
 
+
+def print_proc_stats():
+  print("#" * 80)
+  print("# PROCESS STATS")
+  print("#" * 80)
+  sys.stdout.flush()
+  with contextlib.suppress(Exception):
+    if sys.platform.startswith("linux") or sys.platform == "darwin":
+      subprocess.run(["ps", "-aux"])
+    elif sys.platform == "win32":
+      subprocess.run(["tasklist"])
+    else:
+      print(f"#   Process stats not implemented for platform: {sys.platform}")
+  sys.stdout.flush()
+
+
+def print_memory_stats():
+  print("#" * 80)
+  print("# Memory Stats:")
+  print("#" * 80)
+  sys.stdout.flush()
+  with contextlib.suppress(Exception):
+    if sys.platform.startswith("linux"):
+      with open("/proc/meminfo", "r") as f:
+        print(f.read(), end="")
+    elif sys.platform == "darwin":
+      subprocess.run(["vm_stat"])
+    elif sys.platform == "win32":
+      with contextlib.suppress(Exception):
+        res = subprocess.run([
+            "wmic",
+            "OS",
+            "get",
+            "FreePhysicalMemory,TotalVisibleMemorySize,FreeVirtualMemory,TotalVirtualMemorySize",
+            "/Value",
+        ])
+        if res.returncode == 0:
+          return
+      subprocess.run(["systeminfo"])
+    else:
+      print(f"#   Memory stats not implemented for platform: {sys.platform}")
+  sys.stdout.flush()
 
 def tools_pgo_dir():
   return Path(__file__).parent
