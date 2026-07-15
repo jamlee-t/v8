@@ -75,8 +75,8 @@ builder.addFunction('main', kSig_i_v)
 const instance = builder.instantiate({ env: {setup} });
 
 // Write 42 to Memory 2 before growth.
-new Int32Array(instance.exports.mem2.buffer)[0] = 42;
+new DataView(instance.exports.mem2.buffer).setInt32(0, 42, true);
 
 let result = instance.exports.main();
 assertEquals(42, result);
-assertEquals(42, new Int32Array(instance.exports.mem2.buffer)[0]);
+assertEquals(42, new DataView(instance.exports.mem2.buffer).getInt32(0, true));
