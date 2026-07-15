@@ -395,7 +395,7 @@ auto TurbolevFrontendPipeline::Run(Args&&... args) {
   }
 #ifdef DEBUG
   maglev::GraphProcessor<maglev::MaglevGraphVerifier> verifier(
-      compilation_info_.get());
+      compilation_info_.get(), Phase::phase);
   verifier.ProcessGraph(graph_);
 #endif
   return result;

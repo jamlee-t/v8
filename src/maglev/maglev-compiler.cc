@@ -70,9 +70,8 @@ void PrintGraph(Graph* graph, bool condition, MaglevPhase phase) {
 
 void VerifyGraph(Graph* graph, MaglevPhase phase) {
 #ifdef DEBUG
-  bool verify_sweepable_dead_nodes = phase != MaglevPhase::kAnyUseMarking;
   GraphProcessor<MaglevGraphVerifier> verifier(graph->compilation_info(),
-                                               verify_sweepable_dead_nodes);
+                                               phase);
   verifier.ProcessGraph(graph);
 #endif  // DEBUG
 }
