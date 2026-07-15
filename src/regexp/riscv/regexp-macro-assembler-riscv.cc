@@ -862,7 +862,7 @@ DirectHandle<HeapObject> RegExpMacroAssemblerRISCV::GetCode(
   // entry stack check for small leaf frames (see the static_assert and
   // CodeGenerator::ShouldApplyOffsetToStackCheck).
   static constexpr int kMaxRegistersWithoutStackCheck = 32;
-  static_assert(kMaxRegistersWithoutStackCheck * kWRegSize <=
+  static_assert(kMaxRegistersWithoutStackCheck * kSystemPointerSize <=
                 kStackLimitSlackForDeoptimizationInBytes);
   if (num_registers_ > kMaxRegistersWithoutStackCheck) {
     // Check if we have space on the stack for registers.
