@@ -1138,6 +1138,8 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   void RequestInterrupt(InterruptCallback callback, void* data);
   void InvokeApiInterruptCallbacks();
 
+  bool is_executing_api_interrupt() const { return api_interrupt_depth_ > 0; }
+
   void RequestInvalidateNoProfilingProtector();
 
   // Administration
@@ -2812,6 +2814,7 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
 
   using InterruptEntry = std::pair<InterruptCallback, void*>;
   std::queue<InterruptEntry> api_interrupts_queue_;
+  int api_interrupt_depth_ = 0;
 
 #define GLOBAL_BACKING_STORE(type, name, initialvalue) type name##_;
   ISOLATE_INIT_LIST(GLOBAL_BACKING_STORE)

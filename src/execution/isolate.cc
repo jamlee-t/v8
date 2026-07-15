@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <fstream>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <span>
@@ -2595,6 +2596,19 @@ void Isolate::RequestInterrupt(InterruptCallback callback, void* data) {
 
 void Isolate::InvokeApiInterruptCallbacks() {
   RCS_SCOPE(this, RuntimeCallCounterId::kInvokeApiInterruptCallbacks);
+  struct ApiInterruptScope {
+    explicit ApiInterruptScope(Isolate* isolate) : isolate_(isolate) {
+      DCHECK_LE(0, isolate_->api_interrupt_depth_);
+      DCHECK_LT(isolate_->api_interrupt_depth_,
+                std::numeric_limits<int>::max());
+      isolate_->api_interrupt_depth_++;
+    }
+    ~ApiInterruptScope() {
+      DCHECK_LT(0, isolate_->api_interrupt_depth_);
+      isolate_->api_interrupt_depth_--;
+    }
+    Isolate* const isolate_;
+  } scope{this};
   // Note: callback below should be called outside of execution access lock.
   while (true) {
     InterruptEntry entry;
