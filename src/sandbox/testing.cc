@@ -4,7 +4,6 @@
 
 #include "src/sandbox/testing.h"
 
-#include <cstring>
 #include <vector>
 
 #include "src/api/api-inl.h"
@@ -1300,59 +1299,10 @@ void CrashFilter(int signal, siginfo_t* info, void* context) {
   // (after uninstalling itself), so we need to allow for that.
 }
 
-#ifdef V8_USE_ADDRESS_SANITIZER
-void FilterIfHarmlessMemcpyParamOverlap() {
-  const void* src_addr = nullptr;
-  size_t src_size = 0;
-  const void* dest_addr = nullptr;
-  size_t dest_size = 0;
-  if (!__asan_get_report_src_address(&src_addr, &src_size) ||
-      !__asan_get_report_dest_address(&dest_addr, &dest_size)) {
-    PrintToStderr(
-        "Warning: ASan report indicates a memcpy-param-overlap, but we "
-        "couldn't obtain the src/dest ranges.\n");
-    return;
-  }
-
-  if (src_size == 0 || dest_size == 0) {
-    PrintToStderr(
-        "Warning: ASan report indicates a memcpy-param-overlap, but "
-        "one or both of the sizes is 0.\n");
-    return;
-  }
-
-  Address src_begin = reinterpret_cast<Address>(src_addr);
-  Address dest_begin = reinterpret_cast<Address>(dest_addr);
-  Address src_last = src_begin + src_size - 1;
-  Address dest_last = dest_begin + dest_size - 1;
-
-  Sandbox* sandbox = Sandbox::current();
-  if (src_begin <= src_last && dest_begin <= dest_last &&
-      sandbox->ReservationContains(src_begin) &&
-      sandbox->ReservationContains(src_last) &&
-      sandbox->ReservationContains(dest_begin) &&
-      sandbox->ReservationContains(dest_last)) {
-    FilterCrash(
-        "Caught harmless ASan fault (overlapping memcpy safely "
-        "contained in the sandbox).");
-  }
-}
-#endif  // V8_USE_ADDRESS_SANITIZER
-
 #ifdef V8_USE_ANY_SANITIZER
 void SanitizerFaultHandler() {
 #ifdef V8_USE_ADDRESS_SANITIZER
   if (__asan_report_present()) {
-    const char* description = __asan_get_report_description();
-    if (description && strcmp(description, "memcpy-param-overlap") == 0) {
-      FilterIfHarmlessMemcpyParamOverlap();
-      // If we didn't filter the crash above, it's a legitimate violation.
-      // memcpy-param-overlap does not have a single fault address, so we
-      // return early to prevent the kNullAddress check below from filtering it.
-      PrintToStderr("\n## V8 sandbox violation detected!\n\n");
-      return;
-    }
-
     Address faultaddr = reinterpret_cast<Address>(__asan_get_report_address());
 
     if (faultaddr == kNullAddress) {
