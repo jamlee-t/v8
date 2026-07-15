@@ -235,8 +235,8 @@ namespace compiler {
   V(RiscvF64x2Abs)                        \
   V(RiscvF32x4ExtractLane)                \
   V(RiscvF32x4ReplaceLane)                \
-  V(RiscvF32x4SConvertI32x4)              \
-  V(RiscvF32x4UConvertI32x4)              \
+  V(RiscvVFcvtFX)                         \
+  V(RiscvVFcvtFXU)                        \
   V(RiscvI64x2SConvertI32x4Low)           \
   V(RiscvI64x2SConvertI32x4High)          \
   V(RiscvI64x2UConvertI32x4Low)           \
@@ -296,8 +296,8 @@ namespace compiler {
   V(RiscvI32x4DotI16x8S)                  \
   V(RiscvI16x8DotI8x16I7x16S)             \
   V(RiscvI32x4DotI8x16I7x16AddS)          \
-  V(RiscvI32x4SConvertF32x4)              \
-  V(RiscvI32x4UConvertF32x4)              \
+  V(RiscvVFcvtXF)                         \
+  V(RiscvVFcvtXUF)                        \
   V(RiscvI32x4SConvertI16x8High)          \
   V(RiscvI32x4UConvertI16x8High)          \
   V(RiscvI16x8SConvertI8x16Low)           \

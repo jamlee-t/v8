@@ -2748,19 +2748,41 @@ bool LiftoffAssembler::emit_f16x8_pmax(LiftoffRegister dst, LiftoffRegister lhs,
 
 bool LiftoffAssembler::emit_i16x8_sconvert_f16x8(LiftoffRegister dst,
                                                  LiftoffRegister src) {
-  return false;
+  if (!CpuFeatures::IsSupported(ZVFH)) return false;
+  VU.SetSimd128(E16);
+  VU.set(FPURoundingMode::RTZ);
+  vmfeq_vv(v0, src.simd128(), src.simd128());
+  vmv_vv(kSimd128ScratchReg, src.simd128());
+  vmv_vx(dst.simd128(), zero_reg);
+  vfcvt_x_f_v(dst.simd128(), kSimd128ScratchReg, MaskType::Mask);
+  VU.set(FPURoundingMode::RNE);
+  return true;
 }
 bool LiftoffAssembler::emit_i16x8_uconvert_f16x8(LiftoffRegister dst,
                                                  LiftoffRegister src) {
-  return false;
+  if (!CpuFeatures::IsSupported(ZVFH)) return false;
+  VU.SetSimd128(E16);
+  VU.set(FPURoundingMode::RTZ);
+  vmfeq_vv(v0, src.simd128(), src.simd128());
+  vmv_vv(kSimd128ScratchReg, src.simd128());
+  vmv_vx(dst.simd128(), zero_reg);
+  vfcvt_xu_f_v(dst.simd128(), kSimd128ScratchReg, MaskType::Mask);
+  VU.set(FPURoundingMode::RNE);
+  return true;
 }
 bool LiftoffAssembler::emit_f16x8_sconvert_i16x8(LiftoffRegister dst,
                                                  LiftoffRegister src) {
-  return false;
+  if (!CpuFeatures::IsSupported(ZVFH)) return false;
+  VU.SetSimd128(E16);
+  vfcvt_f_x_v(dst.simd128(), src.simd128());
+  return true;
 }
 bool LiftoffAssembler::emit_f16x8_uconvert_i16x8(LiftoffRegister dst,
                                                  LiftoffRegister src) {
-  return false;
+  if (!CpuFeatures::IsSupported(ZVFH)) return false;
+  VU.SetSimd128(E16);
+  vfcvt_f_xu_v(dst.simd128(), src.simd128());
+  return true;
 }
 bool LiftoffAssembler::emit_f16x8_demote_f32x4_zero(LiftoffRegister dst,
                                                     LiftoffRegister src) {

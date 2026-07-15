@@ -3687,13 +3687,13 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       __ vfabs_vv(i.OutputSimd128Register(), i.InputSimd128Register(0));
       break;
     }
-    case kRiscvF32x4UConvertI32x4: {
-      __ VU.SetSimd128(E32);
+    case kRiscvVFcvtFXU: {
+      __ VU.SetSimd128(DecodeElementWidth(instr->opcode()));
       __ vfcvt_f_xu_v(i.OutputSimd128Register(), i.InputSimd128Register(0));
       break;
     }
-    case kRiscvF32x4SConvertI32x4: {
-      __ VU.SetSimd128(E32);
+    case kRiscvVFcvtFX: {
+      __ VU.SetSimd128(DecodeElementWidth(instr->opcode()));
       __ vfcvt_f_x_v(i.OutputSimd128Register(), i.InputSimd128Register(0));
       break;
     }
@@ -4135,8 +4135,9 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       __ vzext_vf2(i.OutputSimd128Register(), kSimd128ScratchReg);
       break;
     }
-    case kRiscvI32x4SConvertF32x4: {
-      __ VU.SetSimd128(E32);
+    case kRiscvVFcvtXF: {
+      VSew sew = DecodeElementWidth(instr->opcode());
+      __ VU.SetSimd128(sew);
       __ VU.set(FPURoundingMode::RTZ);
       __ vmfeq_vv(v0, i.InputSimd128Register(0), i.InputSimd128Register(0));
       if (i.OutputSimd128Register() != i.InputSimd128Register(0)) {
@@ -4151,8 +4152,9 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       __ VU.set(FPURoundingMode::RNE);
       break;
     }
-    case kRiscvI32x4UConvertF32x4: {
-      __ VU.SetSimd128(E32);
+    case kRiscvVFcvtXUF: {
+      VSew sew = DecodeElementWidth(instr->opcode());
+      __ VU.SetSimd128(sew);
       __ VU.set(FPURoundingMode::RTZ);
       __ vmfeq_vv(v0, i.InputSimd128Register(0), i.InputSimd128Register(0));
       if (i.OutputSimd128Register() != i.InputSimd128Register(0)) {

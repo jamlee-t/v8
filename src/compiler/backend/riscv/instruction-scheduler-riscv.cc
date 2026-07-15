@@ -138,8 +138,8 @@ int InstructionScheduler::GetTargetInstructionFlags(
     case kRiscvF32x4Qfma:
     case kRiscvF32x4Qfms:
     case kRiscvF32x4ReplaceLane:
-    case kRiscvF32x4SConvertI32x4:
-    case kRiscvF32x4UConvertI32x4:
+    case kRiscvVFcvtFX:
+    case kRiscvVFcvtFXU:
     case kRiscvF32x4Pmin:
     case kRiscvF32x4Pmax:
     case kRiscvF32x4DemoteF64x2Zero:
@@ -199,11 +199,11 @@ int InstructionScheduler::GetTargetInstructionFlags(
     case kRiscvI32x4TruncSatF64x2UZero:
     case kRiscvI32x4ExtractLane:
     case kRiscvI32x4ReplaceLane:
-    case kRiscvI32x4SConvertF32x4:
+    case kRiscvVFcvtXF:
     case kRiscvI32x4Shl:
     case kRiscvI32x4ShrS:
     case kRiscvI32x4ShrU:
-    case kRiscvI32x4UConvertF32x4:
+    case kRiscvVFcvtXUF:
     case kRiscvI8x16ExtractLaneU:
     case kRiscvI8x16ExtractLaneS:
     case kRiscvI8x16ReplaceLane:
@@ -1600,8 +1600,8 @@ ArchInstResource InstructionScheduler::GetInstructionResource(
     case kRiscvF32x4Sqrt:
     case kRiscvF32x4ExtractLane:
     case kRiscvF32x4ReplaceLane:
-    case kRiscvF32x4SConvertI32x4:
-    case kRiscvF32x4UConvertI32x4:
+    case kRiscvVFcvtFX:
+    case kRiscvVFcvtFXU:
     case kRiscvF32x4Pmin:
     case kRiscvF32x4Pmax:
     case kRiscvF32x4DemoteF64x2Zero:
@@ -1628,8 +1628,8 @@ ArchInstResource InstructionScheduler::GetInstructionResource(
     case kRiscvF16x8Sqrt:
     case kRiscvF16x8Pmin:
     case kRiscvF16x8Pmax:
-    case kRiscvI32x4SConvertF32x4:
-    case kRiscvI32x4UConvertF32x4:
+    case kRiscvVFcvtXF:
+    case kRiscvVFcvtXUF:
     case kRiscvI32x4TruncSatF64x2SZero:
     case kRiscvI32x4TruncSatF64x2UZero:
 #endif

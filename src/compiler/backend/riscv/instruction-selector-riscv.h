@@ -962,21 +962,15 @@ void InstructionSelector::VisitI16x8ExtAddPairwiseI8x16U(OpIndex node) {
   V(F64x2ConvertLowI32x4S, kRiscvF64x2ConvertLowI32x4S)         \
   V(F64x2ConvertLowI32x4U, kRiscvF64x2ConvertLowI32x4U)         \
   V(F64x2PromoteLowF32x4, kRiscvF64x2PromoteLowF32x4)           \
-  V(F32x4SConvertI32x4, kRiscvF32x4SConvertI32x4)               \
-  V(F32x4UConvertI32x4, kRiscvF32x4UConvertI32x4)               \
   V(F32x4Abs, kRiscvF32x4Abs)                                   \
   V(F32x4Sqrt, kRiscvF32x4Sqrt)                                 \
   V(F32x4DemoteF64x2Zero, kRiscvF32x4DemoteF64x2Zero)           \
-  V(I32x4RelaxedTruncF32x4S, kRiscvI32x4SConvertF32x4)          \
-  V(I32x4RelaxedTruncF32x4U, kRiscvI32x4UConvertF32x4)          \
   V(I32x4RelaxedTruncF64x2SZero, kRiscvI32x4TruncSatF64x2SZero) \
   V(I32x4RelaxedTruncF64x2UZero, kRiscvI32x4TruncSatF64x2UZero) \
   V(I64x2SConvertI32x4Low, kRiscvI64x2SConvertI32x4Low)         \
   V(I64x2SConvertI32x4High, kRiscvI64x2SConvertI32x4High)       \
   V(I64x2UConvertI32x4Low, kRiscvI64x2UConvertI32x4Low)         \
   V(I64x2UConvertI32x4High, kRiscvI64x2UConvertI32x4High)       \
-  V(I32x4SConvertF32x4, kRiscvI32x4SConvertF32x4)               \
-  V(I32x4UConvertF32x4, kRiscvI32x4UConvertF32x4)               \
   V(I32x4TruncSatF64x2SZero, kRiscvI32x4TruncSatF64x2SZero)     \
   V(I32x4TruncSatF64x2UZero, kRiscvI32x4TruncSatF64x2UZero)     \
   V(I8x16Popcnt, kRiscvI8x16Popcnt)                             \
@@ -1139,10 +1133,6 @@ void InstructionSelector::VisitF16x8Le(OpIndex node) {
 
 // Still unimplemented F16x8 ops (no Liftoff support).
 #define UNIMPLEMENTED_SIMD_FP16_OP_LIST(V) \
-  V(F16x8SConvertI16x8)                    \
-  V(F16x8UConvertI16x8)                    \
-  V(I16x8SConvertF16x8)                    \
-  V(I16x8UConvertF16x8)                    \
   V(F16x8DemoteF32x4Zero)                  \
   V(F16x8DemoteF64x2Zero)                  \
   V(F32x4PromoteLowF16x8)                  \
@@ -1155,6 +1145,29 @@ void InstructionSelector::VisitF16x8Le(OpIndex node) {
 UNIMPLEMENTED_SIMD_FP16_OP_LIST(SIMD_VISIT_UNIMPL_FP16_OP)
 #undef SIMD_VISIT_UNIMPL_FP16_OP
 #undef UNIMPLEMENTED_SIMD_FP16_OP_LIST
+
+// Conversions sharing opcodes between F32x4 and F16x8, differentiated by
+// encoded element width.
+#define SIMD_VISIT_CONVERT(Name, instruction, sew)                      \
+  void InstructionSelector::Visit##Name(OpIndex node) {                 \
+    RiscvOperandGenerator g(this);                                      \
+    const Operation& op = this->Get(node);                              \
+    DCHECK_EQ(op.input_count, 1);                                       \
+    InstructionCode opcode = instruction | EncodeElementWidth(sew);     \
+    Emit(opcode, g.DefineAsRegister(node), g.UseRegister(op.input(0))); \
+  }
+
+SIMD_VISIT_CONVERT(F32x4SConvertI32x4, kRiscvVFcvtFX, E32)
+SIMD_VISIT_CONVERT(F32x4UConvertI32x4, kRiscvVFcvtFXU, E32)
+SIMD_VISIT_CONVERT(I32x4SConvertF32x4, kRiscvVFcvtXF, E32)
+SIMD_VISIT_CONVERT(I32x4UConvertF32x4, kRiscvVFcvtXUF, E32)
+SIMD_VISIT_CONVERT(I32x4RelaxedTruncF32x4S, kRiscvVFcvtXF, E32)
+SIMD_VISIT_CONVERT(I32x4RelaxedTruncF32x4U, kRiscvVFcvtXUF, E32)
+SIMD_VISIT_CONVERT(F16x8SConvertI16x8, kRiscvVFcvtFX, E16)
+SIMD_VISIT_CONVERT(F16x8UConvertI16x8, kRiscvVFcvtFXU, E16)
+SIMD_VISIT_CONVERT(I16x8SConvertF16x8, kRiscvVFcvtXF, E16)
+SIMD_VISIT_CONVERT(I16x8UConvertF16x8, kRiscvVFcvtXUF, E16)
+#undef SIMD_VISIT_CONVERT
 
 void InstructionSelector::VisitS128AndNot(OpIndex node) {
   RiscvOperandGenerator g(this);
