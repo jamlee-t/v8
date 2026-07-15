@@ -5832,6 +5832,27 @@ struct VirtualHeapObjectShape {
 #undef FIELD_LIST
 };
 
+class VirtualObject;
+// To avoid infinite recursion when iterating recursive VirtualObjects, we use
+// VirtualObjectAncestors to keep track of already-visited VirtualObjects and to
+// avoid revisiting them. It's a simple ad-hoc linked list of VirtualObjects.
+// The reasoning behind using a linked-list (rather than say, a
+// absl::flat_hash_set) is that:
+//    1. The vast majority of VirtualObjects will not be deeply nested, so the
+//       linear search of ancestors should be very cheap.
+//    2. It's stack-allocated, meaning cheap to create and no need for any heap
+//       allocation.
+struct VirtualObjectAncestors {
+  const VirtualObject* object;
+  const VirtualObjectAncestors* parent;
+  bool Contains(const VirtualObject* obj) const {
+    for (const VirtualObjectAncestors* cur = this; cur; cur = cur->parent) {
+      if (cur->object == obj) return true;
+    }
+    return false;
+  }
+};
+
 // VirtualObject is a ValueNode only for convenience, it should never be added
 // to the Maglev graph.
 class VirtualObject : public FixedInputValueNodeT<0, VirtualObject> {
@@ -5976,11 +5997,13 @@ class VirtualObject : public FixedInputValueNodeT<0, VirtualObject> {
   template <typename Function>
   inline void ForEachNestedRuntimeInput(
       VirtualObjectList virtual_objects, Function&& f,
-      ForEachSlotIterationMode mode = ForEachSlotIterationMode::kDefault);
+      ForEachSlotIterationMode mode = ForEachSlotIterationMode::kDefault,
+      const VirtualObjectAncestors* ancestors = nullptr);
   template <typename Function>
   inline void ForEachNestedRuntimeInput(
       VirtualObjectList virtual_objects, Function&& f,
-      ForEachSlotIterationMode mode = ForEachSlotIterationMode::kDefault) const;
+      ForEachSlotIterationMode mode = ForEachSlotIterationMode::kDefault,
+      const VirtualObjectAncestors* ancestors = nullptr) const;
 
   template <typename Function>
   inline std::optional<VirtualObject*> Merge(const VirtualObject* other,
@@ -6582,7 +6605,8 @@ void ValueNode::remove_use() {
 template <typename Function>
 inline void VirtualObject::ForEachNestedRuntimeInput(
     VirtualObjectList virtual_objects, Function&& f,
-    ForEachSlotIterationMode mode) const {
+    ForEachSlotIterationMode mode,
+    const VirtualObjectAncestors* ancestors) const {
   ForEachSlot(
       [&](ValueNode* value, const vobj::Field& desc) -> bool {
         value = value->UnwrapIdentities();
@@ -6606,8 +6630,12 @@ inline void VirtualObject::ForEachNestedRuntimeInput(
             // Check if it has escaped.
             if (inner_vobject &&
                 (!alloc->HasBeenAnalysed() || alloc->HasBeenElided())) {
-              inner_vobject->ForEachNestedRuntimeInput(virtual_objects, f,
-                                                       mode);
+              if (ancestors && ancestors->Contains(inner_vobject)) {
+                break;
+              }
+              VirtualObjectAncestors next_ancestors{inner_vobject, ancestors};
+              inner_vobject->ForEachNestedRuntimeInput(virtual_objects, f, mode,
+                                                       &next_ancestors);
             } else {
               f(value);
             }
@@ -6625,7 +6653,7 @@ inline void VirtualObject::ForEachNestedRuntimeInput(
 template <typename Function>
 inline void VirtualObject::ForEachNestedRuntimeInput(
     VirtualObjectList virtual_objects, Function&& f,
-    ForEachSlotIterationMode mode) {
+    ForEachSlotIterationMode mode, const VirtualObjectAncestors* ancestors) {
   ForEachSlot(
       [&](ValueNode*& value, const vobj::Field& desc) -> bool {
         // Subtle: this modifies the location of the caller's `value` in-place.
@@ -6653,8 +6681,12 @@ inline void VirtualObject::ForEachNestedRuntimeInput(
             // Check if it has escaped.
             if (inner_vobject &&
                 (!alloc->HasBeenAnalysed() || alloc->HasBeenElided())) {
-              inner_vobject->ForEachNestedRuntimeInput(virtual_objects, f,
-                                                       mode);
+              if (ancestors && ancestors->Contains(inner_vobject)) {
+                break;
+              }
+              VirtualObjectAncestors next_ancestors{inner_vobject, ancestors};
+              inner_vobject->ForEachNestedRuntimeInput(virtual_objects, f, mode,
+                                                       &next_ancestors);
             } else {
               f(value);
             }
