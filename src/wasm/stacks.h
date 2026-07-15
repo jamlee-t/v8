@@ -72,6 +72,7 @@ class StackMemory {
   ~StackMemory();
   Address limit() const;
   void* jslimit() const;
+  void UpdateCentralStackLimit(Isolate* isolate);
   Address base() const {
     Address memory_limit = active_segment_
                                ? active_segment_->base()

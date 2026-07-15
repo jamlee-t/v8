@@ -17,6 +17,13 @@ StackMemory* StackMemory::GetCentralStackView(Isolate* isolate) {
   return new StackMemory(view.begin(), view.size());
 }
 
+void StackMemory::UpdateCentralStackLimit(Isolate* isolate) {
+  DCHECK(!owned_);
+  base::Vector<uint8_t> view = SimulatorStack::GetCentralStackView(isolate);
+  limit_ = view.begin();
+  size_ = view.size();
+}
+
 StackMemory::~StackMemory() {
   if (v8_flags.trace_wasm_stack_switching) {
     PrintF("Delete stack #%d\n", id_);

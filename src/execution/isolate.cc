@@ -7111,6 +7111,19 @@ base::RandomNumberGenerator* Isolate::fuzzer_rng() {
   return fuzzer_rng_;
 }
 
+void Isolate::SetStackSize(size_t v) {
+  stack_size_ = v;
+#if V8_ENABLE_WEBASSEMBLY
+  // During early isolate initialization (inside v8::Isolate::Initialize),
+  // SetStackSize is called before Isolate::Init allocates the first central
+  // Wasm stack. When that happens, wasm_stacks() is empty. Skip the bounds
+  // update since the central stack will query stack_size() upon creation.
+  if (!wasm_stacks().empty()) {
+    wasm_stacks()[0]->UpdateCentralStackLimit(this);
+  }
+#endif
+}
+
 int Isolate::GenerateIdentityHash(uint32_t mask) {
   int hash;
   int attempts = 0;

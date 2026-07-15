@@ -1814,7 +1814,7 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
 
   bool jitless() const { return jitless_; }
 
-  void set_stack_size(size_t v) { stack_size_ = v; }
+  void SetStackSize(size_t v);
   size_t stack_size() { return stack_size_; }
 
   base::RandomNumberGenerator* random_number_generator();
