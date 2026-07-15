@@ -1020,8 +1020,7 @@ DirectHandle<JSArrayBuffer> WasmMemoryObject::RefreshBuffer(
     new_buffer = isolate->factory()->NewJSSharedArrayBuffer(
         backing_store.as_shared_ptr());
     if (override_resizable.has_value()) {
-      bool resizable = override_resizable->value();
-      new_buffer->set_is_resizable_by_js(resizable);
+      new_buffer->set_is_resizable_by_js(*override_resizable);
     }
   } else {
     new_buffer = isolate->factory()->NewJSArrayBuffer(

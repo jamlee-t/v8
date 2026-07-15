@@ -61,8 +61,8 @@ void JSArrayBuffer::Setup(SharedFlag shared, ResizableFlag resizable,
   init_extension();
   set_views_or_detach_key(views);
   set_bit_field(0);
-  set_is_shared(shared.value());
-  set_is_resizable_by_js(resizable.value());
+  set_is_shared(shared);
+  set_is_resizable_by_js(resizable);
   set_is_detachable(!shared);
   cpp_heap_wrappable_.SetupLazilyInitialized();
   for (int i = 0; i < v8::ArrayBuffer::kEmbedderFieldCount; i++) {
@@ -242,7 +242,7 @@ void JSArrayBuffer::DetachInternal(DirectHandle<JSArrayBuffer> array_buffer,
 void JSArrayBuffer::MakeImmutable(Isolate* isolate) {
   if (is_immutable()) return;
   DCHECK(!was_detached());
-  set_is_immutable(true);
+  set_is_immutable(ImmutableFlag{true});
   if (auto backing_store = GetBackingStore()) {
     backing_store->set_is_immutable(true);
   }

@@ -249,23 +249,33 @@ BIT_FIELD_ACCESSORS(JSArrayBuffer, bit_field, is_detachable,
                     JSArrayBuffer::IsDetachableBit)
 BIT_FIELD_ACCESSORS(JSArrayBuffer, bit_field, was_detached,
                     JSArrayBuffer::WasDetachedBit)
-BIT_FIELD_ACCESSORS(JSArrayBuffer, bit_field, is_shared,
-                    JSArrayBuffer::IsSharedBit)
-
-bool JSArrayBuffer::is_resizable_by_js() const {
-  return JSArrayBuffer::IsResizableByJsBit::decode(bit_field());
+bool JSArrayBuffer::is_shared() const {
+  return IsSharedBit::decode(bit_field()).value();
 }
 
-void JSArrayBuffer::set_is_resizable_by_js(bool value) {
-  set_bit_field(JSArrayBuffer::IsResizableByJsBit::update(bit_field(), value));
+void JSArrayBuffer::set_is_shared(SharedFlag value) {
+  set_bit_field(IsSharedBit::update(bit_field(), value));
+}
 
-  if (auto* extension = this->extension()) {
-    extension->set_is_resizable_by_js(value);
+bool JSArrayBuffer::is_resizable_by_js() const {
+  return IsResizableByJsBit::decode(bit_field()).value();
+}
+
+void JSArrayBuffer::set_is_resizable_by_js(ResizableFlag value) {
+  set_bit_field(IsResizableByJsBit::update(bit_field(), value));
+
+  if (ArrayBufferExtension* extension = this->extension()) {
+    extension->set_is_resizable_by_js(value.value());
   }
 }
 
-BIT_FIELD_ACCESSORS(JSArrayBuffer, bit_field, is_immutable,
-                    JSArrayBuffer::IsImmutableBit)
+bool JSArrayBuffer::is_immutable() const {
+  return IsImmutableBit::decode(bit_field()).value();
+}
+
+void JSArrayBuffer::set_is_immutable(ImmutableFlag value) {
+  set_bit_field(IsImmutableBit::update(bit_field(), value));
+}
 
 bool JSArrayBuffer::was_detached(AcquireLoadTag) const {
   uint32_t bits = base::AsAtomic32::Acquire_Load(&bit_field_);

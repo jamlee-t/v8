@@ -2164,7 +2164,7 @@ MaybeDirectHandle<JSArrayBuffer> ValueDeserializer::ReadJSArrayBuffer(
       if (!ReadVarint<uint8_t>().To(&resizable_subtag)) return {};
       if (resizable_subtag ==
           static_cast<uint8_t>(WasmMemoryArrayBufferTag::kResizable)) {
-        array_buffer->set_is_resizable_by_js(true);
+        array_buffer->set_is_resizable_by_js(ResizableFlag{true});
         // GSABs don't use byte_length getter; avoid DCHECK from firing.
         array_buffer->set_byte_length(0);
         DirectHandle<Object> wasm_memory_obj;

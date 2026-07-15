@@ -69,9 +69,9 @@ V8_OBJECT class JSArrayBuffer : public JSAPIObjectWithEmbedderSlots {
   using IsDetachableBit = IsExternalBit::Next<bool, 1>;
   using WasDetachedBit = IsDetachableBit::Next<bool, 1>;
   using IsAsmJsMemoryBit = WasDetachedBit::Next<bool, 1>;
-  using IsSharedBit = IsAsmJsMemoryBit::Next<bool, 1>;
-  using IsResizableByJsBit = IsSharedBit::Next<bool, 1>;
-  using IsImmutableBit = IsResizableByJsBit::Next<bool, 1>;
+  using IsSharedBit = IsAsmJsMemoryBit::Next<SharedFlag, 1>;
+  using IsResizableByJsBit = IsSharedBit::Next<ResizableFlag, 1>;
+  using IsImmutableBit = IsResizableByJsBit::Next<ImmutableFlag, 1>;
   enum Flag : uint32_t {
     kNone = 0,
     kIsExternal = IsExternalBit::kMask,
@@ -100,14 +100,17 @@ V8_OBJECT class JSArrayBuffer : public JSAPIObjectWithEmbedderSlots {
 
   // [is_shared]: true if this is a SharedArrayBuffer or a
   // GrowableSharedArrayBuffer.
-  DECL_BOOLEAN_ACCESSORS(is_shared)
+  inline bool is_shared() const;
+  inline void set_is_shared(SharedFlag value);
 
   // [is_resizable_by_js]: true if this is a ResizableArrayBuffer or a
   // GrowableSharedArrayBuffer.
-  DECL_BOOLEAN_ACCESSORS(is_resizable_by_js)
+  inline bool is_resizable_by_js() const;
+  inline void set_is_resizable_by_js(ResizableFlag value);
 
   // [is_immutable]: true if this is an ImmutableArrayBuffer.
-  DECL_BOOLEAN_ACCESSORS(is_immutable)
+  inline bool is_immutable() const;
+  inline void set_is_immutable(ImmutableFlag value);
 
   V8_EXPORT_PRIVATE void MakeImmutable(Isolate* isolate);
 
