@@ -5667,13 +5667,13 @@ MaybeReduceResult MaglevReducer<BaseT>::TryReduceRegExpPrototypeTest(
   ValueNode* search_string = args[0];
   RETURN_IF_ABORT(BuildCheckString(search_string));
 
-  // lastIndex is a plain Object field: it can hold any value, so the untag
-  // below must be the checked one.
   ValueNode* last_index;
   GET_VALUE_OR_ABORT(
       last_index, BuildLoadTaggedField(receiver, JSRegExp::kLastIndexOffset));
+  // Virtual object tracking might return an Int32Constant, which cannot be
+  // untagged.
   ValueNode* last_index_int32;
-  GET_VALUE_OR_ABORT(last_index_int32, BuildSmiUntag(last_index));
+  GET_VALUE_OR_ABORT(last_index_int32, GetInt32(last_index));
   RETURN_IF_ABORT(TryBuildCheckInt32Condition(
       last_index_int32, GetInt32Constant(0), AssertCondition::kGreaterThanEqual,
       DeoptimizeReason::kNotASmi));
