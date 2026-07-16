@@ -197,6 +197,10 @@ void EscapeAnalysisData::MarkAsEscaped(InlinedAllocation* alloc) {
   }
 }
 
+bool EscapeAnalysisData::HasEscaped(InlinedAllocation* alloc) {
+  return candidates.at(alloc) == CandidateStatus::kCannotElide;
+}
+
 namespace {
 
 void UpdateVirtualObjects(DeoptFrame* deopt_frame,
@@ -889,11 +893,16 @@ class FieldValuesTracker : public CandidateAnalyzer {
       state = block->state();
     }
 
-    bool created_phi = false;
+    bool need_revisit = false;
     auto merge_field_values =
         [&](Key key,
             base::Vector<ValueNode* const> predecessors) -> ValueNode* {
       DCHECK_NOT_NULL(key.data().base);
+      if (data_.HasEscaped(key.data().base)) {
+        // No need to bother introducing phis since this allocation has escaped.
+        return nullptr;
+      }
+
       bool all_predecessors_equal = true;
       for (ValueNode* pred : predecessors) {
         if (pred == nullptr) {
@@ -914,14 +923,29 @@ class FieldValuesTracker : public CandidateAnalyzer {
         return predecessors[0];
       }
 
-#ifdef DEBUG
-      // All predecessors should have the same value_representation.
+      // Check representation mismatch
+      DCHECK_GT(predecessors.size(), 0);
       ValueRepresentation first_pred_repr =
           predecessors[0]->value_representation();
+      bool representation_mismatch = false;
       for (int i = 1; i < predecessor_count; i++) {
-        DCHECK_EQ(first_pred_repr, predecessors[i]->value_representation());
+        if (first_pred_repr != predecessors[i]->value_representation()) {
+          representation_mismatch = true;
+          break;
+        }
       }
-#endif
+
+      if (representation_mismatch) {
+        // This can happen due to type confusion on dead branches where we
+        // perform type-unsafe stores (e.g. storing a Float64 to a field that
+        // is tracked as Tagged on another path).
+        TRACE("Representation mismatch for key " << key.data().offset << " of "
+                                                 << PRINT_NODE(key.data().base)
+                                                 << " -> escaping base");
+        data_.MarkAsEscaped(key.data().base);
+        need_revisit = true;
+        return nullptr;
+      }
 
       DCHECK(state.has_value());
       // The "owner" field of Phis is just used for exception phis late in the
@@ -949,7 +973,7 @@ class FieldValuesTracker : public CandidateAnalyzer {
       }
       phi->change_representation(predecessors[0]->value_representation());
       TRACE(">> Created new phi: " << PRINT_NODE(phi));
-      created_phi = true;
+      need_revisit = true;
       RegisterNewPhi(phi, block, key);
 
       // We need to call `ProcessPhi` because an input of this phi could be an
@@ -962,7 +986,7 @@ class FieldValuesTracker : public CandidateAnalyzer {
     field_values().StartNewSnapshot(base::VectorOf(predecessors_snapshots),
                                     merge_field_values);
 
-    return created_phi;
+    return need_revisit;
   }
 
   BlockProcessResult PostProcessBasicBlock(BasicBlock* block) {

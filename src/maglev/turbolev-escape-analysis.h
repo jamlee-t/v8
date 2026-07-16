@@ -170,6 +170,8 @@ struct EscapeAnalysisData {
 
   void MarkAsEscaped(InlinedAllocation* alloc);
 
+  bool HasEscaped(InlinedAllocation* alloc);
+
   ValueNode* Get(InlinedAllocation* base, int field);
   Key GetOrCreateKey(InlinedAllocation* base, int field);
 };
