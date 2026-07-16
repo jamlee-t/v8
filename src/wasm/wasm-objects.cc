@@ -826,8 +826,7 @@ DirectHandle<WasmMemoryObject> WasmMemoryObject::New(
 
   if (DirectHandle<JSArrayBuffer> buffer; maybe_buffer.ToHandle(&buffer)) {
     DCHECK_EQ(backing_store, buffer->GetBackingStore());
-    DCHECK(!backing_store ||
-           buffer->is_shared().value() == backing_store->is_shared());
+    DCHECK(!backing_store || buffer->is_shared() == backing_store->is_shared());
     WasmMemoryObject::SetNewBuffer(isolate, memory_object, buffer);
   } else if (backing_store && backing_store->is_shared()) {
     // Only Wasm memory can be shared (in contrast to asm.js memory).
@@ -1015,7 +1014,7 @@ DirectHandle<JSArrayBuffer> WasmMemoryObject::RefreshBuffer(
   DCHECK_EQ(backing_store.raw(), memory_object->backing_store().raw());
 
   DirectHandle<JSArrayBuffer> new_buffer;
-  const bool bs_shared = backing_store->is_shared();
+  const SharedFlag bs_shared = backing_store->is_shared();
   DCHECK_IMPLIES(override_resizable.has_value(), bs_shared);
   if (bs_shared) {
     new_buffer = isolate->factory()->NewJSSharedArrayBuffer(
@@ -1045,8 +1044,7 @@ int32_t WasmMemoryObject::Grow(Isolate* isolate,
       direct_handle(memory_object->array_buffer(), isolate), &maybe_old_buffer);
   if (has_old_buffer) {
     DCHECK_EQ(maybe_old_buffer->GetBackingStore(), backing_store);
-    DCHECK_EQ(maybe_old_buffer->is_shared().value(),
-              backing_store->is_shared());
+    DCHECK_EQ(maybe_old_buffer->is_shared(), backing_store->is_shared());
   }
 
   // Check for maximum memory size.
@@ -1187,9 +1185,8 @@ DirectHandle<JSArrayBuffer> WasmMemoryObject::GetArrayBuffer(
           : handle(Cast<JSArrayBuffer>(memory_object->array_buffer()), isolate);
 
   DCHECK_EQ(memory_object->backing_store(), buffer->GetBackingStore());
-  DCHECK_EQ(memory_object->backing_store()->is_shared(),
-            buffer->is_shared().value());
-  DCHECK_EQ(memory_object->backing_store()->is_resizable_by_js(),
+  DCHECK_EQ(memory_object->backing_store()->is_shared(), buffer->is_shared());
+  DCHECK_EQ(memory_object->backing_store()->is_resizable_by_js().value(),
             !buffer->is_shared() && buffer->is_resizable_by_js());
   return buffer;
 }
@@ -1216,8 +1213,8 @@ DirectHandle<JSArrayBuffer> WasmMemoryObject::ChangeArrayBufferResizability(
                          new_resizability);
   }
   // Potentially update the bit on the backing store and detach the old buffer.
-  if (backing_store->is_resizable_by_js() != new_resizability.value()) {
-    backing_store->MakeWasmMemoryResizableByJS(new_resizability.value());
+  if (backing_store->is_resizable_by_js() != new_resizability) {
+    backing_store->MakeWasmMemoryResizableByJS(new_resizability);
     if (!buffer.is_null()) JSArrayBuffer::Detach(buffer, true).Check();
   }
 

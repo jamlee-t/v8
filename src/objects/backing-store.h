@@ -108,9 +108,13 @@ class V8_EXPORT_PRIVATE BackingStore : public BackingStoreBase {
   }
   size_t max_byte_length() const { return max_byte_length_; }
   size_t byte_capacity() const { return byte_capacity_; }
-  bool is_shared() const { return has_flag(kIsShared); }
-  bool is_resizable_by_js() const { return has_flag(kIsResizableByJs); }
-  bool is_immutable() const { return has_flag(kIsImmutable); }
+  SharedFlag is_shared() const { return SharedFlag{has_flag(kIsShared)}; }
+  ResizableFlag is_resizable_by_js() const {
+    return ResizableFlag{has_flag(kIsResizableByJs)};
+  }
+  ImmutableFlag is_immutable() const {
+    return ImmutableFlag{has_flag(kIsImmutable)};
+  }
   bool is_wasm_memory() const { return has_flag(kIsWasmMemory); }
   bool is_wasm_memory64() const { return has_flag(kIsWasmMemory64); }
   WasmMemoryFlag wasm_memory_flag() const {
@@ -160,7 +164,7 @@ class V8_EXPORT_PRIVATE BackingStore : public BackingStoreBase {
   // WebAssembly.Memory can create multiple SharedArrayBuffers backed by the
   // same BackingStore, some of which are exposed as growable, and some of which
   // as fixed-length.
-  void MakeWasmMemoryResizableByJS(bool resizable);
+  void MakeWasmMemoryResizableByJS(ResizableFlag resizable);
 
   // Attempt to grow this backing store in place.
   std::optional<size_t> GrowWasmMemoryInPlace(Isolate* isolate,

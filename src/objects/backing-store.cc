@@ -605,7 +605,7 @@ void BackingStore::UpdateSharedWasmMemoryObjects(Isolate* isolate) {
   GlobalBackingStoreRegistry::UpdateSharedWasmMemoryObjects(isolate);
 }
 
-void BackingStore::MakeWasmMemoryResizableByJS(bool resizable) {
+void BackingStore::MakeWasmMemoryResizableByJS(ResizableFlag resizable) {
   DCHECK(is_wasm_memory());
   // Shared memory does not update this flag, because different ABs may share
   // the backing store but with different resizability.

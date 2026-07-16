@@ -76,10 +76,9 @@ void JSArrayBuffer::Setup(SharedFlag shared, ResizableFlag resizable,
     return;
   }
   // Rest of the code here deals with attaching the BackingStore.
-  DCHECK_EQ(is_shared().value(), backing_store->is_shared());
-  DCHECK(
-      (is_resizable_by_js().value() == backing_store->is_resizable_by_js()) ||
-      (backing_store->is_wasm_memory() && is_shared().value()));
+  DCHECK_EQ(is_shared(), backing_store->is_shared());
+  DCHECK((is_resizable_by_js() == backing_store->is_resizable_by_js()) ||
+         (backing_store->is_wasm_memory() && is_shared()));
   DCHECK_IMPLIES(
       !backing_store->is_wasm_memory() && !backing_store->is_resizable_by_js(),
       backing_store->byte_length() == backing_store->max_byte_length());

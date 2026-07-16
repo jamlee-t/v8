@@ -2377,7 +2377,7 @@ bool InstanceBuilder::ProcessImportedMemories(
     if (Tagged<JSArrayBuffer> buffer;
         TryCast(memory_object->array_buffer(), &buffer)) {
       DCHECK_EQ(backing_store, buffer->GetBackingStore());
-      DCHECK_EQ(backing_store->is_shared(), buffer->is_shared().value());
+      DCHECK_EQ(backing_store->is_shared(), buffer->is_shared());
       if (backing_store->is_shared()) {
         // Note: For shared memory, the backing store might have just grown in
         // another thread.
@@ -2422,12 +2422,12 @@ bool InstanceBuilder::ProcessImportedMemories(
         return false;
       }
     }
-    if (memory->is_shared != SharedFlag{backing_store->is_shared()}) {
+    if (memory->is_shared != backing_store->is_shared()) {
       thrower_->LinkError(
           "%s: mismatch in shared state of memory, declared = %d, imported = "
           "%d",
           ImportName(import_index).c_str(), memory->is_shared.value(),
-          backing_store->is_shared());
+          backing_store->is_shared().value());
       return false;
     }
 
