@@ -210,7 +210,7 @@ void RegExpMacroAssemblerX64::CheckFixedLengthLoop(Label* on_equal) {
   __ cmpl(rdi, Operand(backtrack_stackpointer(), 0));
   __ j(not_equal, &fallthrough, Label::kNear);
   Drop();
-  BranchOrBacktrack(on_equal);
+  GoTo(on_equal);
   __ bind(&fallthrough);
 }
 
@@ -1900,7 +1900,9 @@ DirectHandle<HeapObject> RegExpMacroAssemblerX64::GetCode(
   return Cast<HeapObject>(code);
 }
 
-void RegExpMacroAssemblerX64::GoTo(Label* to) { BranchOrBacktrack(to); }
+void RegExpMacroAssemblerX64::GoTo(Label* to) {
+  __ jmp(to ? to : &backtrack_label_);
+}
 
 void RegExpMacroAssemblerX64::IfRegisterGE(int reg, int comparand,
                                            Label* if_ge) {
@@ -2110,10 +2112,6 @@ void RegExpMacroAssemblerX64::CheckPosition(int cp_offset,
     __ cmpq(rax, Operand(rbp, kStringStartMinusOneOffset));
     BranchOrBacktrack(less_equal, on_outside_input);
   }
-}
-
-void RegExpMacroAssemblerX64::BranchOrBacktrack(Label* to) {
-  __ jmp(to ? to : &backtrack_label_);
 }
 
 void RegExpMacroAssemblerX64::BranchOrBacktrack(Condition condition,

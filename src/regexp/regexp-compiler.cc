@@ -4392,11 +4392,8 @@ std::optional<EmitResult> ChoiceNode::TryEmitMaskedValueDispatch(
       assembler->CheckCharacter(group_values[g], group_labels[g]);
     }
   }
-  if (trace->backtrack() == nullptr) {
-    assembler->Backtrack();
-  } else {
-    assembler->GoTo(trace->backtrack());
-  }
+  // A null backtrack target means Backtrack; GoTo handles that.
+  assembler->GoTo(trace->backtrack());
 
   // Group bodies: full checks in original alternative order, chained
   // within the group; the last alternative of a group backtracks like the
