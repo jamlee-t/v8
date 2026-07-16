@@ -180,6 +180,10 @@ class V8_EXPORT_PRIVATE Pipeline {
       return false;
     }
 
+    data_->info()->set_inlined_bytecode_size(
+        (*maglev_graph)->total_inlined_bytecode_size() +
+        (*maglev_graph)->total_inlined_bytecode_size_small());
+
     std::optional<BailoutReason> bailout =
         Run<turboshaft::TurbolevGraphBuildingPhase>(*maglev_graph);
     if (bailout.has_value()) {

@@ -54,6 +54,7 @@ class MaglevInliner {
   bool returned_constant_function_ = false;
 
   bool IsSmallWithHeapNumberInputsOutputs(MaglevCallSiteInfo* call_site) const;
+  int GetExistingInlinedSize(MaglevCallSiteInfo* call_site) const;
 
   compiler::JSHeapBroker* broker() const { return graph_->broker(); }
   Zone* zone() const { return graph_->zone(); }
