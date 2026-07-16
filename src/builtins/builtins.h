@@ -715,6 +715,19 @@ DEFINE_TYPED_OP_CHECKER(LessThan, Number, None)
 DEFINE_TYPED_OP_CHECKER(GreaterThan, Number, None)
 DEFINE_TYPED_OP_CHECKER(LessThanOrEqual, Number, None)
 DEFINE_TYPED_OP_CHECKER(GreaterThanOrEqual, Number, None)
+// Binary op typed-stub families.
+DEFINE_TYPED_OP_CHECKER(Add, None, String)
+DEFINE_TYPED_OP_CHECKER(Subtract, None, Number)
+DEFINE_TYPED_OP_CHECKER(Multiply, None, Number)
+DEFINE_TYPED_OP_CHECKER(Divide, None, Number)
+DEFINE_TYPED_OP_CHECKER(Modulus, None, Number)
+DEFINE_TYPED_OP_CHECKER(Exponentiate, None, Number)
+DEFINE_TYPED_OP_CHECKER(BitwiseOr, None, SignedSmall)
+DEFINE_TYPED_OP_CHECKER(BitwiseXor, None, SignedSmall)
+DEFINE_TYPED_OP_CHECKER(BitwiseAnd, None, SignedSmall)
+DEFINE_TYPED_OP_CHECKER(ShiftLeft, None, SignedSmall)
+DEFINE_TYPED_OP_CHECKER(ShiftRight, None, SignedSmall)
+DEFINE_TYPED_OP_CHECKER(ShiftRightLogical, None, SignedSmall)
 #undef DEFINE_TYPED_OP_CHECKER
 #endif  // V8_ENABLE_SPARKPLUG_PLUS
 

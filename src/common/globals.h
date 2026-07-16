@@ -2925,29 +2925,49 @@ enum class CachedTieringDecision : int32_t {
 #ifdef V8_ENABLE_SPARKPLUG_PLUS
 #define IF_SPARKPLUG_PLUS(V, ...) EXPAND(V(__VA_ARGS__))
 
-#define TYPED_EQUAL_STUB_LIST(V) \
-  V(None)                        \
-  V(SignedSmall)                 \
-  V(Number)                      \
-  V(InternalizedString)          \
-  V(String)                      \
-  V(Receiver)                    \
-  V(Any)
+#define TYPED_EQUAL_STUB_LIST(V, ...)  \
+  V(None, ##__VA_ARGS__)               \
+  V(SignedSmall, ##__VA_ARGS__)        \
+  V(Number, ##__VA_ARGS__)             \
+  V(InternalizedString, ##__VA_ARGS__) \
+  V(String, ##__VA_ARGS__)             \
+  V(Receiver, ##__VA_ARGS__)           \
+  V(Any, ##__VA_ARGS__)
 
-#define TYPED_STRICTEQUAL_STUB_LIST(V) \
-  TYPED_EQUAL_STUB_LIST(V)             \
-  V(Symbol)
+#define TYPED_STRICTEQUAL_STUB_LIST(V, ...) \
+  TYPED_EQUAL_STUB_LIST(V, ##__VA_ARGS__)   \
+  V(Symbol, ##__VA_ARGS__)
 
-#define TYPED_RELATIONAL_COMPARE_STUB_LIST(V) \
-  V(None)                                     \
-  V(SignedSmall)                              \
-  V(Number)
+#define TYPED_RELATIONAL_COMPARE_STUB_LIST(V, ...) \
+  V(None, ##__VA_ARGS__)                           \
+  V(SignedSmall, ##__VA_ARGS__)                    \
+  V(Number, ##__VA_ARGS__)
+
+#define TYPED_BITWISE_BINOP_STUB_LIST(V, ...) \
+  V(None, ##__VA_ARGS__)                      \
+  V(SignedSmall, ##__VA_ARGS__)
+
+#define TYPED_BINOP_STUB_LIST(V, ...)             \
+  TYPED_BITWISE_BINOP_STUB_LIST(V, ##__VA_ARGS__) \
+  V(Number, ##__VA_ARGS__)
+
+#define TYPED_ADD_STUB_LIST(V, ...)       \
+  TYPED_BINOP_STUB_LIST(V, ##__VA_ARGS__) \
+  V(String, ##__VA_ARGS__)
+
+#define TYPED_EXP_STUB_LIST(V, ...) \
+  V(None, ##__VA_ARGS__)            \
+  V(Number, ##__VA_ARGS__)
 #else
 #define IF_SPARKPLUG_PLUS(V, ...)
 
-#define TYPED_STRICTEQUAL_STUB_LIST(V)
-#define TYPED_EQUAL_STUB_LIST(V)
-#define TYPED_RELATIONAL_COMPARE_STUB_LIST(V)
+#define TYPED_STRICTEQUAL_STUB_LIST(V, ...)
+#define TYPED_EQUAL_STUB_LIST(V, ...)
+#define TYPED_RELATIONAL_COMPARE_STUB_LIST(V, ...)
+#define TYPED_BINOP_STUB_LIST(V, ...)
+#define TYPED_ADD_STUB_LIST(V, ...)
+#define TYPED_EXP_STUB_LIST(V, ...)
+#define TYPED_BITWISE_BINOP_STUB_LIST(V, ...)
 #endif  // V8_ENABLE_SPARKPLUG_PLUS
 
 enum class SpeculationMode {

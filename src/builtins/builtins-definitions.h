@@ -142,12 +142,34 @@ constexpr int kGearboxGenericBuiltinIdOffset = -2;
   TYPED_EQUAL_HANDLER_HELPER(V, Receiver)           \
   TYPED_EQUAL_HANDLER_HELPER(V, SignedSmall)        \
   TYPED_EQUAL_HANDLER_HELPER(V, None)
-#endif
 
 #define GENERATE_BUILTIN_TYPED_RELATIONAL_COMPARE_HANDLER(V, OP) \
   TYPED_COMPARE_OPERATION_HANDLER_HELPER(V, OP, Number)          \
   TYPED_COMPARE_OPERATION_HANDLER_HELPER(V, OP, SignedSmall)     \
   TYPED_COMPARE_OPERATION_HANDLER_HELPER(V, OP, None)
+
+#define TYPED_BINOP_HANDLER_HELPER(V, OPERATION, TYPE) \
+  V(OPERATION##_##TYPE##_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)
+
+#define GENERATE_BUILTIN_TYPED_BINOP_HANDLER(V, OP) \
+  TYPED_BINOP_HANDLER_HELPER(V, OP, None)           \
+  TYPED_BINOP_HANDLER_HELPER(V, OP, SignedSmall)    \
+  TYPED_BINOP_HANDLER_HELPER(V, OP, Number)
+
+#define GENERATE_BUILTIN_TYPED_ADD_HANDLER(V)     \
+  TYPED_BINOP_HANDLER_HELPER(V, Add, None)        \
+  TYPED_BINOP_HANDLER_HELPER(V, Add, SignedSmall) \
+  TYPED_BINOP_HANDLER_HELPER(V, Add, Number)      \
+  TYPED_BINOP_HANDLER_HELPER(V, Add, String)
+
+#define GENERATE_BUILTIN_TYPED_EXP_HANDLER(V, OP) \
+  TYPED_BINOP_HANDLER_HELPER(V, OP, None)         \
+  TYPED_BINOP_HANDLER_HELPER(V, OP, Number)
+
+#define GENERATE_BUILTIN_TYPED_BITWISE_HANDLER(V, OP) \
+  TYPED_BINOP_HANDLER_HELPER(V, OP, None)             \
+  TYPED_BINOP_HANDLER_HELPER(V, OP, SignedSmall)
+#endif
 
 /* Tiering related builtins
  *
@@ -917,30 +939,69 @@ constexpr int kGearboxGenericBuiltinIdOffset = -2;
   TFC(SameValueNumbersOnly, CompareNoContext)                                  \
                                                                                \
   /* Binary ops with embedded feedback */                                      \
-  TFC(Add_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)                       \
-  TFC(AddSmi_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)                    \
-  TFC(Subtract_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)                  \
-  TFC(SubtractSmi_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)               \
-  TFC(Multiply_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)                  \
-  TFC(MultiplySmi_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)               \
-  TFC(Divide_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)                    \
-  TFC(DivideSmi_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)                 \
-  TFC(Modulus_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)                   \
-  TFC(ModulusSmi_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)                \
-  TFC(Exponentiate_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)              \
-  TFC(ExponentiateSmi_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)           \
-  TFC(BitwiseAnd_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)                \
-  TFC(BitwiseAndSmi_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)             \
-  TFC(BitwiseOr_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)                 \
-  TFC(BitwiseOrSmi_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)              \
-  TFC(BitwiseXor_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)                \
-  TFC(BitwiseXorSmi_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)             \
-  TFC(ShiftLeft_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)                 \
-  TFC(ShiftLeftSmi_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)              \
-  TFC(ShiftRight_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)                \
-  TFC(ShiftRightSmi_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)             \
-  TFC(ShiftRightLogical_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)         \
-  TFC(ShiftRightLogicalSmi_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)      \
+  TFC(Add_Generic_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)               \
+  IF_SPARKPLUG_PLUS(GENERATE_BUILTIN_TYPED_ADD_HANDLER, TFC)                   \
+  IF_SPARKPLUG_PLUS(TFC, AddAndTryPatchCode, BinaryOpAndTryPatchCode)          \
+                                                                               \
+  TFC(Subtract_Generic_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)          \
+  IF_SPARKPLUG_PLUS(GENERATE_BUILTIN_TYPED_BINOP_HANDLER, TFC, Subtract)       \
+  IF_SPARKPLUG_PLUS(TFC, SubtractAndTryPatchCode, BinaryOpAndTryPatchCode)     \
+                                                                               \
+  TFC(Multiply_Generic_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)          \
+  IF_SPARKPLUG_PLUS(GENERATE_BUILTIN_TYPED_BINOP_HANDLER, TFC, Multiply)       \
+  IF_SPARKPLUG_PLUS(TFC, MultiplyAndTryPatchCode, BinaryOpAndTryPatchCode)     \
+                                                                               \
+  TFC(Divide_Generic_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)            \
+  IF_SPARKPLUG_PLUS(GENERATE_BUILTIN_TYPED_BINOP_HANDLER, TFC, Divide)         \
+  IF_SPARKPLUG_PLUS(TFC, DivideAndTryPatchCode, BinaryOpAndTryPatchCode)       \
+                                                                               \
+  TFC(Modulus_Generic_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)           \
+  IF_SPARKPLUG_PLUS(GENERATE_BUILTIN_TYPED_BINOP_HANDLER, TFC, Modulus)        \
+  IF_SPARKPLUG_PLUS(TFC, ModulusAndTryPatchCode, BinaryOpAndTryPatchCode)      \
+                                                                               \
+  TFC(Exponentiate_Generic_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)      \
+  IF_SPARKPLUG_PLUS(GENERATE_BUILTIN_TYPED_EXP_HANDLER, TFC, Exponentiate)     \
+  IF_SPARKPLUG_PLUS(TFC, ExponentiateAndTryPatchCode, BinaryOpAndTryPatchCode) \
+                                                                               \
+  TFC(BitwiseAnd_Generic_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)        \
+  IF_SPARKPLUG_PLUS(GENERATE_BUILTIN_TYPED_BITWISE_HANDLER, TFC, BitwiseAnd)   \
+  IF_SPARKPLUG_PLUS(TFC, BitwiseAndAndTryPatchCode, BinaryOpAndTryPatchCode)   \
+                                                                               \
+  TFC(BitwiseOr_Generic_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)         \
+  IF_SPARKPLUG_PLUS(GENERATE_BUILTIN_TYPED_BITWISE_HANDLER, TFC, BitwiseOr)    \
+  IF_SPARKPLUG_PLUS(TFC, BitwiseOrAndTryPatchCode, BinaryOpAndTryPatchCode)    \
+                                                                               \
+  TFC(BitwiseXor_Generic_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)        \
+  IF_SPARKPLUG_PLUS(GENERATE_BUILTIN_TYPED_BITWISE_HANDLER, TFC, BitwiseXor)   \
+  IF_SPARKPLUG_PLUS(TFC, BitwiseXorAndTryPatchCode, BinaryOpAndTryPatchCode)   \
+                                                                               \
+  TFC(ShiftLeft_Generic_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)         \
+  IF_SPARKPLUG_PLUS(GENERATE_BUILTIN_TYPED_BITWISE_HANDLER, TFC, ShiftLeft)    \
+  IF_SPARKPLUG_PLUS(TFC, ShiftLeftAndTryPatchCode, BinaryOpAndTryPatchCode)    \
+                                                                               \
+  TFC(ShiftRight_Generic_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)        \
+  IF_SPARKPLUG_PLUS(GENERATE_BUILTIN_TYPED_BITWISE_HANDLER, TFC, ShiftRight)   \
+  IF_SPARKPLUG_PLUS(TFC, ShiftRightAndTryPatchCode, BinaryOpAndTryPatchCode)   \
+                                                                               \
+  TFC(ShiftRightLogical_Generic_Baseline, BinaryOp_WithEmbeddedFeedbackOffset) \
+  IF_SPARKPLUG_PLUS(GENERATE_BUILTIN_TYPED_BITWISE_HANDLER, TFC,               \
+                    ShiftRightLogical)                                         \
+  IF_SPARKPLUG_PLUS(TFC, ShiftRightLogicalAndTryPatchCode,                     \
+                    BinaryOpAndTryPatchCode)                                   \
+                                                                               \
+  TFC(AddSmi_Generic_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)            \
+  TFC(SubtractSmi_Generic_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)       \
+  TFC(MultiplySmi_Generic_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)       \
+  TFC(DivideSmi_Generic_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)         \
+  TFC(ModulusSmi_Generic_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)        \
+  TFC(ExponentiateSmi_Generic_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)   \
+  TFC(BitwiseAndSmi_Generic_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)     \
+  TFC(BitwiseOrSmi_Generic_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)      \
+  TFC(BitwiseXorSmi_Generic_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)     \
+  TFC(ShiftLeftSmi_Generic_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)      \
+  TFC(ShiftRightSmi_Generic_Baseline, BinaryOp_WithEmbeddedFeedbackOffset)     \
+  TFC(ShiftRightLogicalSmi_Generic_Baseline,                                   \
+      BinaryOp_WithEmbeddedFeedbackOffset)                                     \
                                                                                \
   IF_TSA(TFC_TSA, TFC, Add_WithFeedback, BinaryOp_WithEmbeddedFeedback)        \
   TFC(Subtract_WithFeedback, BinaryOp_WithEmbeddedFeedback)                    \

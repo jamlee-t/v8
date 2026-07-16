@@ -1251,10 +1251,43 @@ void BaselineCompiler::VisitDefineKeyedOwnPropertyInLiteral() {
               FeedbackSlotAsTagged(3));         // slot
 }
 
+#ifdef V8_ENABLE_SPARKPLUG_PLUS
+#define TYPED_BINOP_CASE(type, name, lhs_expr, rhs_expr)                      \
+  case BinaryOperationFeedback::Type::k##type:                                \
+    CallBuiltin<Builtin::k##name##_##type##_Baseline>(lhs_expr, rhs_expr,     \
+                                                      feedback_index_offset); \
+    break;
+
+#define VISIT_TYPED_BINARY_OPERATION(TypedStubList, Name, GenericName, Lhs, \
+                                     Rhs)                                   \
+  using Feedback = BinaryOperationFeedback;                                 \
+  auto feedback_index_offset =                                              \
+      iterator().GetEmbeddedFeedbackOffset(kEmbeddedFeedbackOperandIndex);  \
+  if (allow_sparkplug_plus_) {                                              \
+    switch (Feedback::DecodeTypeIndex(static_cast<Feedback::TypeIndex>(     \
+        EmbeddedFeedback(kEmbeddedFeedbackOperandIndex)))) {                \
+      TypedStubList(TYPED_BINOP_CASE, Name, Lhs, Rhs) default               \
+          : CallBuiltin<Builtin::k##GenericName##_Generic_Baseline>(        \
+                Lhs, Rhs, feedback_index_offset);                           \
+      break;                                                                \
+    }                                                                       \
+  } else {                                                                  \
+    CallBuiltin<Builtin::k##GenericName##_Generic_Baseline>(                \
+        Lhs, Rhs, feedback_index_offset);                                   \
+  }
+#else
+#define VISIT_TYPED_BINARY_OPERATION(TypedStubList, Name, GenericName, Lhs, \
+                                     Rhs)                                   \
+  auto feedback_index_offset =                                              \
+      iterator().GetEmbeddedFeedbackOffset(kEmbeddedFeedbackOperandIndex);  \
+  CallBuiltin<Builtin::k##GenericName##_Generic_Baseline>(                  \
+      Lhs, Rhs, feedback_index_offset);
+#endif  // V8_ENABLE_SPARKPLUG_PLUS
+
 void BaselineCompiler::VisitAdd() {
-  CallBuiltin<Builtin::kAdd_Baseline>(
-      RegisterOperand(0), kInterpreterAccumulatorRegister,
-      iterator().GetEmbeddedFeedbackOffset(kEmbeddedFeedbackOperandIndex));
+  VISIT_TYPED_BINARY_OPERATION(TYPED_ADD_STUB_LIST, Add, Add,
+                               RegisterOperand(0),
+                               kInterpreterAccumulatorRegister);
 }
 
 void BaselineCompiler::VisitAdd_StringConstant_Internalize() {
@@ -1277,142 +1310,166 @@ void BaselineCompiler::VisitAdd_StringConstant_Internalize() {
 }
 
 void BaselineCompiler::VisitSub() {
-  CallBuiltin<Builtin::kSubtract_Baseline>(
-      RegisterOperand(0), kInterpreterAccumulatorRegister,
-      iterator().GetEmbeddedFeedbackOffset(kEmbeddedFeedbackOperandIndex));
+  VISIT_TYPED_BINARY_OPERATION(TYPED_BINOP_STUB_LIST, Subtract, Subtract,
+                               RegisterOperand(0),
+                               kInterpreterAccumulatorRegister);
 }
 
 void BaselineCompiler::VisitMul() {
-  CallBuiltin<Builtin::kMultiply_Baseline>(
-      RegisterOperand(0), kInterpreterAccumulatorRegister,
-      iterator().GetEmbeddedFeedbackOffset(kEmbeddedFeedbackOperandIndex));
+  VISIT_TYPED_BINARY_OPERATION(TYPED_BINOP_STUB_LIST, Multiply, Multiply,
+                               RegisterOperand(0),
+                               kInterpreterAccumulatorRegister);
 }
 
 void BaselineCompiler::VisitDiv() {
-  CallBuiltin<Builtin::kDivide_Baseline>(
-      RegisterOperand(0), kInterpreterAccumulatorRegister,
-      iterator().GetEmbeddedFeedbackOffset(kEmbeddedFeedbackOperandIndex));
+  VISIT_TYPED_BINARY_OPERATION(TYPED_BINOP_STUB_LIST, Divide, Divide,
+                               RegisterOperand(0),
+                               kInterpreterAccumulatorRegister);
 }
 
 void BaselineCompiler::VisitMod() {
-  CallBuiltin<Builtin::kModulus_Baseline>(
-      RegisterOperand(0), kInterpreterAccumulatorRegister,
-      iterator().GetEmbeddedFeedbackOffset(kEmbeddedFeedbackOperandIndex));
+  VISIT_TYPED_BINARY_OPERATION(TYPED_BINOP_STUB_LIST, Modulus, Modulus,
+                               RegisterOperand(0),
+                               kInterpreterAccumulatorRegister);
+}
+
+template <Builtin kGenericBuiltin, typename LhsArg, typename RhsArg>
+void BaselineCompiler::BuildExponentiate(LhsArg lhs, RhsArg rhs) {
+  auto feedback_index_offset =
+      iterator().GetEmbeddedFeedbackOffset(kEmbeddedFeedbackOperandIndex);
+#ifdef V8_ENABLE_SPARKPLUG_PLUS
+  if (allow_sparkplug_plus_) {
+    using Feedback = BinaryOperationFeedback;
+    switch (Feedback::DecodeTypeIndex(static_cast<Feedback::TypeIndex>(
+        EmbeddedFeedback(kEmbeddedFeedbackOperandIndex)))) {
+      case Feedback::Type::kNone:
+        CallBuiltin<Builtin::kExponentiate_None_Baseline>(
+            lhs, rhs, feedback_index_offset);
+        return;
+      case Feedback::Type::kSignedSmall:
+      case Feedback::Type::kNumber:
+        CallBuiltin<Builtin::kExponentiate_Number_Baseline>(
+            lhs, rhs, feedback_index_offset);
+        return;
+      default:
+        break;
+    }
+  }
+#endif  // V8_ENABLE_SPARKPLUG_PLUS
+  CallBuiltin<kGenericBuiltin>(lhs, rhs, feedback_index_offset);
 }
 
 void BaselineCompiler::VisitExp() {
-  CallBuiltin<Builtin::kExponentiate_Baseline>(
-      RegisterOperand(0), kInterpreterAccumulatorRegister,
-      iterator().GetEmbeddedFeedbackOffset(kEmbeddedFeedbackOperandIndex));
+  BuildExponentiate<Builtin::kExponentiate_Generic_Baseline>(
+      RegisterOperand(0), kInterpreterAccumulatorRegister);
 }
 
 void BaselineCompiler::VisitBitwiseOr() {
-  CallBuiltin<Builtin::kBitwiseOr_Baseline>(
-      RegisterOperand(0), kInterpreterAccumulatorRegister,
-      iterator().GetEmbeddedFeedbackOffset(kEmbeddedFeedbackOperandIndex));
+  VISIT_TYPED_BINARY_OPERATION(TYPED_BITWISE_BINOP_STUB_LIST, BitwiseOr,
+                               BitwiseOr, RegisterOperand(0),
+                               kInterpreterAccumulatorRegister);
 }
 
 void BaselineCompiler::VisitBitwiseXor() {
-  CallBuiltin<Builtin::kBitwiseXor_Baseline>(
-      RegisterOperand(0), kInterpreterAccumulatorRegister,
-      iterator().GetEmbeddedFeedbackOffset(kEmbeddedFeedbackOperandIndex));
+  VISIT_TYPED_BINARY_OPERATION(TYPED_BITWISE_BINOP_STUB_LIST, BitwiseXor,
+                               BitwiseXor, RegisterOperand(0),
+                               kInterpreterAccumulatorRegister);
 }
 
 void BaselineCompiler::VisitBitwiseAnd() {
-  CallBuiltin<Builtin::kBitwiseAnd_Baseline>(
-      RegisterOperand(0), kInterpreterAccumulatorRegister,
-      iterator().GetEmbeddedFeedbackOffset(kEmbeddedFeedbackOperandIndex));
+  VISIT_TYPED_BINARY_OPERATION(TYPED_BITWISE_BINOP_STUB_LIST, BitwiseAnd,
+                               BitwiseAnd, RegisterOperand(0),
+                               kInterpreterAccumulatorRegister);
 }
 
 void BaselineCompiler::VisitShiftLeft() {
-  CallBuiltin<Builtin::kShiftLeft_Baseline>(
-      RegisterOperand(0), kInterpreterAccumulatorRegister,
-      iterator().GetEmbeddedFeedbackOffset(kEmbeddedFeedbackOperandIndex));
+  VISIT_TYPED_BINARY_OPERATION(TYPED_BITWISE_BINOP_STUB_LIST, ShiftLeft,
+                               ShiftLeft, RegisterOperand(0),
+                               kInterpreterAccumulatorRegister);
 }
 
 void BaselineCompiler::VisitShiftRight() {
-  CallBuiltin<Builtin::kShiftRight_Baseline>(
-      RegisterOperand(0), kInterpreterAccumulatorRegister,
-      iterator().GetEmbeddedFeedbackOffset(kEmbeddedFeedbackOperandIndex));
+  VISIT_TYPED_BINARY_OPERATION(TYPED_BITWISE_BINOP_STUB_LIST, ShiftRight,
+                               ShiftRight, RegisterOperand(0),
+                               kInterpreterAccumulatorRegister);
 }
 
 void BaselineCompiler::VisitShiftRightLogical() {
-  CallBuiltin<Builtin::kShiftRightLogical_Baseline>(
-      RegisterOperand(0), kInterpreterAccumulatorRegister,
-      iterator().GetEmbeddedFeedbackOffset(kEmbeddedFeedbackOperandIndex));
+  VISIT_TYPED_BINARY_OPERATION(TYPED_BITWISE_BINOP_STUB_LIST, ShiftRightLogical,
+                               ShiftRightLogical, RegisterOperand(0),
+                               kInterpreterAccumulatorRegister);
 }
 
 void BaselineCompiler::VisitAddSmi() {
-  CallBuiltin<Builtin::kAddSmi_Baseline>(
-      kInterpreterAccumulatorRegister, IntAsSmi(0),
-      iterator().GetEmbeddedFeedbackOffset(kEmbeddedFeedbackOperandIndex));
+  VISIT_TYPED_BINARY_OPERATION(TYPED_ADD_STUB_LIST, Add, AddSmi,
+                               kInterpreterAccumulatorRegister, IntAsSmi(0));
 }
 
 void BaselineCompiler::VisitSubSmi() {
-  CallBuiltin<Builtin::kSubtractSmi_Baseline>(
-      kInterpreterAccumulatorRegister, IntAsSmi(0),
-      iterator().GetEmbeddedFeedbackOffset(kEmbeddedFeedbackOperandIndex));
+  VISIT_TYPED_BINARY_OPERATION(TYPED_BINOP_STUB_LIST, Subtract, SubtractSmi,
+                               kInterpreterAccumulatorRegister, IntAsSmi(0));
 }
 
 void BaselineCompiler::VisitMulSmi() {
-  CallBuiltin<Builtin::kMultiplySmi_Baseline>(
-      kInterpreterAccumulatorRegister, IntAsSmi(0),
-      iterator().GetEmbeddedFeedbackOffset(kEmbeddedFeedbackOperandIndex));
+  VISIT_TYPED_BINARY_OPERATION(TYPED_BINOP_STUB_LIST, Multiply, MultiplySmi,
+                               kInterpreterAccumulatorRegister, IntAsSmi(0));
 }
 
 void BaselineCompiler::VisitDivSmi() {
-  CallBuiltin<Builtin::kDivideSmi_Baseline>(
-      kInterpreterAccumulatorRegister, IntAsSmi(0),
-      iterator().GetEmbeddedFeedbackOffset(kEmbeddedFeedbackOperandIndex));
+  VISIT_TYPED_BINARY_OPERATION(TYPED_BINOP_STUB_LIST, Divide, DivideSmi,
+                               kInterpreterAccumulatorRegister, IntAsSmi(0));
 }
 
 void BaselineCompiler::VisitModSmi() {
-  CallBuiltin<Builtin::kModulusSmi_Baseline>(
-      kInterpreterAccumulatorRegister, IntAsSmi(0),
-      iterator().GetEmbeddedFeedbackOffset(kEmbeddedFeedbackOperandIndex));
+  VISIT_TYPED_BINARY_OPERATION(TYPED_BINOP_STUB_LIST, Modulus, ModulusSmi,
+                               kInterpreterAccumulatorRegister, IntAsSmi(0));
 }
 
 void BaselineCompiler::VisitExpSmi() {
-  CallBuiltin<Builtin::kExponentiateSmi_Baseline>(
-      kInterpreterAccumulatorRegister, IntAsSmi(0),
-      iterator().GetEmbeddedFeedbackOffset(kEmbeddedFeedbackOperandIndex));
+  BuildExponentiate<Builtin::kExponentiateSmi_Generic_Baseline>(
+      kInterpreterAccumulatorRegister, IntAsSmi(0));
 }
 
 void BaselineCompiler::VisitBitwiseOrSmi() {
-  CallBuiltin<Builtin::kBitwiseOrSmi_Baseline>(
-      kInterpreterAccumulatorRegister, IntAsSmi(0),
-      iterator().GetEmbeddedFeedbackOffset(kEmbeddedFeedbackOperandIndex));
+  VISIT_TYPED_BINARY_OPERATION(TYPED_BITWISE_BINOP_STUB_LIST, BitwiseOr,
+                               BitwiseOrSmi, kInterpreterAccumulatorRegister,
+                               IntAsSmi(0));
 }
 
 void BaselineCompiler::VisitBitwiseXorSmi() {
-  CallBuiltin<Builtin::kBitwiseXorSmi_Baseline>(
-      kInterpreterAccumulatorRegister, IntAsSmi(0),
-      iterator().GetEmbeddedFeedbackOffset(kEmbeddedFeedbackOperandIndex));
+  VISIT_TYPED_BINARY_OPERATION(TYPED_BITWISE_BINOP_STUB_LIST, BitwiseXor,
+                               BitwiseXorSmi, kInterpreterAccumulatorRegister,
+                               IntAsSmi(0));
 }
 
 void BaselineCompiler::VisitBitwiseAndSmi() {
-  CallBuiltin<Builtin::kBitwiseAndSmi_Baseline>(
-      kInterpreterAccumulatorRegister, IntAsSmi(0),
-      iterator().GetEmbeddedFeedbackOffset(kEmbeddedFeedbackOperandIndex));
+  VISIT_TYPED_BINARY_OPERATION(TYPED_BITWISE_BINOP_STUB_LIST, BitwiseAnd,
+                               BitwiseAndSmi, kInterpreterAccumulatorRegister,
+                               IntAsSmi(0));
 }
 
 void BaselineCompiler::VisitShiftLeftSmi() {
-  CallBuiltin<Builtin::kShiftLeftSmi_Baseline>(
-      kInterpreterAccumulatorRegister, IntAsSmi(0),
-      iterator().GetEmbeddedFeedbackOffset(kEmbeddedFeedbackOperandIndex));
+  VISIT_TYPED_BINARY_OPERATION(TYPED_BITWISE_BINOP_STUB_LIST, ShiftLeft,
+                               ShiftLeftSmi, kInterpreterAccumulatorRegister,
+                               IntAsSmi(0));
 }
 
 void BaselineCompiler::VisitShiftRightSmi() {
-  CallBuiltin<Builtin::kShiftRightSmi_Baseline>(
-      kInterpreterAccumulatorRegister, IntAsSmi(0),
-      iterator().GetEmbeddedFeedbackOffset(kEmbeddedFeedbackOperandIndex));
+  VISIT_TYPED_BINARY_OPERATION(TYPED_BITWISE_BINOP_STUB_LIST, ShiftRight,
+                               ShiftRightSmi, kInterpreterAccumulatorRegister,
+                               IntAsSmi(0));
 }
 
 void BaselineCompiler::VisitShiftRightLogicalSmi() {
-  CallBuiltin<Builtin::kShiftRightLogicalSmi_Baseline>(
-      kInterpreterAccumulatorRegister, IntAsSmi(0),
-      iterator().GetEmbeddedFeedbackOffset(kEmbeddedFeedbackOperandIndex));
+  VISIT_TYPED_BINARY_OPERATION(TYPED_BITWISE_BINOP_STUB_LIST, ShiftRightLogical,
+                               ShiftRightLogicalSmi,
+                               kInterpreterAccumulatorRegister, IntAsSmi(0));
 }
+
+#ifdef V8_ENABLE_SPARKPLUG_PLUS
+#undef TYPED_BINOP_CASE
+#endif  // V8_ENABLE_SPARKPLUG_PLUS
+#undef VISIT_TYPED_BINARY_OPERATION
 
 void BaselineCompiler::VisitInc() {
   CallBuiltin<Builtin::kIncrement_Baseline>(kInterpreterAccumulatorRegister,
@@ -1836,29 +1893,21 @@ void BaselineCompiler::VisitConstructForwardAllArgs() {
 }
 
 #ifdef V8_ENABLE_SPARKPLUG_PLUS
-#define TYPED_COMPARE_CASE(name, type)                       \
+#define TYPED_COMPARE_CASE(type, name)                       \
   case CompareOperationFeedback::Type::k##type:              \
     CallBuiltin<Builtin::k##name##_##type##_Baseline>(       \
         RegisterOperand(0), kInterpreterAccumulatorRegister, \
         feedback_index_offset);                              \
     break;
 
-#define Equal_CASE(type) TYPED_COMPARE_CASE(Equal, type)
-#define StrictEqual_CASE(type) TYPED_COMPARE_CASE(StrictEqual, type)
-#define LessThan_CASE(type) TYPED_COMPARE_CASE(LessThan, type)
-#define GreaterThan_CASE(type) TYPED_COMPARE_CASE(GreaterThan, type)
-#define LessThanOrEqual_CASE(type) TYPED_COMPARE_CASE(LessThanOrEqual, type)
-#define GreaterThanOrEqual_CASE(type) \
-  TYPED_COMPARE_CASE(GreaterThanOrEqual, type)
-
 #define VISIT_TYPED_COMPARE_OPERATION(TypedStubList, Name)                 \
   using Feedback = CompareOperationFeedback;                               \
   auto feedback_index_offset =                                             \
       iterator().GetEmbeddedFeedbackOffset(kEmbeddedFeedbackOperandIndex); \
   if (allow_sparkplug_plus_) {                                             \
-    switch (Feedback::DecodeTypeIndex(                                     \
-        static_cast<Feedback::TypeIndex>(EmbeddedFeedback(1)))) {          \
-      TypedStubList(Name##_CASE) default                                   \
+    switch (Feedback::DecodeTypeIndex(static_cast<Feedback::TypeIndex>(    \
+        EmbeddedFeedback(kEmbeddedFeedbackOperandIndex)))) {               \
+      TypedStubList(TYPED_COMPARE_CASE, Name) default                      \
           : CallBuiltin<Builtin::k##Name##_Generic_Baseline>(              \
                 RegisterOperand(0), kInterpreterAccumulatorRegister,       \
                 feedback_index_offset);                                    \
@@ -1904,12 +1953,6 @@ void BaselineCompiler::VisitTestGreaterThanOrEqual() {
                                 GreaterThanOrEqual)
 }
 #ifdef V8_ENABLE_SPARKPLUG_PLUS
-#undef Equal_CASE
-#undef StrictEqual_CASE
-#undef LessThan_CASE
-#undef GreaterThan_CASE
-#undef LessThanOrEqual_CASE
-#undef GreaterThanOrEqual_CASE
 #undef TYPED_COMPARE_CASE
 #endif  // V8_ENABLE_SPARKPLUG_PLUS
 #undef VISIT_TYPED_COMPARE_OPERATION

@@ -461,6 +461,7 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
                             Label* if_overflow);
   TNode<Smi> TrySmiAdd(TNode<Smi> a, TNode<Smi> b, Label* if_overflow);
   TNode<Smi> TrySmiSub(TNode<Smi> a, TNode<Smi> b, Label* if_overflow);
+  TNode<Smi> TrySmiMul(TNode<Smi> lhs, TNode<Smi> rhs, Label* bailout);
   TNode<Smi> TrySmiAbs(TNode<Smi> a, Label* if_overflow);
 
   TNode<Smi> UnsignedSmiShl(TNode<Smi> a, int shift) {
@@ -4264,6 +4265,35 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
                                        TNode<Object> rhs,
                                        TNode<UintPtrT> feedback_offset,
                                        Builtin fallback_builtin);
+
+  void GenerateSmiBinaryOp(Operation op, TNode<Object> lhs, TNode<Object> rhs,
+                           TNode<UintPtrT> feedback_offset,
+                           Builtin fallback_builtin);
+
+  void TailCallPatchBinopToNumberHandler(TNode<Number> result,
+                                         TNode<UintPtrT> feedback_offset);
+
+  void GenerateTrySmiBinaryOpAndWiden(Operation op, TNode<Smi> lhs_smi,
+                                      TNode<Smi> rhs_smi,
+                                      TNode<UintPtrT> feedback_offset);
+
+  void GenerateSmiToNumberBinaryOpAndMaybeWiden(
+      Operation op, TNode<Smi> lhs_smi, TNode<Smi> rhs_smi,
+      TNode<UintPtrT> feedback_offset);
+
+  void GenerateNumberBinaryOp(Operation op, TNode<Object> lhs,
+                              TNode<Object> rhs,
+                              TNode<UintPtrT> feedback_offset,
+                              Builtin fallback_builtin);
+
+  void GenerateStringAdd(TNode<Object> lhs, TNode<Object> rhs,
+                         TNode<UintPtrT> feedback_offset,
+                         Builtin fallback_builtin);
+
+  void GenerateBinaryOpAndTryPatchCode(Operation op, TNode<Object> lhs,
+                                       TNode<Object> rhs,
+                                       TNode<Int32T> current_type_feedback,
+                                       TNode<UintPtrT> feedback_offset);
 #endif  // V8_ENABLE_SPARKPLUG_PLUS
 
   TNode<Boolean> Equal(TNode<Object> lhs, TNode<Object> rhs,

@@ -154,6 +154,9 @@ class BaselineCompiler {
   template <ConvertReceiverMode kMode, typename... Args>
   void BuildCall(uint32_t slot, uint32_t arg_count, Args... args);
 
+  template <Builtin kGenericBuiltin, typename LhsArg, typename RhsArg>
+  void BuildExponentiate(LhsArg lhs, RhsArg rhs);
+
 #ifdef V8_TRACE_UNOPTIMIZED
   void TraceBytecode(Runtime::FunctionId function_id);
 #endif

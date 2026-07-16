@@ -124,23 +124,25 @@ constexpr bool CanTriggerGC(T... properties) {
 #define FOR_EACH_INTRINSIC_COMPILER_DUMPLING(F, I)
 #endif  // V8_DUMPLING
 
-#define FOR_EACH_INTRINSIC_COMPILER_GENERIC(F, I) \
-  F(CompileOptimizedOSR, 0, 1)                    \
-  F(CompileOptimizedOSRFromMaglev, 1, 1)          \
-  F(CompileOptimizedOSRFromMaglevInlined, 2, 1)   \
-  F(LogOrTraceOptimizedOSREntry, 0, 1)            \
-  F(CompileLazy, 1, 1)                            \
-  F(CompileBaseline, 1, 1)                        \
-  F(InstallBaselineCode, 1, 1)                    \
-  F(InstallSFICode, 1, 1)                         \
-  F(InstantiateAsmJs, 4, 1)                       \
-  F(NotifyDeoptimized, 0, 1)                      \
-  F(ObserveNode, 1, 1)                            \
-  F(ResolvePossiblyDirectEval, 6, 1)              \
-  F(VerifyType, 1, 1)                             \
-  F(CheckTurboshaftTypeOf, 2, 1)                  \
-  IF_SPARKPLUG_PLUS(F, PatchBaselineCode, 4, 1)   \
-  IF_SPARKPLUG_PLUS(F, PatchBaselineCodeAndThrow, 4, 1)
+#define FOR_EACH_INTRINSIC_COMPILER_GENERIC(F, I)                \
+  F(CompileOptimizedOSR, 0, 1)                                   \
+  F(CompileOptimizedOSRFromMaglev, 1, 1)                         \
+  F(CompileOptimizedOSRFromMaglevInlined, 2, 1)                  \
+  F(LogOrTraceOptimizedOSREntry, 0, 1)                           \
+  F(CompileLazy, 1, 1)                                           \
+  F(CompileBaseline, 1, 1)                                       \
+  F(InstallBaselineCode, 1, 1)                                   \
+  F(InstallSFICode, 1, 1)                                        \
+  F(InstantiateAsmJs, 4, 1)                                      \
+  F(NotifyDeoptimized, 0, 1)                                     \
+  F(ObserveNode, 1, 1)                                           \
+  F(ResolvePossiblyDirectEval, 6, 1)                             \
+  F(VerifyType, 1, 1)                                            \
+  F(CheckTurboshaftTypeOf, 2, 1)                                 \
+  IF_SPARKPLUG_PLUS(F, PatchCompareOpBaselineCode, 4, 1)         \
+  IF_SPARKPLUG_PLUS(F, PatchCompareOpBaselineCodeAndThrow, 4, 1) \
+  IF_SPARKPLUG_PLUS(F, PatchBinopBaselineCode, 4, 1)             \
+  IF_SPARKPLUG_PLUS(F, PatchBinopBaselineCodeAndThrow, 4, 1)
 
 // TODO(olivf): Unify the Maglev/TF variants into one runtime function and pass
 // the optimization tier as an argument.

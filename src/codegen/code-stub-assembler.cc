@@ -23,6 +23,7 @@
 #include "src/execution/protectors.h"
 #include "src/heap/heap-inl.h"  // For MutablePage. TODO(jkummerow): Drop.
 #include "src/heap/mutable-page.h"
+#include "src/ic/binary-op-assembler.h"
 #include "src/logging/counters.h"
 #include "src/numbers/integer-literal-inl.h"
 #include "src/numbers/math-random.h"
@@ -1081,6 +1082,59 @@ TNode<Smi> CodeStubAssembler::TrySmiSub(TNode<Smi> lhs, TNode<Smi> rhs,
     TNode<Int32T> result = Projection<0>(pair);
     return BitcastWordToTaggedSigned(ChangeInt32ToIntPtr(result));
   }
+}
+
+TNode<Smi> CodeStubAssembler::TrySmiMul(TNode<Smi> lhs, TNode<Smi> rhs,
+                                        Label* bailout) {
+  TNode<Int32T> rhs32 = SmiToInt32(rhs);
+  Label answer_zero(this, Label::kDeferred), done(this);
+  TVARIABLE(Smi, var_result);
+  if (SmiValuesAre32Bits()) {
+    TNode<IntPtrT> tagged_lhs = BitcastTaggedToWordForTagAndSmiBits(lhs);
+    TNode<PairT<IntPtrT, BoolT>> pair =
+        IntPtrMulWithOverflow(tagged_lhs, ChangeInt32ToIntPtr(rhs32));
+    GotoIf(Projection<1>(pair), bailout);
+    TNode<IntPtrT> answer = Projection<0>(pair);
+    GotoIf(IntPtrEqual(answer, IntPtrConstant(0)), &answer_zero);
+    var_result = BitcastWordToTaggedSigned(answer);
+  } else {
+    DCHECK(SmiValuesAre31Bits());
+    // tagged(lhs) * rhs == (lhs * rhs) << kSmiShift == tagged(lhs * rhs),
+    // for smi-overflow check.
+    TNode<Int32T> tagged_lhs =
+        TruncateIntPtrToInt32(BitcastTaggedToWordForTagAndSmiBits(lhs));
+    TNode<PairT<Int32T, BoolT>> pair = Int32MulWithOverflow(tagged_lhs, rhs32);
+    GotoIf(Projection<1>(pair), bailout);
+    TNode<Int32T> answer = Projection<0>(pair);
+    GotoIf(Word32Equal(answer, Int32Constant(0)), &answer_zero);
+    var_result = BitcastWordToTaggedSigned(ChangeInt32ToIntPtr(answer));
+  }
+  Goto(&done);
+
+  BIND(&answer_zero);
+  {
+    // result == 0: bail if either input is negative.
+    if (SmiValuesAre32Bits()) {
+      GotoIf(IntPtrLessThan(WordOr(BitcastTaggedToWordForTagAndSmiBits(lhs),
+                                   BitcastTaggedToWordForTagAndSmiBits(rhs)),
+                            IntPtrConstant(0)),
+             bailout);
+    } else {
+      DCHECK(SmiValuesAre31Bits());
+      GotoIf(
+          Int32LessThan(Word32Or(TruncateIntPtrToInt32(
+                                     BitcastTaggedToWordForTagAndSmiBits(lhs)),
+                                 TruncateIntPtrToInt32(
+                                     BitcastTaggedToWordForTagAndSmiBits(rhs))),
+                        Int32Constant(0)),
+          bailout);
+    }
+    var_result = SmiConstant(0);
+    Goto(&done);
+  }
+
+  BIND(&done);
+  return var_result.value();
 }
 
 TNode<Smi> CodeStubAssembler::TrySmiAbs(TNode<Smi> a, Label* if_overflow) {
@@ -16216,7 +16270,7 @@ void CodeStubAssembler::GenerateStrictEqualAndTryPatchCode(
   // Update embedded feedback in the runtime function to avoid
   // repeatedly entering/exiting hardware sandbox.
   auto bytecode_array = LoadBytecodeArrayFromBaseline();
-  TailCallRuntime(Runtime::kPatchBaselineCode, NoContextConstant(),
+  TailCallRuntime(Runtime::kPatchCompareOpBaselineCode, NoContextConstant(),
                   SmiFromInt32(new_feedback), result, bytecode_array,
                   ChangeUintPtrToTagged(feedback_offset));
 }
@@ -16243,7 +16297,7 @@ void CodeStubAssembler::GenerateEqualAndTryPatchCode(
       var_type_feedback.value());
   new_feedback = CombineEmbeddedFeedback<CompareOperationFeedback>(
       current_type_feedback, feedback_index.value());
-  TailCallRuntime(Runtime::kPatchBaselineCode, NoContextConstant(),
+  TailCallRuntime(Runtime::kPatchCompareOpBaselineCode, NoContextConstant(),
                   SmiFromInt32(new_feedback.value()), result, bytecode_array,
                   ChangeUintPtrToTagged(feedback_offset));
 
@@ -16253,9 +16307,10 @@ void CodeStubAssembler::GenerateEqualAndTryPatchCode(
         var_type_feedback.value());
     new_feedback = CombineEmbeddedFeedback<CompareOperationFeedback>(
         current_type_feedback, feedback_index.value());
-    TailCallRuntime(Runtime::kPatchBaselineCodeAndThrow, NoContextConstant(),
-                    SmiFromInt32(new_feedback.value()), var_exception.value(),
-                    bytecode_array, ChangeUintPtrToTagged(feedback_offset));
+    TailCallRuntime(Runtime::kPatchCompareOpBaselineCodeAndThrow,
+                    NoContextConstant(), SmiFromInt32(new_feedback.value()),
+                    var_exception.value(), bytecode_array,
+                    ChangeUintPtrToTagged(feedback_offset));
   }
 }
 
@@ -16463,7 +16518,7 @@ void CodeStubAssembler::GenerateNumberEqual(TNode<Object> lhs,
         var_type_feedback.value());                                            \
     new_feedback = CombineEmbeddedFeedback<CompareOperationFeedback>(          \
         current_type_feedback, feedback_index.value());                        \
-    TailCallRuntime(Runtime::kPatchBaselineCode, NoContextConstant(),          \
+    TailCallRuntime(Runtime::kPatchCompareOpBaselineCode, NoContextConstant(), \
                     SmiFromInt32(new_feedback.value()), result,                \
                     bytecode_array, ChangeUintPtrToTagged(feedback_offset));   \
                                                                                \
@@ -16473,7 +16528,7 @@ void CodeStubAssembler::GenerateNumberEqual(TNode<Object> lhs,
           var_type_feedback.value());                                          \
       new_feedback = CombineEmbeddedFeedback<CompareOperationFeedback>(        \
           current_type_feedback, feedback_index.value());                      \
-      TailCallRuntime(Runtime::kPatchBaselineCodeAndThrow,                     \
+      TailCallRuntime(Runtime::kPatchCompareOpBaselineCodeAndThrow,            \
                       NoContextConstant(), SmiFromInt32(new_feedback.value()), \
                       var_exception.value(), bytecode_array,                   \
                       ChangeUintPtrToTagged(feedback_offset));                 \
@@ -16492,8 +16547,9 @@ void CodeStubAssembler::GenerateSmiRelationalCompare(
   Label fallback(this, Label::kDeferred), return_true(this), return_false(this);
   TVARIABLE(Boolean, result);
 
-  GotoIfNot(TaggedIsSmi(lhs), &fallback);
-  GotoIfNot(TaggedIsSmi(rhs), &fallback);
+  TNode<IntPtrT> both_are_smi =
+      WordOr(BitcastTaggedToWord(lhs), BitcastTaggedToWord(rhs));
+  GotoIfNot(TaggedIsSmi(BitcastWordToTagged(both_are_smi)), &fallback);
 
   TNode<Smi> smi_left = CAST(lhs);
   TNode<Smi> smi_right = CAST(rhs);
@@ -16648,6 +16704,362 @@ void CodeStubAssembler::GenerateNumberRelationalCompare(
                     Int32Constant(static_cast<int32_t>(
                         CompareOperationFeedback::TypeIndex::kNumber)),
                     feedback_offset);
+  }
+}
+
+void CodeStubAssembler::TailCallPatchBinopToNumberHandler(
+    TNode<Number> result, TNode<UintPtrT> feedback_offset) {
+  TailCallRuntime(Runtime::kPatchBinopBaselineCode, NoContextConstant(),
+                  SmiConstant(static_cast<int>(
+                      BinaryOperationFeedback::TypeIndex::kNumber)),
+                  result, LoadBytecodeArrayFromBaseline(),
+                  ChangeUintPtrToTagged(feedback_offset));
+}
+
+void CodeStubAssembler::GenerateTrySmiBinaryOpAndWiden(
+    Operation op, TNode<Smi> lhs_smi, TNode<Smi> rhs_smi,
+    TNode<UintPtrT> feedback_offset) {
+  Label smi_overflow(this, Label::kDeferred);
+  switch (op) {
+    case Operation::kMultiply:
+      Return(TrySmiMul(lhs_smi, rhs_smi, &smi_overflow));
+      break;
+    case Operation::kDivide:
+      Return(TrySmiDiv(lhs_smi, rhs_smi, &smi_overflow));
+      break;
+    default:
+      UNREACHABLE();
+  }
+
+  BIND(&smi_overflow);
+  TNode<Float64T> lhs_f64 = SmiToFloat64(lhs_smi);
+  TNode<Float64T> rhs_f64 = SmiToFloat64(rhs_smi);
+  TNode<Float64T> result_f64;
+  switch (op) {
+    case Operation::kMultiply:
+      result_f64 = Float64Mul(lhs_f64, rhs_f64);
+      break;
+    case Operation::kDivide:
+      result_f64 = Float64Div(lhs_f64, rhs_f64);
+      break;
+    default:
+      UNREACHABLE();
+  }
+  TailCallPatchBinopToNumberHandler(AllocateHeapNumberWithValue(result_f64),
+                                    feedback_offset);
+}
+
+void CodeStubAssembler::GenerateSmiToNumberBinaryOpAndMaybeWiden(
+    Operation op, TNode<Smi> lhs_smi, TNode<Smi> rhs_smi,
+    TNode<UintPtrT> feedback_offset) {
+  Label widen(this, Label::kDeferred);
+  TNode<Number> result;
+  switch (op) {
+    case Operation::kModulus:
+      result = SmiMod(lhs_smi, rhs_smi);
+      break;
+    case Operation::kShiftLeft:
+    case Operation::kShiftRightLogical:
+      result = BitwiseSmiOp(lhs_smi, rhs_smi, op);
+      break;
+    default:
+      UNREACHABLE();
+  }
+  GotoIfNot(TaggedIsSmi(result), &widen);
+  Return(result);
+
+  BIND(&widen);
+  TailCallPatchBinopToNumberHandler(result, feedback_offset);
+}
+
+void CodeStubAssembler::GenerateSmiBinaryOp(Operation op, TNode<Object> lhs,
+                                            TNode<Object> rhs,
+                                            TNode<UintPtrT> feedback_offset,
+                                            Builtin fallback_builtin) {
+  Label fallback(this, Label::kDeferred);
+  TNode<IntPtrT> both_are_smi =
+      WordOr(BitcastTaggedToWord(lhs), BitcastTaggedToWord(rhs));
+  GotoIfNot(TaggedIsSmi(BitcastWordToTagged(both_are_smi)), &fallback);
+  TNode<Smi> lhs_smi = CAST(lhs);
+  TNode<Smi> rhs_smi = CAST(rhs);
+
+  switch (op) {
+    case Operation::kAdd:
+      // Bail to the fallback on overflow so Generate_AddWithFeedback
+      // can record kAdditiveSafeInteger.
+      Return(TrySmiAdd(lhs_smi, rhs_smi, &fallback));
+      break;
+    case Operation::kSubtract:
+      Return(TrySmiSub(lhs_smi, rhs_smi, &fallback));
+      break;
+    case Operation::kMultiply:
+    case Operation::kDivide:
+      GenerateTrySmiBinaryOpAndWiden(op, lhs_smi, rhs_smi, feedback_offset);
+      break;
+    case Operation::kModulus:
+    case Operation::kShiftLeft:
+    case Operation::kShiftRightLogical:
+      GenerateSmiToNumberBinaryOpAndMaybeWiden(op, lhs_smi, rhs_smi,
+                                               feedback_offset);
+      break;
+    case Operation::kBitwiseOr:
+    case Operation::kBitwiseXor:
+    case Operation::kBitwiseAnd:
+    case Operation::kShiftRight:
+      Return(BitwiseSmiOp(lhs_smi, rhs_smi, op));
+      break;
+    default:
+      UNREACHABLE();
+  }
+
+  BIND(&fallback);
+  {
+    TailCallBuiltin(fallback_builtin, LoadContextFromBaseline(), lhs, rhs,
+                    Int32Constant(static_cast<int32_t>(
+                        BinaryOperationFeedback::TypeIndex::kSignedSmall)),
+                    feedback_offset);
+  }
+}
+
+void CodeStubAssembler::GenerateNumberBinaryOp(Operation op, TNode<Object> lhs,
+                                               TNode<Object> rhs,
+                                               TNode<UintPtrT> feedback_offset,
+                                               Builtin fallback_builtin) {
+  Label fallback(this, Label::kDeferred), do_float(this), end(this);
+  TVARIABLE(Object, var_result);
+  TVARIABLE(Float64T, var_lhs_f64);
+  TVARIABLE(Float64T, var_rhs_f64);
+
+  Label lhs_smi(this), lhs_not_smi(this);
+  Branch(TaggedIsSmi(lhs), &lhs_smi, &lhs_not_smi);
+
+  BIND(&lhs_smi);
+  {
+    Label rhs_smi(this), rhs_not_smi(this);
+    Branch(TaggedIsSmi(rhs), &rhs_smi, &rhs_not_smi);
+
+    BIND(&rhs_smi);
+    {
+      TNode<Smi> lhs_smi_node = CAST(lhs);
+      TNode<Smi> rhs_smi_node = CAST(rhs);
+      if (op == Operation::kModulus) {
+        var_result = SmiMod(lhs_smi_node, rhs_smi_node);
+        Goto(&end);
+      } else if (op == Operation::kExponentiate) {
+        var_lhs_f64 = SmiToFloat64(lhs_smi_node);
+        var_rhs_f64 = SmiToFloat64(rhs_smi_node);
+        Goto(&do_float);
+      } else {
+        Label smi_overflow(this);
+        switch (op) {
+          case Operation::kAdd:
+            var_result = TrySmiAdd(lhs_smi_node, rhs_smi_node, &smi_overflow);
+            break;
+          case Operation::kSubtract:
+            var_result = TrySmiSub(lhs_smi_node, rhs_smi_node, &smi_overflow);
+            break;
+          case Operation::kMultiply:
+            var_result = TrySmiMul(lhs_smi_node, rhs_smi_node, &smi_overflow);
+            break;
+          case Operation::kDivide:
+            var_result = TrySmiDiv(lhs_smi_node, rhs_smi_node, &smi_overflow);
+            break;
+          default:
+            UNREACHABLE();
+        }
+        Goto(&end);
+
+        BIND(&smi_overflow);
+        var_lhs_f64 = SmiToFloat64(lhs_smi_node);
+        var_rhs_f64 = SmiToFloat64(rhs_smi_node);
+        Goto(&do_float);
+      }
+    }
+
+    BIND(&rhs_not_smi);
+    {
+      GotoIfNot(IsHeapNumber(CAST(rhs)), &fallback);
+      var_lhs_f64 = SmiToFloat64(CAST(lhs));
+      var_rhs_f64 = LoadHeapNumberValue(CAST(rhs));
+      Goto(&do_float);
+    }
+  }
+
+  BIND(&lhs_not_smi);
+  {
+    GotoIfNot(IsHeapNumber(CAST(lhs)), &fallback);
+    var_lhs_f64 = LoadHeapNumberValue(CAST(lhs));
+    Label rhs_smi(this), rhs_not_smi(this);
+    Branch(TaggedIsSmi(rhs), &rhs_smi, &rhs_not_smi);
+
+    BIND(&rhs_smi);
+    var_rhs_f64 = SmiToFloat64(CAST(rhs));
+    Goto(&do_float);
+
+    BIND(&rhs_not_smi);
+    GotoIfNot(IsHeapNumber(CAST(rhs)), &fallback);
+    var_rhs_f64 = LoadHeapNumberValue(CAST(rhs));
+    Goto(&do_float);
+  }
+
+  BIND(&do_float);
+  {
+    TNode<Float64T> result_f64;
+    switch (op) {
+      case Operation::kAdd:
+        result_f64 = Float64Add(var_lhs_f64.value(), var_rhs_f64.value());
+        break;
+      case Operation::kSubtract:
+        result_f64 = Float64Sub(var_lhs_f64.value(), var_rhs_f64.value());
+        break;
+      case Operation::kMultiply:
+        result_f64 = Float64Mul(var_lhs_f64.value(), var_rhs_f64.value());
+        break;
+      case Operation::kDivide:
+        result_f64 = Float64Div(var_lhs_f64.value(), var_rhs_f64.value());
+        break;
+      case Operation::kModulus:
+        result_f64 = Float64Mod(var_lhs_f64.value(), var_rhs_f64.value());
+        break;
+      case Operation::kExponentiate:
+        result_f64 = Float64Pow(var_lhs_f64.value(), var_rhs_f64.value());
+        break;
+      default:
+        UNREACHABLE();
+    }
+    var_result = AllocateHeapNumberWithValue(result_f64);
+    Goto(&end);
+  }
+
+  BIND(&end);
+  Return(var_result.value());
+
+  BIND(&fallback);
+  {
+    TailCallBuiltin(fallback_builtin, LoadContextFromBaseline(), lhs, rhs,
+                    Int32Constant(static_cast<int32_t>(
+                        BinaryOperationFeedback::TypeIndex::kNumber)),
+                    feedback_offset);
+  }
+}
+
+void CodeStubAssembler::GenerateStringAdd(TNode<Object> lhs, TNode<Object> rhs,
+                                          TNode<UintPtrT> feedback_offset,
+                                          Builtin fallback_builtin) {
+  Label fallback(this, Label::kDeferred);
+
+  GotoIf(TaggedIsSmi(lhs), &fallback);
+  TNode<HeapObject> lhs_heap_object = CAST(lhs);
+  GotoIfNot(IsString(lhs_heap_object), &fallback);
+  GotoIf(TaggedIsSmi(rhs), &fallback);
+  TNode<HeapObject> rhs_heap_object = CAST(rhs);
+  GotoIfNot(IsString(rhs_heap_object), &fallback);
+
+  TNode<String> lhs_string = CAST(lhs_heap_object);
+  TNode<String> rhs_string = CAST(rhs_heap_object);
+  TailCallBuiltin(Builtin::kStringAdd_NoMapCheck, LoadContextFromBaseline(),
+                  lhs_string, rhs_string);
+
+  BIND(&fallback);
+  {
+    TailCallBuiltin(fallback_builtin, LoadContextFromBaseline(), lhs, rhs,
+                    Int32Constant(static_cast<int32_t>(
+                        BinaryOperationFeedback::TypeIndex::kString)),
+                    feedback_offset);
+  }
+}
+
+void CodeStubAssembler::GenerateBinaryOpAndTryPatchCode(
+    Operation op, TNode<Object> lhs, TNode<Object> rhs,
+    TNode<Int32T> current_type_feedback, TNode<UintPtrT> feedback_offset) {
+  TVARIABLE(Smi, var_type_feedback,
+            SmiConstant(BinaryOperationFeedback::kNone));
+  TVARIABLE(Object, var_exception);
+  TVARIABLE(Object, var_result);
+  TVARIABLE(Uint8T, new_feedback);
+  TVARIABLE(Int32T, feedback_index);
+
+  auto bytecode_array = LoadBytecodeArrayFromBaseline();
+  Label if_exception(this, Label::kDeferred);
+  {
+    ScopedExceptionHandler handler(this, &if_exception, &var_exception);
+    BinaryOpAssembler binop_asm(state());
+    auto context_lazy = [&]() { return LoadContextFromBaseline(); };
+    auto record_feedback = [&](TNode<Smi> feedback) {
+      var_type_feedback = feedback;
+    };
+
+    switch (op) {
+      case Operation::kAdd:
+        var_result = binop_asm.Generate_AddWithFeedback(context_lazy, lhs, rhs,
+                                                        record_feedback, false);
+        break;
+      case Operation::kSubtract:
+        var_result = binop_asm.Generate_SubtractWithFeedback(
+            context_lazy, lhs, rhs, record_feedback, false);
+        break;
+      case Operation::kMultiply:
+        var_result = binop_asm.Generate_MultiplyWithFeedback(
+            context_lazy, lhs, rhs, record_feedback, false);
+        break;
+      case Operation::kDivide:
+        var_result = binop_asm.Generate_DivideWithFeedback(
+            context_lazy, lhs, rhs, record_feedback, false);
+        break;
+      case Operation::kModulus:
+        var_result = binop_asm.Generate_ModulusWithFeedback(
+            context_lazy, lhs, rhs, record_feedback, false);
+        break;
+      case Operation::kExponentiate:
+        var_result = binop_asm.Generate_ExponentiateWithFeedback(
+            context_lazy, lhs, rhs, record_feedback, false);
+        break;
+      case Operation::kBitwiseOr:
+        var_result = binop_asm.Generate_BitwiseOrWithFeedback(
+            context_lazy, lhs, rhs, record_feedback, false);
+        break;
+      case Operation::kBitwiseXor:
+        var_result = binop_asm.Generate_BitwiseXorWithFeedback(
+            context_lazy, lhs, rhs, record_feedback, false);
+        break;
+      case Operation::kBitwiseAnd:
+        var_result = binop_asm.Generate_BitwiseAndWithFeedback(
+            context_lazy, lhs, rhs, record_feedback, false);
+        break;
+      case Operation::kShiftLeft:
+        var_result = binop_asm.Generate_ShiftLeftWithFeedback(
+            context_lazy, lhs, rhs, record_feedback, false);
+        break;
+      case Operation::kShiftRight:
+        var_result = binop_asm.Generate_ShiftRightWithFeedback(
+            context_lazy, lhs, rhs, record_feedback, false);
+        break;
+      case Operation::kShiftRightLogical:
+        var_result = binop_asm.Generate_ShiftRightLogicalWithFeedback(
+            context_lazy, lhs, rhs, record_feedback, false);
+        break;
+      default:
+        UNREACHABLE();
+    }
+  }
+  feedback_index = EncodeEmbeddedFeedback<BinaryOperationFeedback>(
+      var_type_feedback.value());
+  new_feedback = CombineEmbeddedFeedback<BinaryOperationFeedback>(
+      current_type_feedback, feedback_index.value());
+  TailCallRuntime(Runtime::kPatchBinopBaselineCode, NoContextConstant(),
+                  SmiFromInt32(new_feedback.value()), var_result.value(),
+                  bytecode_array, ChangeUintPtrToTagged(feedback_offset));
+
+  BIND(&if_exception);
+  {
+    feedback_index = EncodeEmbeddedFeedback<BinaryOperationFeedback>(
+        var_type_feedback.value());
+    new_feedback = CombineEmbeddedFeedback<BinaryOperationFeedback>(
+        current_type_feedback, feedback_index.value());
+    TailCallRuntime(Runtime::kPatchBinopBaselineCodeAndThrow,
+                    NoContextConstant(), SmiFromInt32(new_feedback.value()),
+                    var_exception.value(), bytecode_array,
+                    ChangeUintPtrToTagged(feedback_offset));
   }
 }
 #endif  // V8_ENABLE_SPARKPLUG_PLUS
