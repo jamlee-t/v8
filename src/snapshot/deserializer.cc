@@ -570,8 +570,8 @@ void Deserializer<Isolate>::PostProcessNewJSReceiver(
     } else {
       auto bs = backing_store(store_index);
       SharedFlag shared = SharedFlag(bs && bs->is_shared());
-      DCHECK_IMPLIES(bs,
-                     buffer->is_resizable_by_js() == bs->is_resizable_by_js());
+      DCHECK_IMPLIES(
+          bs, buffer->is_resizable_by_js().value() == bs->is_resizable_by_js());
       ResizableFlag resizable = bs && bs->is_resizable_by_js()
                                     ? ResizableFlag{true}
                                     : ResizableFlag{false};

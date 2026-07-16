@@ -1919,7 +1919,7 @@ TEST_F(ValueSerializerTest, RoundTripArrayBuffer) {
   i::DirectHandle<i::JSArrayBuffer> array_buffer =
       Utils::OpenDirectHandle(ArrayBuffer::Cast(*value));
   EXPECT_EQ(0u, array_buffer->max_byte_length());
-  EXPECT_EQ(false, array_buffer->is_resizable_by_js());
+  EXPECT_EQ(false, array_buffer->is_resizable_by_js().value());
 
   value = RoundTripTest("new Uint8Array([0, 128, 255]).buffer");
   ASSERT_TRUE(value->IsArrayBuffer());
@@ -1927,7 +1927,7 @@ TEST_F(ValueSerializerTest, RoundTripArrayBuffer) {
   ExpectScriptTrue("new Uint8Array(result).toString() === '0,128,255'");
   array_buffer = Utils::OpenDirectHandle(ArrayBuffer::Cast(*value));
   EXPECT_EQ(3u, array_buffer->max_byte_length());
-  EXPECT_EQ(false, array_buffer->is_resizable_by_js());
+  EXPECT_EQ(false, array_buffer->is_resizable_by_js().value());
 
   value =
       RoundTripTest("({ a: new ArrayBuffer(), get b() { return this.a; }})");
@@ -1946,7 +1946,7 @@ TEST_F(ValueSerializerTest, RoundTripResizableArrayBuffer) {
   i::DirectHandle<i::JSArrayBuffer> array_buffer =
       Utils::OpenDirectHandle(ArrayBuffer::Cast(*value));
   EXPECT_EQ(200u, array_buffer->max_byte_length());
-  EXPECT_EQ(true, array_buffer->is_resizable_by_js());
+  EXPECT_EQ(true, array_buffer->is_resizable_by_js().value());
 }
 
 TEST_F(ValueSerializerTest, DecodeArrayBuffer) {

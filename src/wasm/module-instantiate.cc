@@ -2377,7 +2377,7 @@ bool InstanceBuilder::ProcessImportedMemories(
     if (Tagged<JSArrayBuffer> buffer;
         TryCast(memory_object->array_buffer(), &buffer)) {
       DCHECK_EQ(backing_store, buffer->GetBackingStore());
-      DCHECK_EQ(backing_store->is_shared(), buffer->is_shared());
+      DCHECK_EQ(backing_store->is_shared(), buffer->is_shared().value());
       if (backing_store->is_shared()) {
         // Note: For shared memory, the backing store might have just grown in
         // another thread.

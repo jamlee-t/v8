@@ -3882,7 +3882,7 @@ bool Value::IsDataView() const {
 bool Value::IsSharedArrayBuffer() const {
   auto obj = *Utils::OpenDirectHandle(this);
   if (!IsJSArrayBuffer(obj)) return false;
-  return i::Cast<i::JSArrayBuffer>(obj)->is_shared();
+  return i::Cast<i::JSArrayBuffer>(obj)->is_shared().value();
 }
 
 bool Value::IsObject() const {
@@ -4322,7 +4322,7 @@ void* v8::ArrayBuffer::Data() const {
 }
 
 bool v8::ArrayBuffer::IsResizableByUserJavaScript() const {
-  return Utils::OpenDirectHandle(this)->is_resizable_by_js();
+  return Utils::OpenDirectHandle(this)->is_resizable_by_js().value();
 }
 
 std::shared_ptr<v8::BackingStore> v8::SharedArrayBuffer::GetBackingStore() {
@@ -9425,13 +9425,13 @@ size_t v8::ArrayBufferView::CopyContents(void* dest, size_t byte_length) {
     bool is_shared;
     if (i::IsJSTypedArray(*self)) {
       i::Tagged<i::JSTypedArray> array = i::Cast<i::JSTypedArray>(*self);
-      is_shared = array->buffer()->is_shared();
+      is_shared = array->buffer()->is_shared().value();
       source = reinterpret_cast<char*>(array->DataPtr());
     } else {
       DCHECK(i::IsJSDataView(*self) || i::IsJSRabGsabDataView(*self));
       i::Tagged<i::JSDataViewOrRabGsabDataView> data_view =
           i::Cast<i::JSDataViewOrRabGsabDataView>(*self);
-      is_shared = data_view->buffer()->is_shared();
+      is_shared = data_view->buffer()->is_shared().value();
       source = reinterpret_cast<char*>(data_view->data_pointer());
     }
     if (is_shared) {

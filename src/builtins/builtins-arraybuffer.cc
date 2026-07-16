@@ -16,7 +16,7 @@ namespace v8 {
 namespace internal {
 
 #define CHECK_SHARED(expected, name, method)                                \
-  if (name->is_shared() != expected) {                                      \
+  if (name->is_shared().value() != expected) {                              \
     THROW_NEW_ERROR_RETURN_FAILURE(                                         \
         isolate,                                                            \
         NewTypeError(MessageTemplate::kIncompatibleMethodReceiver,          \
@@ -25,7 +25,7 @@ namespace internal {
   }
 
 #define CHECK_RESIZABLE(expected, name, method)                             \
-  if (name->is_resizable_by_js() != expected) {                             \
+  if (name->is_resizable_by_js().value() != expected) {                     \
     THROW_NEW_ERROR_RETURN_FAILURE(                                         \
         isolate,                                                            \
         NewTypeError(MessageTemplate::kIncompatibleMethodReceiver,          \

@@ -4200,8 +4200,8 @@ class TypedElementsAccessor
     uint8_t* dest_data = static_cast<uint8_t*>(destination->DataPtr()) +
                          ComputeStoreOffset(offset) * destination_size;
 
-    bool source_shared = source->buffer()->is_shared();
-    bool destination_shared = destination->buffer()->is_shared();
+    SharedFlag source_shared = source->buffer()->is_shared();
+    SharedFlag destination_shared = destination->buffer()->is_shared();
 
     // Don't read source or destination after reading the fields.
     source = {};

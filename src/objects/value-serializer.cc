@@ -1051,7 +1051,7 @@ Maybe<bool> ValueSerializer::WriteJSArrayBuffer(
     return ThrowDataCloneError(MessageTemplate::kDataCloneError, array_buffer);
   }
 
-  bool is_resizable = array_buffer->is_resizable_by_js();
+  ResizableFlag is_resizable = array_buffer->is_resizable_by_js();
   if (is_resizable) {
     WriteTag(SerializationTag::kResizableArrayBuffer);
     WriteVarint<size_t>(byte_length);
@@ -1729,31 +1729,23 @@ MaybeDirectHandle<Object> ValueDeserializer::ReadObjectInternal() {
     case SerializationTag::kBeginJSSet:
       return ReadJSSet();
     case SerializationTag::kArrayBuffer: {
-      constexpr bool is_shared = false;
-      constexpr bool is_resizable = false;
-      constexpr bool is_immutable = false;
-      return ReadJSArrayBuffer(is_shared, is_resizable, is_immutable);
+      return ReadJSArrayBuffer(SharedFlag{false}, ResizableFlag{false},
+                               /*is_immutable*/ false);
     }
     case SerializationTag::kResizableArrayBuffer: {
-      constexpr bool is_shared = false;
-      constexpr bool is_resizable = true;
-      constexpr bool is_immutable = false;
-      return ReadJSArrayBuffer(is_shared, is_resizable, is_immutable);
+      return ReadJSArrayBuffer(SharedFlag{false}, ResizableFlag{true},
+                               /*is_immutable*/ false);
     }
     case SerializationTag::kImmutableArrayBuffer: {
-      constexpr bool is_shared = false;
-      constexpr bool is_resizable = false;
-      constexpr bool is_immutable = true;
-      return ReadJSArrayBuffer(is_shared, is_resizable, is_immutable);
+      return ReadJSArrayBuffer(SharedFlag{false}, ResizableFlag{false},
+                               /*is_immutable*/ true);
     }
     case SerializationTag::kArrayBufferTransfer: {
       return ReadTransferredJSArrayBuffer();
     }
     case SerializationTag::kSharedArrayBuffer: {
-      constexpr bool is_shared = true;
-      constexpr bool is_resizable = false;
-      constexpr bool is_immutable = false;
-      return ReadJSArrayBuffer(is_shared, is_resizable, is_immutable);
+      return ReadJSArrayBuffer(SharedFlag{true}, ResizableFlag{false},
+                               /*is_immutable*/ false);
     }
     case SerializationTag::kError:
       return ReadJSError();
@@ -2137,7 +2129,7 @@ MaybeDirectHandle<JSSet> ValueDeserializer::ReadJSSet() {
 }
 
 MaybeDirectHandle<JSArrayBuffer> ValueDeserializer::ReadJSArrayBuffer(
-    bool is_shared, bool is_resizable, bool is_immutable) {
+    SharedFlag is_shared, ResizableFlag is_resizable, bool is_immutable) {
   uint32_t id = next_id_++;
   if (is_shared) {
     uint32_t clone_id;

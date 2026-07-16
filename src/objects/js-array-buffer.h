@@ -100,12 +100,12 @@ V8_OBJECT class JSArrayBuffer : public JSAPIObjectWithEmbedderSlots {
 
   // [is_shared]: true if this is a SharedArrayBuffer or a
   // GrowableSharedArrayBuffer.
-  inline bool is_shared() const;
+  inline SharedFlag is_shared() const;
   inline void set_is_shared(SharedFlag value);
 
   // [is_resizable_by_js]: true if this is a ResizableArrayBuffer or a
   // GrowableSharedArrayBuffer.
-  inline bool is_resizable_by_js() const;
+  inline ResizableFlag is_resizable_by_js() const;
   inline void set_is_resizable_by_js(ResizableFlag value);
 
   // [is_immutable]: true if this is an ImmutableArrayBuffer.
@@ -296,8 +296,8 @@ class ArrayBufferExtension final
   };
 
   ArrayBufferExtension(std::shared_ptr<BackingStore> backing_store,
-                       ArrayBufferExtension::Age age, bool is_shared,
-                       bool is_resizable_by_js)
+                       ArrayBufferExtension::Age age, SharedFlag is_shared,
+                       ResizableFlag is_resizable_by_js)
       : backing_store_(std::move(backing_store)),
         accounting_state_(AccountingLengthField::encode(static_cast<size_t>(
                               backing_store_->PerIsolateAccountingLength())) |
@@ -377,10 +377,12 @@ class ArrayBufferExtension final
   ArrayBufferExtension* next() const { return next_; }
   void set_next(ArrayBufferExtension* extension) { next_ = extension; }
 
-  bool is_shared() const { return is_shared_; }
+  SharedFlag is_shared() const { return is_shared_; }
 
-  bool is_resizable_by_js() const { return is_resizable_by_js_; }
-  void set_is_resizable_by_js(bool value) { is_resizable_by_js_ = value; }
+  ResizableFlag is_resizable_by_js() const { return is_resizable_by_js_; }
+  void set_is_resizable_by_js(ResizableFlag value) {
+    is_resizable_by_js_ = value;
+  }
 
   Age age() const {
     return AccountingState{accounting_state_.load(std::memory_order_relaxed)}
@@ -419,8 +421,8 @@ class ArrayBufferExtension final
 
   // Trusted copies of the in-sandbox JSArrayBuffer flags. We verify that the
   // in-sandbox flags match these trusted copies during critical operations.
-  const bool is_shared_;
-  bool is_resizable_by_js_;
+  const SharedFlag is_shared_;
+  ResizableFlag is_resizable_by_js_;
 };
 
 V8_OBJECT class JSArrayBufferView : public JSAPIObjectWithEmbedderSlots {

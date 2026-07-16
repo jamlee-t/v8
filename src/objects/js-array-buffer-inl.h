@@ -79,8 +79,8 @@ std::shared_ptr<BackingStore> JSArrayBuffer::GetBackingStore() const {
 }
 
 size_t JSArrayBuffer::GetByteLength() const {
-  const bool is_shared_ = is_shared();
-  const bool is_resizable = is_resizable_by_js();
+  const SharedFlag is_shared_ = is_shared();
+  const ResizableFlag is_resizable = is_resizable_by_js();
   auto* ext = extension();
   if (V8_UNLIKELY(is_shared_ && is_resizable)) {
     // Invariant: byte_length for GSAB is 0 (it needs to be read from the
@@ -103,7 +103,7 @@ size_t JSArrayBuffer::GetByteLength() const {
   // happens during a GC pause, during teardown, or when the main thread is
   // parked.
   DCHECK_IMPLIES(
-      is_resizable_by_js() && !is_shared() && LocalHeap::Current() != nullptr &&
+      is_resizable && !is_shared_ && LocalHeap::Current() != nullptr &&
           !LocalHeap::Current()->is_main_thread(),
       LocalHeap::Current()->heap()->IsInGC() ||
           LocalHeap::Current()->heap()->IsTearingDown() ||
@@ -249,23 +249,23 @@ BIT_FIELD_ACCESSORS(JSArrayBuffer, bit_field, is_detachable,
                     JSArrayBuffer::IsDetachableBit)
 BIT_FIELD_ACCESSORS(JSArrayBuffer, bit_field, was_detached,
                     JSArrayBuffer::WasDetachedBit)
-bool JSArrayBuffer::is_shared() const {
-  return IsSharedBit::decode(bit_field()).value();
+SharedFlag JSArrayBuffer::is_shared() const {
+  return IsSharedBit::decode(bit_field());
 }
 
 void JSArrayBuffer::set_is_shared(SharedFlag value) {
   set_bit_field(IsSharedBit::update(bit_field(), value));
 }
 
-bool JSArrayBuffer::is_resizable_by_js() const {
-  return IsResizableByJsBit::decode(bit_field()).value();
+ResizableFlag JSArrayBuffer::is_resizable_by_js() const {
+  return IsResizableByJsBit::decode(bit_field());
 }
 
 void JSArrayBuffer::set_is_resizable_by_js(ResizableFlag value) {
   set_bit_field(IsResizableByJsBit::update(bit_field(), value));
 
   if (ArrayBufferExtension* extension = this->extension()) {
-    extension->set_is_resizable_by_js(value.value());
+    extension->set_is_resizable_by_js(value);
   }
 }
 

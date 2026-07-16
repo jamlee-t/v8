@@ -936,13 +936,13 @@ BUILTIN(Uint8ArrayFromHex) {
         base::Vector<const uint8_t> input_vector =
             input_content.ToOneByteVector();
         result = ArrayBufferFromHex(
-            input_vector, /*is_shared*/ false,
+            input_vector, SharedFlag{false},
             static_cast<uint8_t*>(buffer->backing_store()), output_length);
       } else {
         base::Vector<const base::uc16> input_vector =
             input_content.ToUC16Vector();
         result = ArrayBufferFromHex(
-            input_vector, /*is_shared*/ false,
+            input_vector, SharedFlag{false},
             static_cast<uint8_t*>(buffer->backing_store()), output_length);
       }
   }
