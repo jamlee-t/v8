@@ -166,6 +166,9 @@ class MaglevGraphOptimizer {
   Jump* FoldBranch(BasicBlock* current, BranchControlNode* branch_node,
                    bool if_true);
 
+  template <typename FixedArrayT, typename NodeT>
+  MaybeReduceResult AbortIfInvalidFixedArrayIndex(NodeT* node);
+
   ProcessResult ReplaceWith(ValueNode* node);
 
   template <typename NodeT, typename... Args>

@@ -1167,35 +1167,45 @@ ProcessResult MaglevGraphOptimizer::VisitStoreMap(
   return ProcessResult::kContinue;
 }
 
+template <typename FixedArrayT, typename NodeT>
+MaybeReduceResult MaglevGraphOptimizer::AbortIfInvalidFixedArrayIndex(
+    NodeT* node) {
+  if (std::optional<int32_t> index =
+          reducer_.TryGetInt32Constant(node->IndexInput().node())) {
+    if (*index < 0 ||
+        static_cast<uint32_t>(*index) >= FixedArrayT::kMaxLength) {
+      // This is an out-of-bound store, which means that we have to be in
+      // unreachable code.
+      return reducer_.BuildAbort(AbortReason::kUnreachable);
+    }
+  }
+  return {};
+}
+
 ProcessResult MaglevGraphOptimizer::VisitStoreFixedArrayElementWithWriteBarrier(
     StoreFixedArrayElementWithWriteBarrier* node,
     const ProcessingState& state) {
-  // TODO(b/424157317): Optimize.
+  REMOVE_AND_RETURN_IF_DONE(AbortIfInvalidFixedArrayIndex<FixedArray>(node));
   return ProcessResult::kContinue;
 }
 
 ProcessResult MaglevGraphOptimizer::VisitStoreFixedArrayElementNoWriteBarrier(
     StoreFixedArrayElementNoWriteBarrier* node, const ProcessingState& state) {
-  // TODO(b/424157317): Optimize.
+  REMOVE_AND_RETURN_IF_DONE(AbortIfInvalidFixedArrayIndex<FixedArray>(node));
   return ProcessResult::kContinue;
 }
 
 ProcessResult MaglevGraphOptimizer::VisitStoreFixedHoleyDoubleArrayElement(
     StoreFixedHoleyDoubleArrayElement* node, const ProcessingState& state) {
-  // TODO(b/424157317): Optimize.
+  REMOVE_AND_RETURN_IF_DONE(
+      AbortIfInvalidFixedArrayIndex<FixedDoubleArray>(node));
   return ProcessResult::kContinue;
 }
 
 ProcessResult MaglevGraphOptimizer::VisitStoreFixedDoubleArrayElement(
     StoreFixedDoubleArrayElement* node, const ProcessingState& state) {
-  if (std::optional<int32_t> index =
-          reducer_.TryGetInt32Constant(node->IndexInput().node())) {
-    if (*index < 0 || static_cast<uint32_t>(*index) >= FixedArray::kMaxLength) {
-      // This is an out-of-bound store, which means that we have to be in
-      // unreachable code.
-      REMOVE_AND_RETURN_IF_DONE(reducer_.BuildAbort(AbortReason::kUnreachable));
-    }
-  }
+  REMOVE_AND_RETURN_IF_DONE(
+      AbortIfInvalidFixedArrayIndex<FixedDoubleArray>(node));
   return ProcessResult::kContinue;
 }
 
@@ -1941,13 +1951,15 @@ ProcessResult MaglevGraphOptimizer::VisitLoadFixedArrayElement(
 
 ProcessResult MaglevGraphOptimizer::VisitLoadFixedDoubleArrayElement(
     LoadFixedDoubleArrayElement* node, const ProcessingState& state) {
-  // TODO(b/424157317): Optimize.
+  REMOVE_AND_RETURN_IF_DONE(
+      AbortIfInvalidFixedArrayIndex<FixedDoubleArray>(node));
   return ProcessResult::kContinue;
 }
 
 ProcessResult MaglevGraphOptimizer::VisitLoadHoleyFixedDoubleArrayElement(
     LoadHoleyFixedDoubleArrayElement* node, const ProcessingState& state) {
-  // TODO(b/424157317): Optimize.
+  REMOVE_AND_RETURN_IF_DONE(
+      AbortIfInvalidFixedArrayIndex<FixedDoubleArray>(node));
   return ProcessResult::kContinue;
 }
 
@@ -1955,7 +1967,8 @@ ProcessResult
 MaglevGraphOptimizer::VisitLoadHoleyFixedDoubleArrayElementCheckedNotHole(
     LoadHoleyFixedDoubleArrayElementCheckedNotHole* node,
     const ProcessingState& state) {
-  // TODO(b/424157317): Optimize.
+  REMOVE_AND_RETURN_IF_DONE(
+      AbortIfInvalidFixedArrayIndex<FixedDoubleArray>(node));
   return ProcessResult::kContinue;
 }
 
