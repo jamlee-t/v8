@@ -793,7 +793,10 @@ void KnownNodeAspects::NarrowPossibleMaps(Zone* zone,
                                           ValueNode* object,
                                           const PossibleMaps& excluded_maps) {
   NodeInfo* info = TryGetInfoFor(object);
-  if (info == nullptr || !info->possible_maps_are_known()) return;
+  if (info == nullptr || !info->possible_maps_are_known() ||
+      info->maps_are_stale()) {
+    return;
+  }
   PossibleMaps remaining = info->possible_maps();
   for (compiler::MapRef map : excluded_maps) {
     remaining.remove(map, zone);
