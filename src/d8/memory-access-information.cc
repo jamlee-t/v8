@@ -18,6 +18,18 @@ namespace v8 {
 
 MemoryAccessInformation ParseMemoryAccessInformationFromInstruction(
     const char* insn_pos, struct user_regs_struct& regs) {
+  if (memcmp(insn_pos, "rep ", 4) == 0 || memcmp(insn_pos, "repne ", 6) == 0) {
+    // Treat any repeating string instruction as a write, which is safely
+    // ignored.
+    return {.kind = MemoryAccessInformation::kWrite,
+            .result_reg = nullptr,
+            .xmm_reg_index = -1,
+            .k_reg_index = -1,
+            .access_width = 8,
+            .dest_width = 8,
+            .extension = MemoryAccessInformation::kNoExtend};
+  }
+
   const char* space_pos = strchr(insn_pos, ' ');
   CHECK_NOT_NULL(space_pos);
   size_t mnem_len = space_pos - insn_pos;

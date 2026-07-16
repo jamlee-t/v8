@@ -150,6 +150,18 @@ TEST(MemoryAccessInformationTest, ParseInstructionWidthAndExtension) {
     EXPECT_EQ(0, info.k_reg_index);
     EXPECT_EQ(-1, info.xmm_reg_index);
   }
+
+  // Test repeating string instructions (rep/repne).
+  {
+    MemoryAccessInformation info =
+        ParseMemoryAccessInformationFromInstruction("rep movsb", regs);
+    EXPECT_EQ(MemoryAccessInformation::kWrite, info.kind);
+  }
+  {
+    MemoryAccessInformation info =
+        ParseMemoryAccessInformationFromInstruction("repne cmpsb", regs);
+    EXPECT_EQ(MemoryAccessInformation::kWrite, info.kind);
+  }
 }
 
 }  // namespace

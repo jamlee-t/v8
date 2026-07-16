@@ -220,6 +220,26 @@ void DisassemblePreviousInstruction(struct user_regs_struct& regs,
           hex_dump);
   }
 
+  // Watchpoints on repeating string instructions ('rep/repne') are
+  // reported as traps, but the saved RIP points to the repeating
+  // instruction itself to allow resumption.
+  // Although a watchpoint on an immediately preceding memory
+  // instruction would also leave RIP pointing here, in practice
+  // (e.g. glibc memcpy) 'rep' is always preceded by non-memory setup/
+  // alignment instructions (lea, sub, and, etc.). Thus, RIP pointing
+  // to 'rep' is guaranteed to be a trigger by the 'rep' itself.
+  // Check if RIP points to a repeating string instruction.
+  uint8_t prefix = bytes_around_rip[rip_offset];
+  uint8_t opcode = bytes_around_rip[rip_offset + 1];
+  if ((prefix == 0xf3 || prefix == 0xf2) &&
+      ((opcode >= 0xa4 && opcode <= 0xa7) ||
+       (opcode >= 0xaa && opcode <= 0xaf))) {
+    disasm.InstructionDecode(buffer, bytes_around_rip + rip_offset);
+    TRACE("[debugger] Executed instruction (repeating string) was: %s\n",
+          buffer.data());
+    return;
+  }
+
   // Try disassembling at increasing offsets. Eventually this should synchronize
   // with the instruction stream and find the instruction ending at `rip`.
   for (size_t start_offset = 0; start_offset < rip_offset; ++start_offset) {
