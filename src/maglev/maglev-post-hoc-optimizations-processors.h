@@ -703,7 +703,15 @@ class CommonSubexpressionEliminationProcessor {
   ProcessResult Process(NodeT* node, const ProcessingState& state) {
     if constexpr (ShouldCSE(Node::opcode_of<NodeT>) &&
                   IsFixedInputNode<NodeT>()) {
-      return TryCSE(node);
+      // A value node is CSE'd by overwriting it in place with an Identity to
+      // its equivalent. The Identity stores the equivalent in input slot 0, so
+      // a zero-input value cannot be eliminated here. Checks produce no value
+      // and are just removed, so they stay eligible regardless of input count.
+      // TODO(victorgomes): Support CSE of zero-input value nodes.
+      if constexpr (!std::is_base_of_v<ValueNode, NodeT> ||
+                    NodeT::kInputCount >= 1) {
+        return TryCSE(node);
+      }
     }
     return ProcessResult::kContinue;
   }
