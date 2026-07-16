@@ -2903,13 +2903,9 @@ RUNTIME_FUNCTION(Runtime_Resume) {
   DCHECK_EQ(1, args.length());
   CHECK_UNLESS_FUZZING(IsString(args[0]));
   DirectHandle<String> phase_name = args.at<String>(0);
-  bool resumed =
+  bool success =
       SynchronizationPointSupport::Get()->Resume(phase_name->ToStdString());
-  if (!resumed) {
-    return isolate->Throw(*isolate->factory()->NewStringFromAsciiChecked(
-        "No thread is currently blocked at this synchronization point"));
-  }
-  return ReadOnlyRoots(isolate).undefined_value();
+  return isolate->heap()->ToBoolean(success);
 }
 
 // Waits until the given synchronization point is reached. Throws an exception
@@ -2926,15 +2922,9 @@ RUNTIME_FUNCTION(Runtime_WaitUntilBlocked) {
   base::TimeDelta timeout =
       base::TimeDelta::FromMilliseconds(args.smi_value_at(1));
 
-  bool timed_out = false;
-  bool blocked = SynchronizationPointSupport::Get()->WaitUntilBlocked(
-      phase_name->ToStdString(), timeout, timed_out);
-  if (!blocked) {
-    return isolate->Throw(*isolate->factory()->NewStringFromAsciiChecked(
-        timed_out ? "Synchronization point wait timed out"
-                  : "Synchronization point not found or not armed"));
-  }
-  return ReadOnlyRoots(isolate).undefined_value();
+  bool success = SynchronizationPointSupport::Get()->WaitUntilBlocked(
+      phase_name->ToStdString(), timeout);
+  return isolate->heap()->ToBoolean(success);
 }
 
 }  // namespace internal

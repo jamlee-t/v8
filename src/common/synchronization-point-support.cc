@@ -45,32 +45,45 @@ bool SynchronizationPointSupport::Resume(
     std::string_view synchronization_point) {
   base::MutexGuard lock(&mutex_);
   auto it = states_.find(synchronization_point);
-  if (it == states_.end()) return false;
-  SyncPointState* state = it->second.get();
-  if (!state->block_requested) return false;
-  state->block_requested = false;
-  state->cv.NotifyAll();
-  return true;
+  if (it != states_.end()) {
+    SyncPointState* state = it->second.get();
+    if (state->block_requested) {
+      state->block_requested = false;
+      state->cv.NotifyAll();
+      return true;
+    }
+  }
+  base::OS::PrintError("Synchronization point not armed\n");
+  return false;
 }
 
 bool SynchronizationPointSupport::WaitUntilBlocked(
-    std::string_view synchronization_point, base::TimeDelta timeout,
-    bool& timed_out) {
-  bool success = false;
-  auto wait_loop = [this, synchronization_point, timeout, &timed_out,
-                    &success]() {
+    std::string_view synchronization_point, base::TimeDelta timeout) {
+  // Safe: map elements are never removed, so the pointer is stable.
+  SyncPointState* state;
+  {
     base::MutexGuard lock(&mutex_);
     auto it = states_.find(synchronization_point);
-    if (it == states_.end()) return;
-    SyncPointState* state = it->second.get();
-    if (!state->block_requested && state->blocked_threads == 0) return;
+    if (it == states_.end()) {
+      base::OS::PrintError("Synchronization point not armed\n");
+      return false;
+    }
+    state = it->second.get();
+  }
 
+  bool success = false;
+  auto wait_loop = [this, state, timeout, &success]() {
+    base::MutexGuard lock(&mutex_);
     const base::TimeTicks start = base::TimeTicks::Now();
     while (state->blocked_threads == 0) {
+      if (!state->block_requested) {
+        base::OS::PrintError("Synchronization point not armed\n");
+        return;
+      }
       const base::TimeDelta remaining =
           start + timeout - base::TimeTicks::Now();
       if (remaining <= base::TimeDelta()) {
-        timed_out = true;
+        base::OS::PrintError("Synchronization point wait timed out\n");
         return;
       }
       std::ignore = state->cv.WaitFor(&mutex_, remaining);

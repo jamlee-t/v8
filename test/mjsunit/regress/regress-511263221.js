@@ -8,34 +8,28 @@ function workerScript() {
   onmessage = function(msg) {
     let sab = new Int32Array(msg.data);
 
-    try {
-      %BlockAt("ExternalizeStringExtensionMakeExternalOneByte", 10000);
-      %BlockAt("ConcurrentConcatenateStrings", 10000);
-      postMessage("ready");
+    %BlockAt("ExternalizeStringExtensionMakeExternalOneByte", 10000);
+    %BlockAt("ConcurrentConcatenateStrings", 10000);
+    postMessage("ready");
 
-      %WaitUntilBlocked("ConcurrentConcatenateStrings", 10000);
-      %WaitUntilBlocked("ExternalizeStringExtensionMakeExternalOneByte", 10000);
+    %WaitUntilBlocked("ConcurrentConcatenateStrings", 10000);
+    %WaitUntilBlocked("ExternalizeStringExtensionMakeExternalOneByte", 10000);
 
-      %BlockAt("StringWriteToFlatConsString", 10000);
-      %Resume("ConcurrentConcatenateStrings");
+    %BlockAt("StringWriteToFlatConsString", 10000);
+    %Resume("ConcurrentConcatenateStrings");
 
-      %WaitUntilBlocked("StringWriteToFlatConsString", 10000);
+    %WaitUntilBlocked("StringWriteToFlatConsString", 10000);
 
-      %Resume("ExternalizeStringExtensionMakeExternalOneByte");
+    %Resume("ExternalizeStringExtensionMakeExternalOneByte");
 
-      Atomics.wait(sab, 0, 0);
+    Atomics.wait(sab, 0, 0);
 
-      %Resume("StringWriteToFlatConsString");
+    %Resume("StringWriteToFlatConsString");
 
-    } catch(e) {
-    } finally {
-      try {
-        %Resume("ExternalizeStringExtensionMakeExternalOneByte");
-      } catch(e) {}
-      try { %Resume("ConcurrentConcatenateStrings"); } catch(e) {}
-      try { %Resume("StringWriteToFlatConsString"); } catch(e) {}
-      close();
-    }
+    %Resume("ExternalizeStringExtensionMakeExternalOneByte");
+    %Resume("ConcurrentConcatenateStrings");
+    %Resume("StringWriteToFlatConsString");
+    close();
   }
 }
 

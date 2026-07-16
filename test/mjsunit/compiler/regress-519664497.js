@@ -26,13 +26,13 @@ assertEquals(expected, f());
 %OptimizeFunctionOnNextCall(f, "concurrent");
 assertEquals(expected, f());
 
-%WaitUntilBlocked('NewConsString', 1000);
+assertTrue(%WaitUntilBlocked('NewConsString', 1000));
 
 // Internalize the string. This will mutate the string on the main thread
 // and turn it into a ThinString, right while the background thread is
 // stopped at NewConsString.
 %InternalizeString(left);
 
-%Resume('NewConsString');
+assertTrue(%Resume('NewConsString'));
 %WaitForBackgroundOptimization();
 assertEquals(expected, f());

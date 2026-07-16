@@ -44,11 +44,10 @@ class V8_EXPORT_PRIVATE SynchronizationPointSupport {
   bool Resume(std::string_view synchronization_point);
 
   // Waits until the given synchronization point is reached by some thread.
-  // Returns false if a block wasn't requested or on timeout (in which case
-  // `timed_out` is set to true as well). Note: this does not request a block;
-  // it must be requested first.
+  // Returns false if a block wasn't requested or on timeout. Note: this does
+  // not request a block; it must be requested first.
   bool WaitUntilBlocked(std::string_view synchronization_point,
-                        base::TimeDelta timeout, bool& timed_out);
+                        base::TimeDelta timeout);
 
   // Called when the synchronization point is reached; blocks if requested.
   V8_INLINE void BlockIfRequested(std::string_view synchronization_point) {
