@@ -778,6 +778,11 @@ class ChoiceNode : public Node {
   V8_WARN_UNUSED_RESULT EmitResult EmitChoices(
       Compiler* compiler, AlternativeGenerationList* alt_gens, int first_choice,
       Trace* trace, PreloadState* preloads, Flags flags);
+  // Emits the choice as a dispatch over a shared masked quick-check value
+  // when all alternatives agree on the mask; nullopt if not eligible.
+  std::optional<EmitResult> TryEmitMaskedValueDispatch(
+      Compiler* compiler, AlternativeGenerationList* alt_gens, Trace* trace,
+      PreloadState* preload, Flags flags);
 
   // If true, this node is never checked at the start of the input.
   // Allows a new trace to start with at_start() set to false.

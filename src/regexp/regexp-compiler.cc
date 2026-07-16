@@ -1398,9 +1398,10 @@ void GenerateBranches(RegExpMacroAssembler* masm, ZoneList<base::uc32>* ranges,
   }
 }
 
-void EmitClassRanges(RegExpMacroAssembler* macro_assembler, ClassRanges* cr,
-                     bool one_byte, Label* on_failure, int cp_offset,
-                     bool check_offset, bool preloaded, Zone* zone) {
+void EmitClassRanges(Compiler* compiler, RegExpMacroAssembler* macro_assembler,
+                     ClassRanges* cr, bool one_byte, Label* on_failure,
+                     int cp_offset, bool check_offset, bool preloaded,
+                     Zone* zone) {
   ZoneList<CharacterRange>* ranges = cr->ranges(zone);
   CharacterRange::Canonicalize(ranges);
 
@@ -1441,6 +1442,71 @@ void EmitClassRanges(RegExpMacroAssembler* macro_assembler, ClassRanges* cr,
     macro_assembler->CheckSpecialClassRanges(cr->standard_type(), on_failure);
     return;
   }
+
+  // A class whose members differ only in a small set of bits, and which
+  // exactly cover the mask equation's solutions within their span, is
+  // checked with two fused operations -- (x & M) == c and a range check --
+  // instead of a branch tree.  The canonical example is the four suits of
+  // one card rank, {0xDCA1, 0xDCB1, 0xDCC1, 0xDCD1}: all solutions of
+  // (x & 0xFF8F) == 0xDC81 within [0xDCA1, 0xDCD1] are exactly the class
+  // members.
+  //
+  // Ranges are handled by treating the class as the set of its members: the
+  // fold's correctness depends only on which values are present, not on how
+  // they were spelled, so [a-c] folds like {a, b, c}.  Enumeration below is
+  // O(members), so the member count is capped.
+  //
+  // Unlike the QuickCheck masked compare, which is only a necessary
+  // pre-filter (false positives fall through to the full check), this fold
+  // replaces the class check outright, so it must be exact.  Hence we walk
+  // the submasks of |diff| below and only fold when every solution in the
+  // span is a class member.
+  do {
+    static constexpr int kMinMembers = 3;
+    static constexpr int kMaxMembers = 8;
+    const base::uc32 lo = ranges->at(0).from();
+    const base::uc32 hi = ranges->at(ranges_length - 1).to();
+    if (hi > 0xffff) break;
+    // diff = bits that vary across the class members.
+    uint32_t diff = 0;
+    int member_count = 0;
+    for (int i = 0; i < ranges_length; i++) {
+      CharacterRange r = ranges->at(i);
+      for (base::uc32 ch = r.from(); ch <= r.to(); ch++) {
+        if (++member_count > kMaxMembers) break;
+        diff |= ch ^ lo;
+      }
+    }
+    if (member_count > kMaxMembers || member_count < kMinMembers) break;
+    if (base::bits::CountPopulation(diff) > 4) break;
+    // mask pins the non-varying bits to c.
+    const uint32_t mask = CharMask(one_byte) & ~diff;
+    const uint32_t c = lo & mask;
+    // (x & mask) == c is necessary for membership but not sufficient: some
+    // other codepoint in [lo, hi] could satisfy it too. Walk every submask
+    // of diff (sub = (sub - diff) & diff enumerates them) and fold only if
+    // all solutions in the span are class members.
+    int solutions = 0;
+    for (uint32_t sub = 0;; sub = (sub - diff) & diff) {
+      const base::uc32 x = c | sub;
+      if (x >= lo && x <= hi) solutions++;
+      if (sub == diff) break;
+    }
+    if (solutions != member_count) break;
+    TRACE("* Fold masked class");
+    if (!cr->is_negated()) {
+      macro_assembler->CheckNotCharacterAfterAnd(c, mask, on_failure);
+      macro_assembler->CheckCharacterNotInRange(
+          static_cast<base::uc16>(lo), static_cast<base::uc16>(hi), on_failure);
+    } else {
+      Label ok;
+      macro_assembler->CheckNotCharacterAfterAnd(c, mask, &ok);
+      macro_assembler->CheckCharacterInRange(
+          static_cast<base::uc16>(lo), static_cast<base::uc16>(hi), on_failure);
+      macro_assembler->Bind(&ok);
+    }
+    return;
+  } while (false);
 
   static constexpr int kMaxRangesForInlineBranchGeneration = 16;
   if (ranges_length > kMaxRangesForInlineBranchGeneration) {
@@ -2416,7 +2482,7 @@ void TextNode::TextEmitPass(Compiler* compiler, TextEmitPassType pass,
         if (DeterminedAlready(quick_check, elm.cp_offset())) continue;
         ClassRanges* cr = elm.class_ranges();
         bool bounds_check = *checked_up_to < cp_offset || read_backward();
-        EmitClassRanges(assembler, cr, one_byte, backtrack, cp_offset,
+        EmitClassRanges(compiler, assembler, cr, one_byte, backtrack, cp_offset,
                         bounds_check, preloaded, zone());
         UpdateBoundsCheck(cp_offset, checked_up_to);
       }
@@ -4158,6 +4224,235 @@ bool ChoiceNode::MaybeEmitFixedLengthConsumeScan(Compiler* compiler,
   return true;
 }
 
+// Attempts to emit this choice as a masked-value dispatch instead of the
+// linear alternative chain in EmitChoices.  Eligible when every
+// alternative's first-load quick check rationalizes to the SAME mask over
+// the preloaded word: the masked input then selects the only group of
+// alternatives that can possibly match, because a quick check's
+// (mask, value) pair is a necessary condition for its alternative.  Two
+// consequences replace the linear chain:
+//
+// - Selection costs one masked compare per DISTINCT value (a group), not
+//   one per alternative.
+// - On a selected alternative's failure, only same-value alternatives
+//   remain viable; once the group is exhausted the whole choice
+//   backtracks, skipping the remaining alternatives' quick checks
+//   entirely.
+//
+// Match priority is preserved: within a group, alternatives are tried in
+// their original order; across groups, the masked value is mutually
+// exclusive, so skipped alternatives could not have matched.
+//
+// Returns the emission result if the dispatch was emitted, nullopt if the
+// choice is not eligible (the caller falls through to the linear chain).
+std::optional<EmitResult> ChoiceNode::TryEmitMaskedValueDispatch(
+    Compiler* compiler, AlternativeGenerationList* alt_gens, Trace* trace,
+    PreloadState* preload, Flags flags) {
+  static constexpr int kMinAlternatives = 4;
+  static constexpr int kMinGroups = 3;
+
+  if (!v8_flags.regexp_masked_dispatch) return std::nullopt;
+  if (AsLoopChoiceNode() != nullptr) {
+    TRACE("* No masked dispatch: loop choice");
+    return std::nullopt;
+  }
+  const int choice_count = alternatives_->length();
+  if (choice_count < kMinAlternatives) {
+    TRACE("* No masked dispatch: too few alternatives");
+    return std::nullopt;
+  }
+
+  RegExpMacroAssembler* assembler = compiler->macro_assembler();
+  const int preload_characters = preload->preload_characters_;
+  if (preload_characters == 0) {
+    TRACE("* No masked dispatch: nothing preloaded");
+    return std::nullopt;
+  }
+  if (preload_characters != 1 && !assembler->CanReadUnaligned()) {
+    TRACE("* No masked dispatch: multi-char preload needs unaligned reads");
+    return std::nullopt;
+  }
+  const bool not_at_start = trace->at_start() == Trace::FALSE_VALUE;
+
+  // The bounds check below covers EatsAtLeast characters, so a failing
+  // check rules out every alternative (see also Node::EmitQuickCheck).
+  const int eats_at_least = EatsAtLeast(not_at_start);
+  if (eats_at_least < preload_characters) {
+    TRACE("* No masked dispatch: EatsAtLeast below preload");
+    return std::nullopt;
+  }
+
+  // Compute one rationalized (mask, value) per alternative and require a
+  // common mask.  The masks and values returned by Rationalize are already
+  // restricted to the bits the preload can produce (see
+  // QuickCheckDetails::Rationalize), so equal masks compare like the
+  // emitted operations would.
+  uint32_t common_mask = 0;
+  base::SmallVector<uint32_t, 16> values;
+  for (int i = 0; i < choice_count; i++) {
+    GuardedAlternative alternative = alternatives_->at(i);
+    if (alternative.guards() != nullptr &&
+        alternative.guards()->length() != 0) {
+      TRACE("* No masked dispatch: alternative " << i << " is guarded");
+      return std::nullopt;
+    }
+    AlternativeGeneration* alt_gen = alt_gens->at(i);
+    alt_gen->quick_check_details.set_characters(preload_characters);
+    QuickCheckDetails* details = &alt_gen->quick_check_details;
+    alternative.node()->GetQuickCheckDetails(details, compiler, 0, not_at_start,
+                                             kRecursionBudget);
+    if (details->cannot_match()) {
+      TRACE("* No masked dispatch: alternative " << i << " cannot match");
+      return std::nullopt;
+    }
+    if (!details->Rationalize(compiler->one_byte())) {
+      TRACE("* No masked dispatch: alternative "
+            << i << " has no useful quick check");
+      return std::nullopt;
+    }
+    if (i == 0) {
+      common_mask = details->mask();
+    } else if (details->mask() != common_mask) {
+      TRACE("* No masked dispatch: alternative " << i << " mask differs");
+      return std::nullopt;
+    }
+    values.push_back(details->value());
+  }
+  if (common_mask == 0) {
+    TRACE("* No masked dispatch: empty common mask");
+    return std::nullopt;
+  }
+
+  // Group alternatives by value, preserving the order of first occurrence
+  // (and, within a group, alternative order).  Alternatives sharing a value
+  // need not be adjacent: the ones in between cannot match when the shared
+  // value did, so skipping them is priority-safe.
+  // The distinct masked values, in first-occurrence order; one group per entry.
+  base::SmallVector<uint32_t, 16> group_values;
+  // Per alternative, the index into |group_values| of its value's group.
+  base::SmallVector<int, 16> group_of_alt;
+  for (int i = 0; i < choice_count; i++) {
+    const uint32_t value = values[i];
+    int group_index = -1;
+    for (size_t j = 0; j < group_values.size(); j++) {
+      if (group_values[j] == value) {
+        group_index = static_cast<int>(j);
+        break;
+      }
+    }
+    if (group_index < 0) {
+      group_index = static_cast<int>(group_values.size());
+      group_values.push_back(value);
+    }
+    group_of_alt.push_back(group_index);
+  }
+  const int group_count = static_cast<int>(group_values.size());
+  if (group_count < kMinGroups) {
+    TRACE("* No masked dispatch: too few distinct values");
+    return std::nullopt;
+  }
+
+  TRACE("* Emit masked-value dispatch");
+
+  // Preload the word if the trace has not already; the bounds check covers
+  // the minimum any alternative eats (mirrors Node::EmitQuickCheck).
+  if (trace->characters_preloaded() != preload_characters) {
+    const int cp_offset = trace->cp_offset();
+    assembler->LoadCurrentCharacter(
+        cp_offset, trace->backtrack(), !preload->preload_has_checked_bounds_,
+        preload_characters,
+        assembler->CalculateBoundsCheckOffset(cp_offset, eats_at_least));
+  }
+
+  // The dispatch: one fused masked compare per group; no group matching
+  // means no alternative can match.
+  // Label is not copyable and, on some architectures, not movable, so store
+  // pointers to zone-allocated labels rather than labels by value.
+  ZoneVector<Label*> group_labels(group_count, zone());
+  for (int g = 0; g < group_count; g++) {
+    group_labels[g] = zone()->New<Label>();
+  }
+  // Bits the preload can produce (mirrors Node::EmitQuickCheck's masking).
+  uint32_t load_mask;
+  if (preload_characters == 1) {
+    load_mask = CharMask(compiler->one_byte());
+  } else if (preload_characters == 2 && compiler->one_byte()) {
+    load_mask = 0xffff;
+  } else {
+    load_mask = 0xffffffff;
+  }
+  // If the mask already covers every bit the load can produce, the AND is a
+  // no-op and a plain character compare suffices.
+  const bool need_mask = (common_mask & load_mask) != load_mask;
+  for (int g = 0; g < group_count; g++) {
+    if (need_mask) {
+      assembler->CheckCharacterAfterAnd(group_values[g], common_mask,
+                                        group_labels[g]);
+    } else {
+      assembler->CheckCharacter(group_values[g], group_labels[g]);
+    }
+  }
+  if (trace->backtrack() == nullptr) {
+    assembler->Backtrack();
+  } else {
+    assembler->GoTo(trace->backtrack());
+  }
+
+  // Group bodies: full checks in original alternative order, chained
+  // within the group; the last alternative of a group backtracks like the
+  // last alternative of the linear chain (keeping the outer trace's
+  // backtrack and any parked grant).
+  const int new_flush_budget = trace->flush_budget() / choice_count;
+  ZoneVector<Label*> chain_labels(choice_count, zone());
+  for (int i = 0; i < choice_count; i++) {
+    chain_labels[i] = zone()->New<Label>();
+  }
+  for (int g = 0; g < group_count; g++) {
+    assembler->Bind(group_labels[g]);
+    int last_in_group = -1;
+    for (int i = choice_count - 1; i >= 0; i--) {
+      if (group_of_alt[i] == g) {
+        last_in_group = i;
+        break;
+      }
+    }
+    for (int i = 0; i < choice_count; i++) {
+      if (group_of_alt[i] != g) continue;
+      compiler->set_flags(flags);
+      Trace new_trace(*trace);
+      new_trace.set_characters_preloaded(preload_characters);
+      new_trace.set_bound_checked_up_to(preload_characters);
+      // The dispatch compare already established this alternative's
+      // rationalized quick check, so its body need not repeat it.
+      new_trace.set_quick_check_performed(
+          &alt_gens->at(i)->quick_check_details);
+      if (not_at_start_) new_trace.set_at_start(Trace::FALSE_VALUE);
+      if (i != last_in_group) {
+        new_trace.set_backtrack(chain_labels[i]);
+      }
+      if (new_trace.has_any_actions()) {
+        new_trace.set_flush_budget(new_flush_budget);
+      }
+      TRACE_WITH_NODE_AND_TRACE(compiler, "  Dispatch choice " << i << " ",
+                                alternatives_->at(i).node(), &new_trace);
+      EmitResult result =
+          alternatives_->at(i).node()->Emit(compiler, &new_trace);
+      if (result.IsError()) return result;
+      if (i != last_in_group) {
+        assembler->Bind(chain_labels[i]);
+        // The intra-group retry re-reads the preloaded word, which the
+        // failed alternative may have invalidated via nested emission;
+        // reload for the next alternative's elided checks.
+        assembler->LoadCurrentCharacter(trace->cp_offset(), nullptr, false,
+                                        preload_characters);
+      }
+    }
+  }
+
+  preload->preload_is_current_ = false;
+  return EmitResult::Success();
+}
+
 EmitResult ChoiceNode::EmitChoices(Compiler* compiler,
                                    AlternativeGenerationList* alt_gens,
                                    int first_choice, Trace* trace,
@@ -4165,6 +4460,13 @@ EmitResult ChoiceNode::EmitChoices(Compiler* compiler,
   TRACE("* Emit Choices");
   RegExpMacroAssembler* macro_assembler = compiler->macro_assembler();
   SetUpPreLoad(compiler, trace, preload);
+
+  if (first_choice == 0) {
+    if (std::optional<EmitResult> dispatched = TryEmitMaskedValueDispatch(
+            compiler, alt_gens, trace, preload, flags)) {
+      return *dispatched;
+    }
+  }
 
   // For now we just call all choices one after the other.  The idea ultimately
   // is to use the Dispatch table to try only the relevant ones.

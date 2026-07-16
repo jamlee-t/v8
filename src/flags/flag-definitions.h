@@ -3504,6 +3504,9 @@ DEFINE_DEVELOPER_FLAG(serialization_statistics,
 // Regexp
 DEFINE_BOOL(regexp_optimization, true, "generate optimized regexp code")
 DEFINE_BOOL(regexp_unroll, true, "unroll small {} repeats when optimizing")
+DEFINE_BOOL(regexp_masked_dispatch, true,
+            "dispatch disjoint regexp alternations on the masked quick-check "
+            "value")
 DEFINE_BOOL(regexp_quick_check, true,
             "generate quickcheck code when optimizing")
 DEFINE_BOOL(regexp_interpret_all, false, "interpret all regexp code")
