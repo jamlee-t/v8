@@ -126,8 +126,8 @@ MergePointInterpreterFrameState* MergePointInterpreterFrameState::NewForLoop(
   state->bitfield_ =
       kIsLoopWithPeeledIterationBit::update(state->bitfield_, has_been_peeled);
   state->loop_metadata_ = LoopMetadata{loop_info, nullptr};
-  if (loop_info->resumable() && !is_inline) {
-    // Note that inlined loops are never resumable:
+  if (loop_info->resumable() && !is_inline && !graph->is_osr()) {
+    // Note that inlined and OSR'd loops are never resumable:
     //
     //  - for generators, we only inline the part of the function that sets up
     //  the generator, which suspends right away without ever reaching any loop
@@ -138,6 +138,11 @@ MergePointInterpreterFrameState* MergePointInterpreterFrameState::NewForLoop(
     //  once inlined it actually just returns a Promise to the caller, which
     //  will take care of awaiting this Promise, which will resume in a
     //  non-inlined version of the function.
+    //
+    //  - for OSR, we can never enter the OSR'd code via a resume path (we only
+    //  enter via the OSR loop header from the interpreter). Therefore, all
+    //  resume blocks are dead and not built, and we don't need to treat loops
+    //  as resumable (which would unnecessarily clear registers).
     state->known_node_aspects_ =
         info.zone()->New<KnownNodeAspects>(info.zone());
     state->set_is_resumable_loop(graph);
