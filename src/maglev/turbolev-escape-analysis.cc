@@ -96,6 +96,8 @@ ValueNode* EscapeAnalysisData::ResolveBase(ValueNode* node,
   switch (node->opcode()) {
     case Opcode::kLoadTaggedField: {
       LoadTaggedField* load = node->Cast<LoadTaggedField>();
+      auto it = loaded_values.find(load);
+      if (it != loaded_values.end()) return it->second;
       return ResolveLoadBase(load->ValueInput().node(), load->offset(), load,
                              predecessor_index);
     }
@@ -695,6 +697,9 @@ class CandidateAnalyzer {
 
   ProcessResult Process(LoadTaggedField* node, const ProcessingState&) {
     // Shouldn't make its input escape.
+    ValueNode* resolved =
+        data_.ResolveLoadBase(node->ValueInput(), node->offset(), node);
+    data_.loaded_values.insert_or_assign(node, resolved);
     return ProcessResult::kContinue;
   }
 
