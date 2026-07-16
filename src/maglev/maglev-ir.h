@@ -6556,7 +6556,18 @@ class InlinedAllocation : public FixedInputValueNodeT<1, InlinedAllocation> {
     non_escaping_use_count_ = std::max(non_escaping_use_count_ - n, 0);
   }
   void AddNonEscapingUses(int n = 1) {
-    DCHECK(!HasBeenAnalysed());
+    // In Maglev, AddNonEscapingUse is always called before the PostHocPhase,
+    // which is where InlinedAllocations are marked as HasBeenAnalyzed.
+    // In Turbolev, however, InlinedAllocations are marked as HasBeenAnalyzed
+    // during the TurbolevEscapeAnalysis phase, which isn't the last phase of
+    // the pipeline, and subsequent phases can end up calling AddNonEscapingUses
+    // on nodes that have been analyzed. This is safe as long it's only called
+    // on objects that are marked as HasEscaped: for objects marked as
+    // HasBeenElided, adding a non-escaping use basically means that we've added
+    // them as input to a DeoptFrame, but this is only allowed if the
+    // VirtualObjects of this DeoptFrame are in the right state, which is hard
+    // to guarantee.
+    DCHECK(!HasBeenAnalysed() || HasEscaped());
     non_escaping_use_count_ += n;
   }
   bool HasEscapingUses() const {
