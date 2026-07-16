@@ -3073,10 +3073,13 @@ class MachineLoweringReducer : public Next {
       HeapObjectRef ref = MakeRef(broker, c->handle());
       if (!ref.IsString()) return StaticShape::kCantBe;
       StringRef sref = ref.AsString();
-      if (sref.IsSeqString() && sref.IsOneByteRepresentation()) {
-        return StaticShape::kIsSeqOneByte;
+      if (!sref.IsSeqString() || !sref.IsOneByteRepresentation()) {
+        return StaticShape::kCantBe;
       }
-      return StaticShape::kCantBe;
+      // A SeqOneByteString can still be internalized in place after this code
+      // is compiled.
+      if (sref.IsInternalizedString()) return StaticShape::kIsSeqOneByte;
+      return StaticShape::kUnknown;
     };
     StaticShape recv_shape = classify(receiver);
     StaticShape arg_shape = classify(compare_str);
