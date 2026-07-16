@@ -180,7 +180,8 @@ void Code::SetMarkedForDeoptimization(Isolate* isolate,
       if (v8_flags.reopt_after_lazy_deopts &&
           isolate->concurrent_recompilation_enabled()) {
         jdt.SetCodeNoWriteBarrier(
-            handle, *BUILTIN_CODE(isolate, InterpreterEntryTrampoline));
+            handle, *BUILTIN_CODE(isolate, InterpreterEntryTrampoline),
+            isolate);
         // Somewhat arbitrary list of lazy deopt reasons which we expect to be
         // stable enough to warrant either immediate re-optimization, or
         // re-optimization after one invocation (to detect potential follow-up
@@ -215,12 +216,9 @@ void Code::SetMarkedForDeoptimization(Isolate* isolate,
             break;
         }
       } else {
-        jdt.SetCodeNoWriteBarrier(handle, *BUILTIN_CODE(isolate, CompileLazy));
+        jdt.SetCodeNoWriteBarrier(handle, *BUILTIN_CODE(isolate, CompileLazy),
+                                  isolate);
       }
-      // TODO(olivf, 525686865): Fix the race in dispatch handle marking by
-      // going back to a CAS loop.
-      static_assert(JSDispatchTable::kWriteBarrierSetsEntryMarkBit);
-      jdt.Mark(handle);
     }
     // Ensure we don't try to patch the entry multiple times.
     set_js_dispatch_handle(kNullJSDispatchHandle);

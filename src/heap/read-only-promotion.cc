@@ -514,7 +514,8 @@ class ReadOnlyPromotionImpl final : public AllStatic {
           Tagged<HeapObject> new_code = it->second;
           CHECK(IsCode(new_code));
           // TODO(saelo): is it worth logging something in this case?
-          jdt.SetCodeNoWriteBarrier(handle, TrustedCast<Code>(new_code));
+          jdt.SetCodeNoWriteBarrier(handle, TrustedCast<Code>(new_code),
+                                    isolate);
         });
     // Note the we should technically also update the entries in the
     // read_only_js_dispatch_table_space but it's currently not needed as we

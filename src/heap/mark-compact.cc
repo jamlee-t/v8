@@ -3295,8 +3295,8 @@ void MarkCompactCollector::ClearNonLiveReferences() {
                              code->kind() == CodeKind::TURBOFAN_JS ||
                              code->is_interpreter_trampoline_builtin());
                       entry.SetCodeAndEntrypointPointer(
-                          compile_lazy.ptr(),
-                          compile_lazy->instruction_start());
+                          compile_lazy.ptr(), compile_lazy->instruction_start(),
+                          isolate);
                     }
                   });
       })
@@ -5998,7 +5998,8 @@ void MarkCompactCollector::UpdatePointersInPointerTables() {
 #undef CASE
             return code->instruction_start();
           })();
-          jdt.SetCodeAndEntrypointNoWriteBarrier(handle, code, new_entrypoint);
+          jdt.SetCodeAndEntrypointNoWriteBarrier(handle, code, new_entrypoint,
+                                                 heap_->isolate());
           CHECK_IMPLIES(jdt.IsTieringRequested(handle),
                         old_entrypoint == new_entrypoint);
         }

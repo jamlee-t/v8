@@ -5472,28 +5472,20 @@ Handle<JSFunction> Factory::JSFunctionBuilder::BuildRaw(
       JSDispatchTable& jdt = isolate_->js_dispatch_table();
       Tagged<Code> old_code = jdt.GetCode(dispatch_handle);
 
-      // A write barrier is needed when settings code, because the update can
-      // race with marking which could leave the dispatch slot unmarked.
-      // TODO(olivf): This should be fixed by using a more traditional WB
-      // for dispatch handles (i.e. have a marking queue with dispatch handles
-      // instead of marking through the handle).
-      constexpr WriteBarrierMode mode_if_setting_code =
-          WriteBarrierMode::UPDATE_WRITE_BARRIER;
-
       // TODO(olivf): We should go through the cases where this is still
       // needed and maybe find some alternative to initialize it correctly
       // from the beginning.
       if (old_code->is_builtin()) {
-        jdt.SetCodeNoWriteBarrier(dispatch_handle, *code);
-        function->set_dispatch_handle(dispatch_handle, mode_if_setting_code);
+        jdt.SetCodeNoWriteBarrier(dispatch_handle, *code, isolate);
+        function->set_dispatch_handle(dispatch_handle, mode);
       } else {
         // On a transition of a feedback cell from one closure to many, make
         // sure that the code on the feedback cell isn't native context
         // specialized, and if it was, eagerly re-optimize.
         if (cell_transition == FeedbackCell::kOneToMany &&
             old_code->is_context_specialized()) {
-          jdt.SetCodeNoWriteBarrier(dispatch_handle, *code);
-          function->set_dispatch_handle(dispatch_handle, mode_if_setting_code);
+          jdt.SetCodeNoWriteBarrier(dispatch_handle, *code, isolate);
+          function->set_dispatch_handle(dispatch_handle, mode);
           DCHECK(old_code->kind() == CodeKind::MAGLEV ||
                  old_code->kind() == CodeKind::TURBOFAN_JS);
           if (!old_code->marked_for_deoptimization()) {

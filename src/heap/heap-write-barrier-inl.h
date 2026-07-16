@@ -295,7 +295,7 @@ void WriteBarrier::ForJSDispatchHandle(Tagged<HeapObject> host,
                                        WriteBarrierMode mode) {
 #if V8_VERIFY_WRITE_BARRIERS
   if (v8_flags.verify_write_barriers) {
-    CHECK(WriteBarrier::VerifyDispatchHandleMarkingState(host, handle, mode));
+    WriteBarrier::VerifyDispatchHandleWriteBarrier(host, handle, mode);
   }
 #endif  // V8_VERIFY_WRITE_BARRIERS
   if (mode == SKIP_WRITE_BARRIER) {
