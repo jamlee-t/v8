@@ -10544,27 +10544,6 @@ MaybeReduceResult MaglevGraphBuilder::TryReduceArrayPrototypePop(
   return sub_graph.get(var_value);
 }
 
-MaybeReduceResult MaglevGraphBuilder::TryReduceFunctionPrototypeHasInstance(
-    compiler::JSFunctionRef target, CallArguments& args) {
-  // We can't reduce Function#hasInstance when there is no receiver function.
-  if (args.receiver_mode() == ConvertReceiverMode::kNullOrUndefined) {
-    return {};
-  }
-  if (args.count() != 1) {
-    return {};
-  }
-  compiler::OptionalJSObjectRef maybe_receiver_constant =
-      TryGetConstant<JSObject>(args.receiver());
-  if (!maybe_receiver_constant) {
-    return {};
-  }
-  if (!maybe_receiver_constant->map(broker()).is_callable()) {
-    return {};
-  }
-  return reducer_.BuildOrdinaryHasInstance(
-      GetContext(), args[0], maybe_receiver_constant.value(), nullptr);
-}
-
 MaybeReduceResult MaglevGraphBuilder::TryReduceObjectPrototypeHasOwnProperty(
     compiler::JSFunctionRef target, CallArguments& args) {
   if (!CanSpeculateCall()) return {};

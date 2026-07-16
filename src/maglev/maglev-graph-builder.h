@@ -855,7 +855,6 @@ class MaglevGraphBuilder {
   V(DataViewPrototypeGetByteLength)              \
   V(FunctionPrototypeApply)                      \
   V(FunctionPrototypeCall)                       \
-  V(FunctionPrototypeHasInstance)                \
   V(MapPrototypeGet)                             \
   V(WeakMapPrototypeGet)                         \
   V(ObjectPrototypeGetProto)                     \

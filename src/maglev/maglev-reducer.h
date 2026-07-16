@@ -1129,6 +1129,7 @@ class MaglevReducer {
   V(DatePrototypeGetMonth)                     \
   V(DatePrototypeGetSeconds)                   \
   V(DatePrototypeGetTime)                      \
+  V(FunctionPrototypeHasInstance)              \
   V(MathAbs)                                   \
   V(MathCeil)                                  \
   V(MathClz32)                                 \

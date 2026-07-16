@@ -2622,6 +2622,29 @@ MaybeReduceResult MaglevReducer<BaseT>::TryBuildFastInstanceOfWithFeedback(
 }
 
 template <typename BaseT>
+MaybeReduceResult MaglevReducer<BaseT>::TryReduceFunctionPrototypeHasInstance(
+    compiler::JSFunctionRef target, CallArguments& args) {
+  // We can't reduce Function#hasInstance when there is no receiver function.
+  if (args.receiver_mode() == ConvertReceiverMode::kNullOrUndefined) {
+    return {};
+  }
+  if (args.count() != 1) {
+    return {};
+  }
+  compiler::OptionalJSObjectRef maybe_receiver_constant =
+      TryGetConstant<JSObject>(args.receiver());
+  if (!maybe_receiver_constant) {
+    return {};
+  }
+  if (!maybe_receiver_constant->map(broker()).is_callable()) {
+    return {};
+  }
+  return BuildOrdinaryHasInstance(GetConstant(target.context(broker())),
+                                  args[0], maybe_receiver_constant.value(),
+                                  nullptr);
+}
+
+template <typename BaseT>
 ReduceResult MaglevReducer<BaseT>::BuildCheckSmi(ValueNode* object) {
   if (object->StaticTypeIs(broker(), NodeType::kSmi)) return object;
   // Check for the empty type first so that we catch the case where
