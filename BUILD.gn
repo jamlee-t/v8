@@ -8225,6 +8225,59 @@ copy("v8_clusterfuzz_fallbacks") {
   outputs = [ "$root_out_dir/test/mjsunit/wasm/wasm-module-builder.js" ]
 }
 
+if (!build_with_chromium && !build_with_v8_embedder && !build_with_node) {
+  copy("v8_clusterfuzz_test262_fallbacks") {
+    testonly = true
+    sources = [
+      "test/test262/data/harness/assert.js",
+      "test/test262/data/harness/assertRelativeDateMs.js",
+      "test/test262/data/harness/asyncHelpers.js",
+      "test/test262/data/harness/atomicsHelper.js",
+      "test/test262/data/harness/byteConversionValues.js",
+      "test/test262/data/harness/compareArray.js",
+      "test/test262/data/harness/compareIterator.js",
+      "test/test262/data/harness/dateConstants.js",
+      "test/test262/data/harness/decimalToHexString.js",
+      "test/test262/data/harness/deepEqual.js",
+      "test/test262/data/harness/detachArrayBuffer.js",
+      "test/test262/data/harness/doneprintHandle.js",
+      "test/test262/data/harness/fnGlobalObject.js",
+      "test/test262/data/harness/isConstructor.js",
+      "test/test262/data/harness/iteratorZipUtils.js",
+      "test/test262/data/harness/nans.js",
+      "test/test262/data/harness/nativeErrors.js",
+      "test/test262/data/harness/nativeFunctionMatcher.js",
+      "test/test262/data/harness/promiseHelper.js",
+      "test/test262/data/harness/propertyHelper.js",
+      "test/test262/data/harness/proxyTrapsHelper.js",
+      "test/test262/data/harness/regExpUtils.js",
+      "test/test262/data/harness/resizableArrayBufferUtils.js",
+      "test/test262/data/harness/sm/assertThrowsValue.js",
+      "test/test262/data/harness/sm/non262-Date-shell.js",
+      "test/test262/data/harness/sm/non262-JSON-shell.js",
+      "test/test262/data/harness/sm/non262-Math-shell.js",
+      "test/test262/data/harness/sm/non262-Reflect-shell.js",
+      "test/test262/data/harness/sm/non262-Set-shell.js",
+      "test/test262/data/harness/sm/non262-Temporal-PlainMonthDay-shell.js",
+      "test/test262/data/harness/sm/non262-TypedArray-shell.js",
+      "test/test262/data/harness/sm/non262-expressions-shell.js",
+      "test/test262/data/harness/sm/non262-generators-shell.js",
+      "test/test262/data/harness/sm/non262-strict-shell.js",
+      "test/test262/data/harness/sta.js",
+      "test/test262/data/harness/tcoHelper.js",
+      "test/test262/data/harness/temporalHelpers.js",
+      "test/test262/data/harness/testAtomics.js",
+      "test/test262/data/harness/testIntl.js",
+      "test/test262/data/harness/testIntlNumberFormat.js",
+      "test/test262/data/harness/testTypedArray.js",
+      "test/test262/data/harness/typeCoercion.js",
+      "test/test262/data/harness/wellKnownIntrinsicObjects.js",
+    ]
+    outputs =
+        [ "$root_out_dir/{{source_root_relative_dir}}/{{source_file_part}}" ]
+  }
+}
+
 group("v8_clusterfuzz") {
   testonly = true
 
@@ -8234,6 +8287,9 @@ group("v8_clusterfuzz") {
     ":v8_simple_inspector_fuzzer",
     "tools/clusterfuzz/trials:v8_clusterfuzz_resources",
   ]
+  if (!build_with_chromium && !build_with_v8_embedder && !build_with_node) {
+    deps += [ ":v8_clusterfuzz_test262_fallbacks" ]
+  }
 
   if (v8_multi_arch_build) {
     deps += [

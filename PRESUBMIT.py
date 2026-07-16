@@ -555,6 +555,92 @@ def _CheckMultiLineIfBraces(input_api, output_api):
   return []
 
 
+def _CheckClusterfuzzTest262Fallbacks(input_api, output_api):
+  """Checks that all test262 harness files are listed in BUILD.gn."""
+  affected_files = [f.LocalPath() for f in input_api.AffectedFiles()]
+  if {"DEPS", "BUILD.gn"}.isdisjoint(affected_files):
+    return []
+
+  import shutil
+  import subprocess
+  import os
+
+  presubmit_out_dir = input_api.os_path.join(input_api.PresubmitLocalPath(),
+                                             "out", "presubmit_clusterfuzz_gn")
+  harness_dir = input_api.os_path.join(input_api.PresubmitLocalPath(), "test",
+                                       "test262", "data", "harness")
+
+  if not input_api.os_path.exists(harness_dir):
+    return []
+
+  if sys.platform == "win32":
+    gn_bin = "gn.exe"
+    gn_dir = "win"
+  elif sys.platform == "darwin":
+    gn_bin = "gn"
+    gn_dir = "mac"
+  else:
+    gn_bin = "gn"
+    gn_dir = "linux64"
+
+  gn_exe = input_api.os_path.join(input_api.PresubmitLocalPath(), "buildtools",
+                                  gn_dir, gn_bin)
+
+  try:
+    if input_api.os_path.exists(presubmit_out_dir):
+      shutil.rmtree(presubmit_out_dir)
+
+    # Need to run GN gen to populate args for gn desc
+    subprocess.check_call([gn_exe, "gen", presubmit_out_dir],
+                          cwd=input_api.PresubmitLocalPath(),
+                          stdout=subprocess.DEVNULL,
+                          stderr=subprocess.DEVNULL)
+
+    # Run GN desc and pull the statically evaluated sources list
+    output = subprocess.check_output([
+        gn_exe, "desc", presubmit_out_dir,
+        "//:v8_clusterfuzz_test262_fallbacks", "sources"
+    ],
+                                     cwd=input_api.PresubmitLocalPath(),
+                                     text=True)
+
+    gn_files = set()
+    for line in output.splitlines():
+      line = line.strip()
+      if line.startswith("//test/test262/data/harness/"):
+        gn_files.add(line[len("//test/test262/data/harness/"):])
+
+  except subprocess.CalledProcessError as e:
+    return [output_api.PresubmitError(f"Failed to run gn desc: {e}")]
+  finally:
+    if input_api.os_path.exists(presubmit_out_dir):
+      shutil.rmtree(presubmit_out_dir)
+
+  # List the actual JS files in the directory recursively.
+  actual_files = set()
+  for root, _, files in os.walk(harness_dir):
+    for filename in files:
+      if filename.endswith(".js"):
+        rel_path = input_api.os_path.relpath(
+            input_api.os_path.join(root, filename), harness_dir)
+        actual_files.add(rel_path.replace(input_api.os_path.sep, "/"))
+
+  if gn_files != actual_files:
+    missing_in_gn = actual_files - gn_files
+    stale_in_gn = gn_files - actual_files
+    error_msg = [
+        "v8_clusterfuzz_test262_fallbacks in BUILD.gn is out of sync with test/test262/data/harness."
+    ]
+    if missing_in_gn:
+      error_msg.append("Missing in BUILD.gn: " + ", ".join(missing_in_gn))
+    if stale_in_gn:
+      error_msg.append("Stale in BUILD.gn: " + ", ".join(stale_in_gn))
+    return [output_api.PresubmitError("\n".join(error_msg))]
+
+  return []
+
+
+
 def _CheckDepsGitignored(input_api, output_api):
   """Checks that all dependencies in DEPS are gitignored."""
   affected_files = [f.LocalPath() for f in input_api.AffectedFiles()]
@@ -579,6 +665,7 @@ def _CommonChecks(input_api, output_api):
   # with the canned PanProjectChecks. Need to make sure that the checks all
   # pass on all existing files.
   checks = [
+      _CheckClusterfuzzTest262Fallbacks,
       input_api.canned_checks.CheckOwnersFormat,
       input_api.canned_checks.CheckOwners,
       _CheckCommitMessageBugEntry,
