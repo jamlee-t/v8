@@ -5385,8 +5385,12 @@ class GraphBuildingNodeProcessor {
     SetMap(node, result);
     return maglev::ProcessResult::kContinue;
   }
-  maglev::ProcessResult Process(maglev::TruncateFloat64AsSafeIntToInt32* node,
-                                const maglev::ProcessingState& state) {
+  template <Either<maglev::TruncateFloat64AsSafeIntToInt32,
+                   maglev::TruncateHoleyFloat64AsSafeIntToInt32>
+                T>
+  maglev::ProcessResult Process(T* node, const maglev::ProcessingState& state) {
+    // HoleyFloat64 shares the Float64 machine representation; the hole is a NaN
+    // pattern which fails the AdditiveSafeInteger check and deopts.
     GET_FRAME_STATE_MAYBE_ABORT(frame_state, node->eager_deopt_info());
     auto feedback = node->eager_deopt_info()->feedback_to_update();
     V<Word64> value = __ ChangeFloat64ToAdditiveSafeIntegerOrDeopt(

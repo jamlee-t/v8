@@ -3730,6 +3730,15 @@ ProcessResult MaglevGraphOptimizer::VisitTruncateFloat64AsSafeIntToInt32(
   return ProcessResult::kContinue;
 }
 
+ProcessResult MaglevGraphOptimizer::VisitTruncateHoleyFloat64AsSafeIntToInt32(
+    TruncateHoleyFloat64AsSafeIntToInt32* node, const ProcessingState& state) {
+  // TODO(b/424157317): Optimize.
+  if (node->input_node(0)->Is<ChangeInt32ToHoleyFloat64>()) {
+    return ReplaceWith(node->input_node(0)->input_node(0));
+  }
+  return ProcessResult::kContinue;
+}
+
 // TODO(victorgomes): Use UNTAGGING_CASE and investigating why Int32ToNumber as
 // input as not been unwrapped.
 ProcessResult MaglevGraphOptimizer::VisitTruncateCheckedNumberAsSafeIntToInt32(

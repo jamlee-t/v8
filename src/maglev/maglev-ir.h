@@ -354,6 +354,7 @@ class ExceptionHandlerInfo;
   V(TruncateCheckedNumberAsSafeIntToInt32)                            \
   V(TruncateUnsafeNumberAsSafeIntToInt32)                             \
   V(TruncateFloat64AsSafeIntToInt32)                                  \
+  V(TruncateHoleyFloat64AsSafeIntToInt32)                             \
   V(TruncateCheckedNumberOrOddballToInt32)                            \
   V(TruncateUnsafeNumberOrOddballToInt32)                             \
   V(TruncateFloat64ToInt32)                                           \
@@ -735,6 +736,7 @@ constexpr bool IsTruncatingToInt32(Opcode opcode) {
     case Opcode::kTruncateCheckedNumberAsSafeIntToInt32:
     case Opcode::kTruncateUnsafeNumberAsSafeIntToInt32:
     case Opcode::kTruncateFloat64AsSafeIntToInt32:
+    case Opcode::kTruncateHoleyFloat64AsSafeIntToInt32:
     case Opcode::kTruncateCheckedNumberOrOddballToInt32:
     case Opcode::kTruncateUnsafeNumberOrOddballToInt32:
       return true;
@@ -4731,6 +4733,21 @@ class TruncateFloat64AsSafeIntToInt32
   static constexpr OpProperties kProperties =
       OpProperties::EagerDeopt() | OpProperties::Int32();
   DECLARE_UNOP(Float64)
+
+  void SetValueLocationConstraints() { UNREACHABLE(); }
+  void GenerateCode(MaglevAssembler*, const ProcessingState&) { UNREACHABLE(); }
+  void PrintParams(std::ostream&) const {}
+};
+
+class TruncateHoleyFloat64AsSafeIntToInt32
+    : public FixedInputValueNodeT<1, TruncateHoleyFloat64AsSafeIntToInt32> {
+ public:
+  explicit TruncateHoleyFloat64AsSafeIntToInt32(uint64_t bitfield)
+      : Base(bitfield) {}
+
+  static constexpr OpProperties kProperties =
+      OpProperties::EagerDeopt() | OpProperties::Int32();
+  DECLARE_UNOP(HoleyFloat64)
 
   void SetValueLocationConstraints() { UNREACHABLE(); }
   void GenerateCode(MaglevAssembler*, const ProcessingState&) { UNREACHABLE(); }
