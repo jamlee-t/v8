@@ -3548,6 +3548,7 @@ std::optional<EmitResult> ChoiceNode::EmitSkipUntilOneOfMaskedSearch(
   // The op lowerings only handle 1-byte (LATIN1) input.
   // TODO(jgruber): Support 2-byte.
   if (!compiler->one_byte()) return std::nullopt;
+  if (!compiler->macro_assembler()->CanReadUnaligned()) return std::nullopt;
 
   DCHECK(trace->is_trivial());
   ChoiceNode* inner = body->AsChoiceNode();
@@ -3944,6 +3945,7 @@ bool ChoiceNode::EmitOneOfMasked3Search(Compiler* compiler,
   if (!v8_flags.regexp_simd_in_rc) return false;
   // The op lowering only handles 1-byte (LATIN1) input.
   if (!compiler->one_byte()) return false;
+  if (!compiler->macro_assembler()->CanReadUnaligned()) return false;
 
   // Shape: alt0 = <wrapper> -> Text(prefix) -> Choice(3 forward Text alts),
   // what RationalizeConsecutiveAtoms produces for a shared-prefix 3-way
