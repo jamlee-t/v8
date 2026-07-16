@@ -77,11 +77,40 @@ void ThrowTypeError(v8::Isolate* isolate, std::string_view message) {
 
 namespace {
 bool IsLocatedInMappedMemory(Address address, Heap* heap) {
+#if CONTIGUOUS_COMPRESSED_READ_ONLY_SPACE_BOOL
+  // Under contiguous compressed read-only space, any address inside the
+  // contiguous read-only reservation belongs to the read-only space. This
+  // check is 100% safe against crashes on arbitrary invalid addresses because
+  // it performs only bitwise operations on integers without dereferencing any
+  // memory.
+  if ((address & kContiguousReadOnlySpaceMask) == 0) {
+    return heap->read_only_space()->ContainsSlow(address);
+  }
+#else
+  // Fallback check for read-only space when contiguous compression is not used.
+  if (heap->read_only_space()->ContainsSlow(address)) {
+    return true;
+  }
+#endif
+
+  // Check the local memory allocator's normal and large pages.
   if (heap->memory_allocator()->LookupChunkContainingAddress(address) !=
       nullptr) {
     return true;
   }
-  return heap->read_only_space()->ContainsSlow(address);
+
+  // Also check the shared heap memory allocator if this isolate uses a shared
+  // space.
+  if (heap->isolate()->has_shared_space() &&
+      heap->isolate()
+              ->shared_space_isolate()
+              ->heap()
+              ->memory_allocator()
+              ->LookupChunkContainingAddress(address) != nullptr) {
+    return true;
+  }
+
+  return false;
 }
 
 bool IsValidHeapObject(Address addr, Heap* heap) {
