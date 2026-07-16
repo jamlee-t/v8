@@ -23,6 +23,7 @@
 #include <errno.h>
 #include <fcntl.h>  // open
 #include <stdarg.h>
+#include <string.h>
 #include <strings.h>   // index
 #include <sys/mman.h>  // mmap & munmap & mremap
 #include <sys/stat.h>  // open
@@ -71,8 +72,7 @@ void OS::SignalCodeMovingGC() {
   long size = sysconf(_SC_PAGESIZE);  // NOLINT(runtime/int)
   FILE* f = fopen(OS::GetGCFakeMMapFile(), "w+");
   if (f == nullptr) {
-    OS::PrintError("Failed to open %s\n", OS::GetGCFakeMMapFile());
-    OS::Abort();
+    FATAL("Failed to open %s: %s", OS::GetGCFakeMMapFile(), strerror(errno));
   }
   void* addr = mmap(OS::GetRandomMmapAddr(), size, PROT_READ | PROT_EXEC,
                     MAP_PRIVATE, fileno(f), 0);
