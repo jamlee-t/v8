@@ -829,7 +829,8 @@ void MacroAssembler::RecordWriteField(Register object, int offset,
 
 void MacroAssembler::Zero(const MemOperand& dest) {
   ASM_CODE_COMMENT(this);
-  Register scratch = r0;
+  UseScratchRegisterScope temps(this);
+  Register scratch = temps.Acquire();
 
   mov(scratch, Operand::Zero());
   StoreU64(scratch, dest);
@@ -837,7 +838,8 @@ void MacroAssembler::Zero(const MemOperand& dest) {
 
 void MacroAssembler::Zero(const MemOperand& dest1, const MemOperand& dest2) {
   ASM_CODE_COMMENT(this);
-  Register scratch = r0;
+  UseScratchRegisterScope temps(this);
+  Register scratch = temps.Acquire();
 
   mov(scratch, Operand::Zero());
   StoreU64(scratch, dest1);
