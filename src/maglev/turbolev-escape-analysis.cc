@@ -250,21 +250,19 @@ void AddUsesToInputs(
   }
 }
 
-ValueNode* GetUpdatedValue(
+ValueNode* GetUpdatedValueAndAddDeoptUse(
     ValueNode* value,
     const std::unordered_map<ValueNode*, VirtualObject*>& vobj_map,
     EscapeAnalysisData& data) {
   ValueNode* resolved = data.ResolveBase(value);
-  if (resolved != value) {
-    // TODO(dmercadier): we can't reduce the use-count of {value} here, because
-    // when we duplicate DeoptFrames we don't increase use-counts to account
-    // for uses in the cloned DeoptFrame. This is sound because we will also
-    // never remove the uses corresponding to the original DeoptFrame that was
-    // dropped (which means that the use-count of {value} or any input of the
-    // current DeoptFrame cannot go down to 0). However, this whole thing sounds
-    // a bit messy and it would be better to track more accurate use counts.
-    resolved->add_use();
-  }
+
+  // We didn't increment use-count when cloning the DeoptFrame (because the
+  // VirtualObjects weren't ready yet), so we need to do it now.
+  // TODO(dmercadier): we can't decrement use-count of the original DeoptFrame
+  // because it could be cloned multiple times, which would lead to wrongly
+  // decrementing multiple times. Figure out a way to get accurate use-counts
+  // after escape analysis.
+  resolved->add_use();
 
   // If {resolved} is a VirtualObject, we need to add uses to its inputs.
   auto it = vobj_map.find(resolved);
@@ -279,12 +277,13 @@ void UpdateInterpretedFrame(
     InterpretedDeoptFrame& frame,
     const std::unordered_map<ValueNode*, VirtualObject*>& vobj_map,
     EscapeAnalysisData& data) {
-  frame.closure() = GetUpdatedValue(frame.closure(), vobj_map, data);
+  frame.closure() =
+      GetUpdatedValueAndAddDeoptUse(frame.closure(), vobj_map, data);
 
   frame.frame_state()->ForEachValue(
       frame.unit(),
       [&vobj_map, &data](ValueNode*& value, interpreter::Register owner) {
-        value = GetUpdatedValue(value, vobj_map, data);
+        value = GetUpdatedValueAndAddDeoptUse(value, vobj_map, data);
       });
 }
 
@@ -292,10 +291,11 @@ void UpdateInlinedArgumentsFrame(
     InlinedArgumentsDeoptFrame& frame,
     const std::unordered_map<ValueNode*, VirtualObject*>& vobj_map,
     EscapeAnalysisData& data) {
-  frame.closure() = GetUpdatedValue(frame.closure(), vobj_map, data);
+  frame.closure() =
+      GetUpdatedValueAndAddDeoptUse(frame.closure(), vobj_map, data);
 
   for (ValueNode*& value : frame.arguments()) {
-    value = GetUpdatedValue(value, vobj_map, data);
+    value = GetUpdatedValueAndAddDeoptUse(value, vobj_map, data);
   }
 }
 
@@ -306,18 +306,21 @@ void UpdateConstructInvokeStubFrame(
   // Note that while the receiver cannot be elided, it could still be a
   // LoadTaggedField from an elided base, in which case it still need to be
   // updated to bypass the load.
-  frame.receiver() = GetUpdatedValue(frame.receiver(), vobj_map, data);
-  frame.context() = GetUpdatedValue(frame.context(), vobj_map, data);
+  frame.receiver() =
+      GetUpdatedValueAndAddDeoptUse(frame.receiver(), vobj_map, data);
+  frame.context() =
+      GetUpdatedValueAndAddDeoptUse(frame.context(), vobj_map, data);
 }
 
 void UpdateBuiltinContinuationFrame(
     BuiltinContinuationDeoptFrame& frame,
     const std::unordered_map<ValueNode*, VirtualObject*>& vobj_map,
     EscapeAnalysisData& data) {
-  frame.context() = GetUpdatedValue(frame.context(), vobj_map, data);
+  frame.context() =
+      GetUpdatedValueAndAddDeoptUse(frame.context(), vobj_map, data);
 
   for (ValueNode*& value : frame.parameters()) {
-    value = GetUpdatedValue(value, vobj_map, data);
+    value = GetUpdatedValueAndAddDeoptUse(value, vobj_map, data);
   }
 }
 
