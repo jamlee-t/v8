@@ -368,7 +368,7 @@ RUNTIME_FUNCTION(Runtime_MarkLazyDeoptimized) {
       // detect if any ICs need updating before re-optimization.
       function->raw_feedback_cell()->set_interrupt_budget(1);
     } else {
-      function->SetInterruptBudget(isolate, BudgetModification::kRaise,
+      function->SetInterruptBudget(isolate, BudgetModification::kReset,
                                    CodeKind::INTERPRETED_FUNCTION);
     }
   }
