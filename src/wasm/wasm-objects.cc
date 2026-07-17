@@ -1427,6 +1427,18 @@ DirectHandle<Tuple2> WasmTrustedInstanceData::GetOrCreateInterpreterObject(
   Isolate* isolate = Isolate::Current();
   DirectHandle<WasmTrustedInstanceData> trusted_data(
       instance->trusted_data(isolate), isolate);
+  // SANDBOX SAFETY: `instance->trusted_data()` is an in-cage trusted-pointer
+  // handle that a sandbox attacker can same-tag swap to point at another
+  // instance's trusted data. Every path that selects the interpreter object
+  // (and thus the InterpreterHandle, runtime, module and signatures) for an
+  // instance must re-establish that the trusted data actually belongs to
+  // {instance} before trusting it. This mirrors the check performed on the
+  // direct JS-to-interpreter entry (see Runtime_WasmRunInterpreter). Without
+  // it, a swap redirects callers to a different instance's runtime on the
+  // nested Wasm-to-Wasm call path, and out-of-cage OOB writes to the runtime's
+  // indirect-call cache vectors on the dispatch-table maintenance paths.
+  SBXCHECK(trusted_data->has_instance_object() &&
+           trusted_data->instance_object() == *instance);
   if (trusted_data->has_interpreter_object()) {
     return direct_handle(trusted_data->interpreter_object(), isolate);
   }
@@ -1441,6 +1453,12 @@ DirectHandle<Tuple2> WasmTrustedInstanceData::GetInterpreterObject(
   Isolate* isolate = Isolate::Current();
   DirectHandle<WasmTrustedInstanceData> trusted_data(
       instance->trusted_data(isolate), isolate);
+  // SANDBOX SAFETY: see the comment in GetOrCreateInterpreterObject. The
+  // in-cage `instance->trusted_data()` handle is attacker-swappable, so we must
+  // re-validate that it still belongs to {instance} before selecting its
+  // interpreter object.
+  SBXCHECK(trusted_data->has_instance_object() &&
+           trusted_data->instance_object() == *instance);
   CHECK(trusted_data->has_interpreter_object());
   return direct_handle(trusted_data->interpreter_object(), isolate);
 }

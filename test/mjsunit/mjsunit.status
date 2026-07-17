@@ -695,6 +695,7 @@
   # DrumBrake interpreter's InterpreterHandle handling.
   'sandbox/regress-527689557-1': [SKIP],
   'sandbox/regress-527689557-2': [SKIP],
+  'sandbox/regress-535518222': [SKIP],
 }],  # not has_wasm_interpreter
 
 ['has_wasm_interpreter and variant == jitless', {
@@ -1056,6 +1057,7 @@
   'wasm/regress-526041421': [SKIP],
   'wasm/regress-529842414': [SKIP],
   'wasm/regress-531123009': [SKIP],
+  'wasm/regress-532625494': [SKIP],
   'wasm/simd-relaxed-lane-select': [SKIP],
   'wasm/speculative-inlining': [SKIP],
   'wasm/stringrefs-regressions': [SKIP],

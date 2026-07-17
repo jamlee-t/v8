@@ -1865,7 +1865,12 @@ void WasmInterpreterRuntime::ExecuteFunction(const uint8_t*& code,
 }
 
 void WasmInterpreterRuntime::PurgeIndirectCallCache(uint32_t table_index) {
-  DCHECK_LT(table_index, indirect_call_tables_.size());
+  // SANDBOX SAFETY: `indirect_call_tables_` is an out-of-cage std::vector sized
+  // to `module_->tables.size()` (see InitIndirectFunctionTables). Bounds-check
+  // unconditionally so that a {table_index} which does not match this runtime's
+  // module can never drive an out-of-cage OOB access here or into
+  // `module_->tables` below.
+  SBXCHECK_LT(table_index, indirect_call_tables_.size());
   const WasmTable& table = module_->tables[table_index];
   if (IsSubtypeOf(table.type, kWasmFuncRef, module_)) {
     size_t length =
@@ -1889,9 +1894,12 @@ void WasmInterpreterRuntime::ClearIndirectCallCacheEntry(
       GetOrCreateInterpreterHandle(isolate, interpreter_object);
   WasmInterpreterRuntime* wasm_runtime =
       handle->ptr()->interpreter()->GetWasmRuntime();
-  DCHECK_LT(table_index, wasm_runtime->indirect_call_tables_.size());
-  DCHECK_LT(entry_index,
-            wasm_runtime->indirect_call_tables_[table_index].size());
+  // SANDBOX SAFETY: `indirect_call_tables_` is an out-of-cage std::vector.
+  // Bounds-check unconditionally (see PurgeIndirectCallCache) so a mismatched
+  // {table_index}/{entry_index} can never drive an out-of-cage OOB write.
+  SBXCHECK_LT(table_index, wasm_runtime->indirect_call_tables_.size());
+  SBXCHECK_LT(entry_index,
+              wasm_runtime->indirect_call_tables_[table_index].size());
   wasm_runtime->indirect_call_tables_[table_index][entry_index] = {};
 }
 
