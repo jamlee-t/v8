@@ -37,18 +37,12 @@ class GrowableStacksReducer : public Next {
 #endif
   }
 
-  // Returns V<None> because it's not used for loop back edge stack checks.
   V<None> REDUCE(WasmStackCheck)(
       OptionalV<WasmTrustedInstanceData> trusted_instance_data,
-      OptionalV<WordPtr> memory_start, OptionalV<WordPtr> memory_size,
       WasmStackCheckOp::Kind kind) {
     CHECK_EQ(kind, WasmStackCheckOp::Kind::kFunctionEntry);
-    // Stack checks on function entry don't update memory start/size.
-    DCHECK(!memory_start.valid());
-    DCHECK(!memory_size.valid());
     if (skip_reducer_) {
-      return Next::ReduceWasmStackCheck(trusted_instance_data, memory_start,
-                                        memory_size, kind);
+      return Next::ReduceWasmStackCheck(trusted_instance_data, kind);
     }
     // Loads of the stack limit should not be load-eliminated as it can be
     // modified by another thread.

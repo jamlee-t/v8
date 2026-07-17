@@ -4143,16 +4143,12 @@ struct PrepareForLoopOp : FixedArityOperationT<1, PrepareForLoopOp> {
 
 #if V8_ENABLE_WEBASSEMBLY
 
-// Supports fine-grained optional inputs/outputs.
+// A WebAssembly stack check operation.
 // If input_count > 0:
-// - input(0) is always trusted_instance_data
-// - input(1) is memory_start if has_memory_start
-// - input(1 + has_memory_start) is memory_size if has_memory_size
+// - input(0) is trusted_instance_data
 struct WasmStackCheckOp : OperationT<WasmStackCheckOp> {
   using Kind = JSStackCheckOp::Kind;
   Kind kind;
-  bool has_memory_start;
-  bool has_memory_size;
 
   OpEffects Effects() const {
     switch (kind) {
@@ -4178,63 +4174,28 @@ struct WasmStackCheckOp : OperationT<WasmStackCheckOp> {
     return input_count > 0 ? input<WasmTrustedInstanceData>(0)
                            : V<WasmTrustedInstanceData>::Invalid();
   }
-  OptionalV<WordPtr> memory_start() const {
-    if (!has_memory_start) return V<WordPtr>::Invalid();
-    return input<WordPtr>(1);
-  }
-  OptionalV<WordPtr> memory_size() const {
-    if (!has_memory_size) return V<WordPtr>::Invalid();
-    return input<WordPtr>(1 + has_memory_start);
-  }
 
   WasmStackCheckOp(OptionalV<WasmTrustedInstanceData> trusted_instance_data,
-                   OptionalV<WordPtr> memory_start,
-                   OptionalV<WordPtr> memory_size, Kind kind)
-      : Base(trusted_instance_data.valid()
-                 ? 1 + memory_start.valid() + memory_size.valid()
-                 : 0),
-        kind(kind),
-        has_memory_start(trusted_instance_data.valid() && memory_start.valid()),
-        has_memory_size(trusted_instance_data.valid() && memory_size.valid()) {
+                   Kind kind)
+      : Base(trusted_instance_data.valid() ? 1 : 0), kind(kind) {
     if (trusted_instance_data.valid()) {
       input(0) = trusted_instance_data.value();
-      int next_idx = 1;
-      if (memory_start.valid()) {
-        input(next_idx++) = memory_start.value();
-      }
-      if (memory_size.valid()) {
-        input(next_idx++) = memory_size.value();
-      }
     }
   }
 
   static WasmStackCheckOp& New(
       Graph* graph, OptionalV<WasmTrustedInstanceData> trusted_instance_data,
-      OptionalV<WordPtr> memory_start, OptionalV<WordPtr> memory_size,
       Kind kind) {
-    size_t input_count = trusted_instance_data.valid()
-                             ? 1 + memory_start.valid() + memory_size.valid()
-                             : 0;
-    return Base::New(graph, input_count, trusted_instance_data, memory_start,
-                     memory_size, kind);
+    size_t input_count = trusted_instance_data.valid() ? 1 : 0;
+    return Base::New(graph, input_count, trusted_instance_data, kind);
   }
 
   template <typename Fn, typename Mapper>
   V8_INLINE auto Explode(Fn fn, Mapper& mapper) const {
-    return fn(mapper.Map(trusted_instance_data()), mapper.Map(memory_start()),
-              mapper.Map(memory_size()), kind);
+    return fn(mapper.Map(trusted_instance_data()), kind);
   }
 
-  base::Vector<const RegisterRepresentation> outputs_rep() const {
-    if (input_count == 0) {
-      return {};
-    }
-    if (has_memory_start && has_memory_size) {
-      return RepVector<RegisterRepresentation::WordPtr(),
-                       RegisterRepresentation::WordPtr()>();
-    }
-    return RepVector<RegisterRepresentation::WordPtr()>();
-  }
+  base::Vector<const RegisterRepresentation> outputs_rep() const { return {}; }
 
   base::Vector<const MaybeRegisterRepresentation> inputs_rep(
       ZoneVector<MaybeRegisterRepresentation>& storage) const {
@@ -4243,9 +4204,6 @@ struct WasmStackCheckOp : OperationT<WasmStackCheckOp> {
     }
     storage.resize(input_count);
     storage[0] = MaybeRegisterRepresentation::Tagged();
-    for (int i = 1; i < input_count; ++i) {
-      storage[i] = MaybeRegisterRepresentation::WordPtr();
-    }
     return base::VectorOf(storage);
   }
 
@@ -4253,22 +4211,17 @@ struct WasmStackCheckOp : OperationT<WasmStackCheckOp> {
     if (kind == Kind::kFunctionEntry) {
       DCHECK_EQ(input_count, 0);
       DCHECK(!trusted_instance_data().valid());
-      DCHECK(!memory_start().valid());
-      DCHECK(!memory_size().valid());
     } else if (kind == Kind::kLoop) {
-      DCHECK_LE(input_count, 3);
+      DCHECK_LE(input_count, 1);
       if (input_count > 0) {
         DCHECK(trusted_instance_data().valid());
-        DCHECK_EQ(input_count, 1 + has_memory_start + has_memory_size);
       }
     } else {
       UNREACHABLE();
     }
   }
 
-  auto options() const {
-    return std::tuple{kind, has_memory_start, has_memory_size};
-  }
+  auto options() const { return std::tuple{kind}; }
 };
 
 V8_EXPORT_PRIVATE std::ostream& operator<<(std::ostream& os,

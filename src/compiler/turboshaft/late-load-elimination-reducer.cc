@@ -725,8 +725,6 @@ void LateLoadEliminationAnalyzer::ProcessWasmStackCheck(
   if (op.kind == WasmStackCheckOp::Kind::kLoop &&
       op.trusted_instance_data().valid()) {
     OpIndex instance = op.trusted_instance_data().value();
-    memory_.InvalidateAtOffset(WasmTrustedInstanceData::kMemory0StartOffset,
-                               instance);
     memory_.InvalidateAtOffset(WasmTrustedInstanceData::kMemory0SizeOffset,
                                instance);
   }

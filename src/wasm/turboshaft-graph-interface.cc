@@ -8467,36 +8467,19 @@ class TurboshaftGraphBuildingInterface
 
   void StackCheck(WasmStackCheckOp::Kind kind, FullDecoder* decoder) {
     if (V8_UNLIKELY(!v8_flags.wasm_stack_checks)) return;
-    bool needs_memory_update = false;
-    bool can_move = false;
-    bool can_grow_and_cached = false;
     if (kind == WasmStackCheckOp::Kind::kLoop &&
         !decoder->module_->memories.empty()) {
-      can_move = instance_cache_.memory_can_move();
-      can_grow_and_cached = instance_cache_.memory_can_grow() &&
-                            instance_cache_.memory_size_cached();
-      needs_memory_update = can_move || can_grow_and_cached;
-    }
-    if (needs_memory_update) {
+      // Wasm memories cannot move at loop stack checks because we disallow
+      // their growth when `Isolate::is_executing_api_interrupt()`.
+      // Also, memory_size is never cached if the memory is growable, making
+      // `can_grow_and_cached` always false. Therefore, we don't need to pipe
+      // memory start/size through WasmStackCheck anymore.
+      bool can_grow_and_cached = instance_cache_.memory_can_grow() &&
+                                 instance_cache_.memory_size_cached();
+      CHECK(!can_grow_and_cached);
       V<WasmTrustedInstanceData> instance =
           instance_cache_.trusted_instance_data();
-      V<WordPtr> start_input =
-          can_move ? instance_cache_.memory0_start() : V<WordPtr>::Invalid();
-      V<WordPtr> size_input = can_grow_and_cached
-                                  ? instance_cache_.memory0_size()
-                                  : V<WordPtr>::Invalid();
-      OpIndex updated =
-          __ WasmStackCheck(kind, instance, start_input, size_input);
-      if (can_move && can_grow_and_cached) {
-        V<Tuple<WordPtr, WordPtr>> tuple =
-            V<Tuple<WordPtr, WordPtr>>::Cast(updated);
-        instance_cache_.set_memory0_start(__ Projection<0>(tuple));
-        instance_cache_.set_memory0_size(__ Projection<1>(tuple));
-      } else if (can_move) {
-        instance_cache_.set_memory0_start(V<WordPtr>::Cast(updated));
-      } else if (can_grow_and_cached) {
-        instance_cache_.set_memory0_size(V<WordPtr>::Cast(updated));
-      }
+      __ WasmStackCheck(kind, instance);
     } else {
       __ WasmStackCheck(kind);
     }

@@ -82,11 +82,8 @@ class StackCheckLoweringReducer : public Next {
   }
 
 #ifdef V8_ENABLE_WEBASSEMBLY
-  // Returns V<None> or V<WordPtr> or V<Tuple<WordPtr, WordPtr>> depending on
-  // inputs.
-  V<AnyOrNone> REDUCE(WasmStackCheck)(
+  V<None> REDUCE(WasmStackCheck)(
       OptionalV<WasmTrustedInstanceData> trusted_instance_data,
-      OptionalV<WordPtr> memory_start, OptionalV<WordPtr> memory_size,
       WasmStackCheckOp::Kind kind) {
     // TODO(14108): Cache descriptor.
     const CallDescriptor* call_descriptor =
@@ -109,8 +106,7 @@ class StackCheckLoweringReducer : public Next {
       if (v8_flags.wasm_growable_stacks) {
         // WasmStackCheck should be lowered by GrowableStacksReducer
         // in a special way.
-        return Next::ReduceWasmStackCheck(trusted_instance_data, memory_start,
-                                          memory_size, kind);
+        return Next::ReduceWasmStackCheck(trusted_instance_data, kind);
       }
 
       // Loads of the stack limit should not be load-eliminated as it can be
@@ -124,17 +120,10 @@ class StackCheckLoweringReducer : public Next {
             __ RelocatableWasmBuiltinCallTarget(Builtin::kWasmStackGuard);
         __ Call(target, {}, ts_call_descriptor);
       }
-      DCHECK(!memory_start.valid());
-      DCHECK(!memory_size.valid());
       return V<None>::Invalid();
     }
 
     DCHECK_EQ(kind, WasmStackCheckOp::Kind::kLoop);
-    V<WordPtr> unused_initializer = V<WordPtr>::Invalid();
-    ScopedVar<WordPtr> new_mem_start(
-        this, memory_start.valid() ? memory_start.value() : unused_initializer);
-    ScopedVar<WordPtr> new_mem_size(
-        this, memory_size.valid() ? memory_size.value() : unused_initializer);
 
     V<Word32> limit = __ Load(
         __ LoadRootRegister(), LoadOp::Kind::RawAligned().NotLoadEliminable(),
@@ -145,29 +134,6 @@ class StackCheckLoweringReducer : public Next {
       V<WordPtr> target =
           __ RelocatableWasmBuiltinCallTarget(Builtin::kWasmStackGuardLoop);
       __ Call(target, {}, ts_call_descriptor);
-
-      if (memory_start.valid() || memory_size.valid()) {
-        DCHECK(trusted_instance_data.valid());
-        if (memory_start.valid()) {
-          new_mem_start =
-              __ Load(trusted_instance_data.value(), LoadOp::Kind::TaggedBase(),
-                      MemoryRepresentation::UintPtr(),
-                      WasmTrustedInstanceData::kMemory0StartOffset);
-        }
-        if (memory_size.valid()) {
-          new_mem_size =
-              __ Load(trusted_instance_data.value(), LoadOp::Kind::TaggedBase(),
-                      MemoryRepresentation::UintPtr(),
-                      WasmTrustedInstanceData::kMemory0SizeOffset);
-        }
-      }
-    }
-    if (memory_start.valid() && memory_size.valid()) {
-      return __ MakeTuple(new_mem_start, new_mem_size);
-    } else if (memory_start.valid()) {
-      return new_mem_start;
-    } else if (memory_size.valid()) {
-      return new_mem_size;
     }
     return V<None>::Invalid();
   }
