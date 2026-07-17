@@ -287,7 +287,8 @@ class Trace {
       : cp_offset_(0),
         flush_budget_(100),  // Note: this is a 16 bit field.
         flags_(AtStartField::encode(UNKNOWN) |
-               HasAnyActionsField::encode(false)),
+               HasAnyActionsField::encode(false) |
+               ParkedGrantField::encode(ParkedGrant::kNone)),
         action_(nullptr),
         backtrack_(nullptr),
         special_loop_state_(nullptr),
@@ -356,6 +357,19 @@ class Trace {
     flags_ = AtStartField::update(flags_, at_start);
   }
   Label* backtrack() const { return backtrack_; }
+  // What the loop-exit backtrack target tolerates when a drain-omitted loop
+  // unwinds to it with the input position parked at the loop's greedy extent
+  // (see ParkedGrant for the levels, and the terminology block in
+  // regexp-nodes.h for "loop-exit backtrack").  The parked position can be
+  // anywhere in [trace position, subject end] -- including the end itself, so
+  // the search-retry re-entry reloads with a bounds check.
+  //
+  // The grant is issued only at emission sites where the target's behavior is
+  // known by construction, and is revoked automatically whenever the backtrack
+  // target changes (see set_backtrack).  Crossing a choice into an alternative
+  // additionally requires that no sibling can match at a skipped position
+  // (see ChoiceNode::EmitChoices).
+  ParkedGrant parked_grant() const { return ParkedGrantField::decode(flags_); }
   SpecialLoopState* special_loop_state() const { return special_loop_state_; }
   int characters_preloaded() const { return characters_preloaded_; }
   int bound_checked_up_to() const { return bound_checked_up_to_; }
@@ -373,7 +387,22 @@ class Trace {
     action_ = new_action;
     flags_ = HasAnyActionsField::update(flags_, true);
   }
-  void set_backtrack(Label* backtrack) { backtrack_ = backtrack; }
+  // Clears any inherited parked-position grant; see parked_grant() for when
+  // an alternative must do this.
+  void reset_parked_grant() {
+    flags_ = ParkedGrantField::update(flags_, ParkedGrant::kNone);
+  }
+  void set_backtrack(Label* backtrack) {
+    backtrack_ = backtrack;
+    // A parked-position grant is tied to the specific target it was issued
+    // for; a new target must obtain its own.
+    reset_parked_grant();
+  }
+  void set_parked_grant(ParkedGrant grant) {
+    DCHECK_NOT_NULL(backtrack_);
+    DCHECK_NE(grant, ParkedGrant::kNone);
+    flags_ = ParkedGrantField::update(flags_, grant);
+  }
   void set_special_loop_state(SpecialLoopState* state) {
     special_loop_state_ = state;
   }
@@ -440,6 +469,8 @@ class Trace {
   using AtStartField = base::BitField<TriBool, 0, 2>;
   // Whether any trace in the chain has an action.
   using HasAnyActionsField = AtStartField::Next<bool, 1>;
+  // See parked_grant.
+  using ParkedGrantField = HasAnyActionsField::Next<ParkedGrant, 2>;
 
   int cp_offset_;
   uint16_t flush_budget_;

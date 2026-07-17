@@ -5,6 +5,7 @@
 #include "src/regexp/regexp-compiler.h"
 
 #include <optional>
+#include <string_view>
 
 #include "src/base/bits.h"
 #include "src/base/numerics/safe_conversions.h"
@@ -441,6 +442,10 @@ class DynamicBitSet : public ZoneObject {
     }
   }
 
+  bool IsEmpty() const {
+    return first_ == 0 && (remaining_ == nullptr || remaining_->is_empty());
+  }
+
   // Destructively set a value in this set.
   void Set(unsigned value, Zone* zone) {
     if (value < kFirstLimit) {
@@ -622,6 +627,49 @@ void Trace::PerformDeferredActions(RegExpMacroAssembler* assembler,
   }
 }
 
+#ifdef V8_ENABLE_REGEXP_DIAGNOSTICS
+namespace {
+// Names for the atomic-loop drain analysis outcome, for --trace-regexp-compiler
+// (see AtomicLoopKind, DrainMode and ParkedGrant).
+std::string_view AtomicLoopKindName(AtomicLoopKind kind) {
+  switch (kind) {
+    case AtomicLoopKind::kNone:
+      return "none";
+    case AtomicLoopKind::kAtEnd:
+      return "at-end";
+    case AtomicLoopKind::kBoundary:
+      return "boundary";
+    case AtomicLoopKind::kDisjoint:
+      return "disjoint";
+  }
+}
+std::string_view DrainModeName(DrainMode mode) {
+  switch (mode) {
+    case DrainMode::kFull:
+      return "full";
+    case DrainMode::kRetryAtEntry:
+      return "retry-at-entry";
+    case DrainMode::kRestoreOnly:
+      return "restore-only";
+    case DrainMode::kOmit:
+      return "omit";
+  }
+}
+std::string_view ParkedGrantName(ParkedGrant grant) {
+  switch (grant) {
+    case ParkedGrant::kNone:
+      return "none";
+    case ParkedGrant::kParked:
+      return "parked";
+    case ParkedGrant::kParkedUniformPrefix:
+      return "uniform-prefix";
+    case ParkedGrant::kParkedNonEmptyUniformPrefix:
+      return "nonempty-uniform-prefix";
+  }
+}
+}  // namespace
+#endif  // V8_ENABLE_REGEXP_DIAGNOSTICS
+
 // This is called as we come into a loop choice node and some other tricky
 // nodes.  It normalizes the state of the code generator to ensure we can
 // generate generic code.  If the mode indicates that we are in a success
@@ -672,7 +720,55 @@ EmitResult Trace::Flush(Compiler* compiler, Node* successor,
   // Generate deferred actions here along with code to undo them again.
   DynamicBitSet affected_registers;
 
-  if (backtrack() != nullptr && mode != kFlushSuccess) {
+  // Skip the per-flush bt-stack frame when the successor is an atomic
+  // LoopChoice (see AtomicLoopKind): retreating before re-entering
+  // the outer scan cannot turn a failed continuation into a match, and the
+  // standard restore would make the outer retry O(n^2) on long runs.
+  //
+  // Two levels of skip:
+  //   skip_position_save: drop PushCurrentPosition + PopCurrentPosition.
+  //   skip_undo_frame: additionally drop PushBacktrack(&undo) and the undo
+  //     body (requires all-IGNORE register undo).  With no frame pushed,
+  //     the bt-stack dispatch would pop an outer frame too early, so the
+  //     body's failures must GoTo the outer backtrack statically.
+  //
+  // Besides a single-code-unit body this requires a parked-position grant
+  // strong enough for the pending cp advance and the loop kind (see the
+  // ParkedGrant levels in regexp-nodes.h).  The gate below mirrors that:
+  // kAtEnd/kDisjoint skip at cp_offset_ == 0 under any grant and with a pending
+  // prefix only under a uniform-prefix grant; kBoundary skips only under a
+  // materialized nonempty uniform prefix.
+  LoopChoiceNode* drain_useless_loop = nullptr;
+  if (mode == kFlushFull && parked_grant() != ParkedGrant::kNone) {
+    DCHECK_NOT_NULL(backtrack());
+    // Parking is only sound for a single-code-unit body (see
+    // ChooseFixedLengthLoopDrainMode); a wider body could skip a matching start
+    // position.
+    LoopChoiceNode* loop = successor->AsLoopChoiceNode();
+    if (loop != nullptr && loop->FixedLengthBodyIterationLength() == 1) {
+      const bool uniform_prefix =
+          parked_grant() == ParkedGrant::kParkedUniformPrefix ||
+          parked_grant() == ParkedGrant::kParkedNonEmptyUniformPrefix;
+      switch (loop->atomic_loop_kind(compiler->flags())) {
+        case AtomicLoopKind::kNone:
+          break;
+        case AtomicLoopKind::kAtEnd:
+        case AtomicLoopKind::kDisjoint:
+          if (cp_offset_ == 0 || (cp_offset_ > 0 && uniform_prefix)) {
+            drain_useless_loop = loop;
+          }
+          break;
+        case AtomicLoopKind::kBoundary:
+          if (cp_offset_ > 0 && uniform_prefix) {
+            drain_useless_loop = loop;
+          }
+          break;
+      }
+    }
+  }
+  bool skip_position_save = drain_useless_loop != nullptr;
+
+  if (!skip_position_save && backtrack() != nullptr && mode != kFlushSuccess) {
     // Here we have a concrete backtrack location.  These are set up by choice
     // nodes and so they indicate that we have a deferred save of the current
     // position which we may need to emit here.
@@ -681,6 +777,26 @@ EmitResult Trace::Flush(Compiler* compiler, Node* successor,
 
   int max_register =
       FindAffectedRegisters(&affected_registers, compiler->zone());
+
+  // Decide whether the entire undo frame can be skipped.  Only IGNORE-only
+  // undo qualifies: a RESTORE or CLEAR would need a pop or ClearRegisters in
+  // the undo body we are dropping.  KeepRecursing gates the inline emit that
+  // replaces the AddWork+GoTo fallback.
+  bool skip_undo_frame = false;
+  if (drain_useless_loop != nullptr &&
+      drain_useless_loop->KeepRecursing(compiler)) {
+    skip_undo_frame = true;
+    for (int reg = 0; reg <= max_register; ++reg) {
+      if (!affected_registers.Get(reg)) continue;
+      RegisterFlushInfo info;
+      ScanDeferredActions(this, reg, &info);
+      if (info.undo_action != IGNORE) {
+        skip_undo_frame = false;
+        break;
+      }
+    }
+  }
+
   DynamicBitSet registers_to_pop;
   DynamicBitSet registers_to_clear;
   PerformDeferredActions(assembler, max_register, affected_registers,
@@ -691,6 +807,25 @@ EmitResult Trace::Flush(Compiler* compiler, Node* successor,
   if (mode == kFlushSuccess) {
     Trace new_state;
     return successor->Emit(compiler, &new_state);
+  }
+
+  if (skip_undo_frame) {
+    // All-IGNORE undo (pre-scanned above), so PerformDeferredActions pushed
+    // no registers and the undo body would be empty: skip PushBacktrack and
+    // the undo body; the body's failures GoTo the outer backtrack directly.
+    // Call ChoiceNode::Emit to bypass LoopChoiceNode::Emit's
+    // non-trivial-trace Flush check (no second frame around this body).
+    DCHECK(registers_to_pop.IsEmpty());
+    DCHECK(registers_to_clear.IsEmpty());
+    Trace new_state;
+    new_state.set_backtrack(backtrack());
+    // Same target, so our grant transfers.  Materializing a nonempty prefix
+    // (cp_offset_ > 0, admitted above only under a uniform-prefix grant)
+    // upgrades it to kParkedNonEmptyUniformPrefix; see that enumerator.
+    new_state.set_parked_grant(cp_offset_ > 0
+                                   ? ParkedGrant::kParkedNonEmptyUniformPrefix
+                                   : parked_grant());
+    return drain_useless_loop->ChoiceNode::Emit(compiler, &new_state);
   }
 
   // Create a new trivial state and generate the node with that.
@@ -718,7 +853,7 @@ EmitResult Trace::Flush(Compiler* compiler, Node* successor,
   if (backtrack() == nullptr) {
     assembler->Backtrack();
   } else {
-    assembler->PopCurrentPosition();
+    if (!skip_position_save) assembler->PopCurrentPosition();
     assembler->GoTo(backtrack());
   }
   return EmitResult::Success();
@@ -2714,6 +2849,350 @@ int ChoiceNode::FixedLengthLoopLengthForAlternative(
   return length;
 }
 
+// Appends the characters |cr| matches to |out| as positive ranges; negated
+// classes are materialized as the complement of their listed ranges.  The
+// result may overapproximate, which only inhibits the optimization, never
+// unsoundly enables it.
+void AppendClassRangesMatchSet(ClassRanges* cr, Zone* node_zone, Zone* zone,
+                               ZoneList<CharacterRange>* out) {
+  ZoneList<CharacterRange>* ranges = cr->ranges(node_zone);
+  if (!cr->is_negated()) {
+    for (int i = 0; i < ranges->length(); i++) out->Add(ranges->at(i), zone);
+    return;
+  }
+  ZoneList<CharacterRange> positive(ranges->length(), zone);
+  for (int i = 0; i < ranges->length(); i++) positive.Add(ranges->at(i), zone);
+  CharacterRange::Canonicalize(&positive);
+  ZoneList<CharacterRange> negated(positive.length() + 1, zone);
+  CharacterRange::Negate(&positive, &negated, zone);
+  for (int i = 0; i < negated.length(); i++) out->Add(negated.at(i), zone);
+}
+
+// Returns true iff every character in |ranges| (canonical) is in
+// |special_class|, a [from, to+1) pair table terminated by kRangeEndMarker
+// (e.g. kWordRanges).  Each range must fit inside a single table entry.
+bool RangesSubsetOfSpecialClass(const ZoneList<CharacterRange>* ranges,
+                                const int* special_class, int length) {
+  DCHECK(CharacterRange::IsCanonical(ranges));
+  DCHECK_EQ(kRangeEndMarker, special_class[length - 1]);
+  length--;  // Remove final marker.
+  auto bound = [&](int i) { return static_cast<base::uc32>(special_class[i]); };
+  // |ci| walks the table entries in lockstep with |ranges| (both canonical);
+  // it never rewinds because a later range starts no earlier than the current.
+  int ci = 0;
+  for (int i = 0; i < ranges->length(); i++) {
+    CharacterRange range = ranges->at(i);
+    while (ci < length && bound(ci + 1) <= range.from()) ci += 2;
+    if (ci >= length || range.from() < bound(ci) ||
+        range.to() >= bound(ci + 1)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Facts about a fixed-length loop's body alternative, computed by
+// AnalyzeAtomicLoopBody in one walk of the body chain.
+struct AtomicLoopBodyAnalysis {
+  // The body is a fixed-length SeqNode chain returning to the loop, i.e. the
+  // shape the emission gate FixedLengthLoopLengthForAlternative accepts (both
+  // test the per-node FixedLengthLoopLength). This analysis only narrows a loop
+  // the gate already took, so if the two ever disagreed we would just forgo the
+  // narrowing, never miscompile.
+  // TODO(jgruber): Fold the two walks together so the shape is decided once.
+  bool fixed_length_eligible = false;
+  // |body_set| overapproximates the characters the body can consume.  False
+  // when the set is not statically known: non-text nodes in the chain, or
+  // atoms under ignore-case (their case equivalents are only materialized
+  // at emission time; class ranges get theirs during analysis).
+  bool set_known = true;
+};
+
+// Appends the characters |elm| matches to |out| (e.g. the atom "ab" appends
+// [a, a] and [b, b]; the class [0-9] appends [0, 9]).  Returns false when the
+// match set is not statically known: class ranges have case equivalents
+// materialized before emission, but atoms only get theirs at emission time,
+// so atoms are rejected under ignore-case.
+// TODO(jgruber): Add the atom case closure instead of giving up; in
+// non-unicode mode this is just AddCaseEquivalents.
+bool AppendTextElementMatchSet(TextElement& elm, Zone* node_zone, Flags flags,
+                               Zone* zone, ZoneList<CharacterRange>* out) {
+  if (elm.text_type() == TextElement::CLASS_RANGES) {
+    AppendClassRangesMatchSet(elm.class_ranges(), node_zone, zone, out);
+    return true;
+  }
+  DCHECK_EQ(elm.text_type(), TextElement::ATOM);
+  if (IsIgnoreCase(flags)) return false;
+  base::Vector<const base::uc16> data = elm.atom()->data();
+  for (int j = 0; j < data.length(); j++) {
+    out->Add(CharacterRange::Singleton(data[j]), zone);
+  }
+  return true;
+}
+
+// Walks the loop body chain, collecting into |body_set| the characters it can
+// consume (see AtomicLoopBodyAnalysis).  This is exactly the set a drain retry
+// position can hold, since every such position was consumed by a body
+// iteration.
+AtomicLoopBodyAnalysis AnalyzeAtomicLoopBody(
+    GuardedAlternative* alt, Node* loop, Flags flags, Zone* zone,
+    ZoneList<CharacterRange>* body_set) {
+  AtomicLoopBodyAnalysis result;
+  Node* node = alt->node();
+  for (int depth = 0; depth <= Compiler::kMaxRecursion; ++depth) {
+    if (node == loop) {
+      result.fixed_length_eligible = true;
+      return result;
+    }
+    if (node->FixedLengthLoopLength() ==
+        Node::kNodeIsTooComplexForFixedLengthLoops) {
+      return result;
+    }
+    SeqNode* seq = node->AsSeqNode();
+    if (seq == nullptr) return result;
+    TextNode* text = node->AsTextNode();
+    if (text == nullptr || text->read_backward()) {
+      result.set_known = false;
+    } else {
+      ZoneList<TextElement>* elms = text->elements();
+      for (int i = 0; i < elms->length(); i++) {
+        if (!AppendTextElementMatchSet(elms->at(i), text->zone(), flags, zone,
+                                       body_set)) {
+          result.set_known = false;
+        }
+      }
+    }
+    node = seq->on_success();
+  }
+  return result;
+}
+
+// Facts about a fixed-length loop's continuation alternative, computed by
+// AnalyzeAtomicLoopContinuation in one walk of the continuation chain.
+struct AtomicLoopContinuationAnalysis {
+  // The chain is AssertionNode(AT_END), zero or more position-insensitive
+  // ActionNodes, EndNode(ACCEPT).  Such a continuation fails at every
+  // retreat position (all strictly before the end).  AT_END is the only
+  // retreat-insensitive assertion kind: AT_START becomes true at position
+  // 0, AT_BOUNDARY / AT_NON_BOUNDARY / AFTER_NEWLINE depend on the
+  // surrounding characters.
+  bool at_end_accept = false;
+  // The chain starts with a \b assertion.  Over a word-character body,
+  // every *interior* retreat position sits between two body characters
+  // where \b is false, so interior retries fail at the assertion.  The
+  // entry position is not covered (the character preceding the loop is
+  // unknown), hence DrainMode::kRetryAtEntry rather than kOmit.  \B is the
+  // opposite -- true between two word characters -- so it stays
+  // retreat-sensitive.
+  bool starts_with_boundary = false;
+  // |first_set| holds FIRST(C): the characters the continuation can accept
+  // as its first input character.  Soundness requires a superset of what
+  // the first character check accepts, so anything whose match set is not
+  // statically known leaves this false rather than underapproximating.
+  // The walk to the first character skips capture bookkeeping (dead on a
+  // failing retry) and assertions (zero-width: a failing assertion fails
+  // the retry, a passing one leads to the first character check).
+  bool first_set_known = false;
+};
+
+AtomicLoopContinuationAnalysis AnalyzeAtomicLoopContinuation(
+    GuardedAlternative* alt, Flags flags, Zone* zone,
+    ZoneList<CharacterRange>* first_set) {
+  AtomicLoopContinuationAnalysis result;
+  if (alt->guards() != nullptr && alt->guards()->length() != 0) return result;
+  Node* node = alt->node();
+  if (AssertionNode* head = node->AsAssertionNode()) {
+    result.starts_with_boundary =
+        head->assertion_type() == AssertionNode::AT_BOUNDARY;
+  }
+  // at_end_accept and first_set are computed over a single walk. Each tracks a
+  // flag that its own disqualifying nodes clear while the walk continues for
+  // the other: at_end_alive holds while the walk could still reach EndNode
+  // ACCEPT with only a leading AT_END, first_alive while no node has yet
+  // altered what the continuation's first consumed character can be (so once we
+  // reach a TextNode its first element still overapproximates
+  // FIRST(continuation)).
+  bool at_end_alive =
+      node->AsAssertionNode() != nullptr &&
+      node->AsAssertionNode()->assertion_type() == AssertionNode::AT_END;
+  bool first_alive = true;
+  for (int depth = 0; depth <= Compiler::kMaxRecursion; ++depth) {
+    if (AssertionNode* assertion = node->AsAssertionNode()) {
+      if (depth > 0) at_end_alive = false;  // Only a leading AT_END.
+      node = assertion->on_success();
+      continue;
+    }
+    if (ActionNode* action = node->AsActionNode()) {
+      switch (action->action_type()) {
+        case ActionNode::STORE_POSITION:
+        case ActionNode::CLEAR_CAPTURES:
+          break;
+        // Position-insensitive for the at-end walk, but carrying
+        // cross-attempt state (counted-loop registers) or changing what
+        // characters match, so the FIRST walk stops.
+        case ActionNode::SET_REGISTER_FOR_LOOP:
+        case ActionNode::INCREMENT_REGISTER:
+        case ActionNode::MODIFY_FLAGS:
+          first_alive = false;
+          break;
+        // RESTORE_POSITION rewrites the position; submatch actions consume
+        // input; EMPTY_MATCH_CHECK reads a saved position that retreats
+        // invalidate; EATS_AT_LEAST is conservatively excluded.
+        case ActionNode::RESTORE_POSITION:
+        case ActionNode::BEGIN_POSITIVE_SUBMATCH:
+        case ActionNode::BEGIN_NEGATIVE_SUBMATCH:
+        case ActionNode::POSITIVE_SUBMATCH_SUCCESS:
+        case ActionNode::EMPTY_MATCH_CHECK:
+        case ActionNode::EATS_AT_LEAST:
+          return result;
+      }
+      node = action->on_success();
+      continue;
+    }
+    if (EndNode* end = node->AsEndNode()) {
+      result.at_end_accept = at_end_alive && end->action() == EndNode::ACCEPT;
+      return result;
+    }
+    // A text (or other) node: the at-end walk requires ACCEPT here; the
+    // FIRST walk takes the first element's match set of a forward TextNode.
+    if (first_alive) {
+      TextNode* text = node->AsTextNode();
+      if (text != nullptr && !text->read_backward()) {
+        // Note only the atom's first character enters FIRST (the check under
+        // analysis is the first character check), so the full-element helper
+        // does not apply to atoms here.
+        TextElement& elm = text->elements()->at(0);
+        if (elm.text_type() == TextElement::CLASS_RANGES) {
+          AppendClassRangesMatchSet(elm.class_ranges(), text->zone(), zone,
+                                    first_set);
+          result.first_set_known = true;
+        } else if (!IsIgnoreCase(flags)) {
+          DCHECK_EQ(elm.text_type(), TextElement::ATOM);
+          first_set->Add(CharacterRange::Singleton(elm.atom()->data().at(0)),
+                         zone);
+          result.first_set_known = true;
+        }
+      }
+    }
+    return result;
+  }
+  return result;
+}
+
+// Classifies |loop| as an atomic loop: alt 0 a fixed-length greedy body
+// chain back to |loop|, alt 1 a continuation that provably cannot benefit
+// from retreating (per kind; see AtomicLoopKind).
+AtomicLoopKind ClassifyAtomicLoop(LoopChoiceNode* loop, Flags flags) {
+  if (loop->alternatives()->length() != 2) return AtomicLoopKind::kNone;
+  GuardedAlternative* body = &loop->alternatives()->at(0);
+  GuardedAlternative* continuation = &loop->alternatives()->at(1);
+  Zone* zone = loop->zone();
+
+  ZoneList<CharacterRange> body_set(4, zone);
+  AtomicLoopBodyAnalysis body_info =
+      AnalyzeAtomicLoopBody(body, loop, flags, zone, &body_set);
+  if (!body_info.fixed_length_eligible) return AtomicLoopKind::kNone;
+
+  ZoneList<CharacterRange> first_set(2, zone);
+  AtomicLoopContinuationAnalysis cont =
+      AnalyzeAtomicLoopContinuation(continuation, flags, zone, &first_set);
+
+  if (cont.at_end_accept) return AtomicLoopKind::kAtEnd;
+  if (!body_info.set_known) return AtomicLoopKind::kNone;
+  CharacterRange::Canonicalize(&body_set);
+  // Disjointness before the boundary rule: where both apply (a \b followed
+  // by a disjoint character, e.g. /\w+\b=/), kDisjoint is strictly stronger
+  // -- no entry retry, and it parks under any grant.  kBoundary remains for
+  // continuations whose first character set overlaps the body (or is not
+  // statically known), where only the assertion itself proves interior
+  // retries futile.
+  if (cont.first_set_known) {
+    CharacterRange::Canonicalize(&first_set);
+    if (!CharacterRange::Intersects(&body_set, &first_set)) {
+      return AtomicLoopKind::kDisjoint;
+    }
+  }
+  // The word characters as \b sees them (see EmitWordCheck).  A body that
+  // folds outside ASCII (e.g. [k] under /iu matching U+212A, a non-word
+  // character to \b) fails the subset check.
+  if (cont.starts_with_boundary &&
+      RangesSubsetOfSpecialClass(&body_set, kWordRanges, kWordRangeCount)) {
+    return AtomicLoopKind::kBoundary;
+  }
+  return AtomicLoopKind::kNone;
+}
+
+AtomicLoopKind LoopChoiceNode::atomic_loop_kind(Flags flags) {
+  if (!atomic_loop_kind_valid_ || atomic_loop_kind_flags_ != flags) {
+    atomic_loop_kind_ = ClassifyAtomicLoop(this, flags);
+    atomic_loop_kind_flags_ = flags;
+    atomic_loop_kind_valid_ = true;
+  }
+  return atomic_loop_kind_;
+}
+
+// Decides how much of the drain epilogue a fixed-length loop needs (see
+// DrainMode), from the strongest analysis that applies.
+//
+// kRetryAtEntry and kRestoreOnly reach the loop-exit backtrack in the same
+// state a fully-unwound kFull drain would (position restored to the loop entry,
+// entry marker popped), so they need no grant.  kOmit instead leaves the
+// position parked at the greedy extent when the loop backtracks out, which each
+// kind licenses separately at its case below.
+//
+// kOmit additionally requires a single-code-unit body.  Parking is only sound
+// when every skipped restart re-consumes the same run and stops exactly at the
+// old greedy extent; a wider body lets a misaligned restart run past the extent
+// and stop on a character the continuation accepts, so the park would skip a
+// start position that matches (/(?:aa)+c/ on "aaaaac" must match "aaaac"@1).
+// The restore modes have no such restriction: they restore the position, so
+// they stay valid at any body width.
+DrainMode ChooseFixedLengthLoopDrainMode(ChoiceNode* choice, Trace* trace,
+                                         Flags flags) {
+  LoopChoiceNode* loop = choice->AsLoopChoiceNode();
+  if (loop == nullptr) return DrainMode::kFull;
+  const AtomicLoopKind kind = loop->atomic_loop_kind(flags);
+  // Parking is unsound for a multi-code-unit body (see above); such loops fall
+  // back to their widest reduced mode below.
+  const bool parkable = kind != AtomicLoopKind::kNone &&
+                        loop->FixedLengthBodyIterationLength() == 1;
+  switch (kind) {
+    case AtomicLoopKind::kNone:
+      return DrainMode::kFull;
+    case AtomicLoopKind::kAtEnd:
+      // Tail position (continuation ends in ACCEPT): the loop-exit backtrack
+      // dispatches through the backtrack stack to frames that all restore or
+      // ignore the position, so parking is safe with a null exit target, and
+      // under any grant with a non-null one (keeps /x(a+$|a)/ siblings
+      // correct).  Otherwise every retry is still futile, so restore-only
+      // suffices (as for kDisjoint); no need for the char-by-char kFull drain.
+      return (parkable && (trace->backtrack() == nullptr ||
+                           trace->parked_grant() != ParkedGrant::kNone))
+                 ? DrainMode::kOmit
+                 : DrainMode::kRestoreOnly;
+    case AtomicLoopKind::kBoundary:
+      // A nonempty uniform prefix proves a word character before the loop
+      // entry, making even the entry retry futile; without it, retry at entry.
+      return (parkable && trace->backtrack() != nullptr &&
+              trace->parked_grant() ==
+                  ParkedGrant::kParkedNonEmptyUniformPrefix)
+                 ? DrainMode::kOmit
+                 : DrainMode::kRetryAtEntry;
+    case AtomicLoopKind::kDisjoint:
+      // Not necessarily tail position (/(?:[abc]*d)+e/ on "abcdabce": an
+      // enclosing quantifier would wrongly match at a park), so parking needs a
+      // grant.  With a grant and a single-unit body every skipped restart
+      // re-consumes the run and stops at the old extent, where the continuation
+      // re-fails (its outcome depends only on input position; the failed
+      // attempt's register writes are undone by the flush undo frames).
+      return (parkable && trace->backtrack() != nullptr &&
+              trace->parked_grant() != ParkedGrant::kNone)
+                 ? DrainMode::kOmit
+                 : DrainMode::kRestoreOnly;
+  }
+  UNREACHABLE();
+}
+
 void LoopChoiceNode::AddLoopAlternative(GuardedAlternative alt) {
   DCHECK_NULL(loop_node_);
   AddAlternative(alt);
@@ -3339,9 +3818,40 @@ EmitResult ChoiceNode::Emit(Compiler* compiler, Trace* trace) {
   // of each alternative (in-line and out-of-line), as flags might be modified
   // when emitting an alternative.
   Flags flags = compiler->flags();
+  // Grant the search-loop body its parked-position grant (see
+  // ComputeSearchBodyParkedGrant, Trace::parked_grant).  Computed once here
+  // rather than at each of its two consumers below (inline emission in
+  // EmitChoices and the out-of-line continuation loop), since compiler->flags()
+  // is reset per alternative and would no longer reflect this node.
+  LoopChoiceNode* loop_choice = AsLoopChoiceNode();
+  const ParkedGrant body_parked_grant =
+      loop_choice != nullptr
+          ? loop_choice->ComputeSearchBodyParkedGrant(compiler)
+          : ParkedGrant::kNone;
   if (choice_count > 1 && text_length != kNodeIsTooComplexForFixedLengthLoops) {
+    // If the continuation is provably retreat-insensitive, the drain
+    // epilogue can be reduced or omitted entirely; see DrainMode and
+    // ChooseFixedLengthLoopDrainMode.  Covers /\s+$/, /\w+\b=/, /[abc]*d/.
+    const DrainMode drain_mode =
+        ChooseFixedLengthLoopDrainMode(this, trace, flags);
+    // A reduced drain reaches here only on a fresh trace (cp_offset() == 0):
+    // the trivial post-flush trace, or Trace::Flush's direct granted emission.
+    // A pending cp advance would break the marker-equals-entry reasoning the
+    // reduced modes rely on (see Trace::Flush).
+    DCHECK_IMPLIES(drain_mode != DrainMode::kFull, trace->cp_offset() == 0);
+    DCHECK_IMPLIES(
+        drain_mode == DrainMode::kOmit && trace->backtrack() == nullptr,
+        !trace->has_any_actions());
+    if (drain_mode != DrainMode::kFull) {
+      // Non-kFull only for a LoopChoiceNode, so AsLoopChoiceNode() is non-null.
+      TRACE("* Atomic loop drain reduced: "
+            << DrainModeName(drain_mode) << " (kind "
+            << AtomicLoopKindName(AsLoopChoiceNode()->atomic_loop_kind(flags))
+            << ", grant " << ParkedGrantName(trace->parked_grant()) << ")");
+    }
     trace = EmitFixedLengthLoop(compiler, trace, &alt_gens, &preload,
-                                &special_loop_state, text_length, flags);
+                                &special_loop_state, text_length, flags,
+                                drain_mode, body_parked_grant);
     if (trace == nullptr) return EmitResult::Error();
   } else {
     bool bm_scan_emitted = false;
@@ -3369,8 +3879,8 @@ EmitResult ChoiceNode::Emit(Compiler* compiler, Trace* trace) {
       }
     }
 
-    RETURN_IF_ERROR(
-        EmitChoices(compiler, &alt_gens, 0, trace, &preload, flags));
+    RETURN_IF_ERROR(EmitChoices(compiler, &alt_gens, 0, trace, &preload, flags,
+                                body_parked_grant));
   }
 
   // At this point we need to generate slow checks for the alternatives where
@@ -3389,9 +3899,13 @@ EmitResult ChoiceNode::Emit(Compiler* compiler, Trace* trace) {
     }
     bool next_expects_preload =
         i == choice_count - 1 ? false : alt_gens.at(i + 1)->expects_preload;
+    // Only the body (alternative 0) gets the grant; its out-of-line
+    // continuation exits to the advance-and-retry alternative, same as its
+    // inline emission in EmitChoices.
+    ParkedGrant parked_grant = i == 0 ? body_parked_grant : ParkedGrant::kNone;
     RETURN_IF_ERROR(EmitOutOfLineContinuation(
         compiler, &new_trace, alternatives_->at(i), alt_gen,
-        preload.preload_characters_, next_expects_preload));
+        preload.preload_characters_, next_expects_preload, parked_grant));
   }
 
   return EmitResult::Success();
@@ -3400,7 +3914,8 @@ EmitResult ChoiceNode::Emit(Compiler* compiler, Trace* trace) {
 Trace* ChoiceNode::EmitFixedLengthLoop(
     Compiler* compiler, Trace* trace, AlternativeGenerationList* alt_gens,
     PreloadState* preload, SpecialLoopState* fixed_length_loop_state,
-    int text_length, Flags flags) {
+    int text_length, Flags flags, DrainMode drain_mode,
+    ParkedGrant body_parked_grant) {
   TRACE("* Emit fixed length loop");
   RegExpMacroAssembler* macro_assembler = compiler->macro_assembler();
   // Here we have special handling for greedy loops containing only text nodes
@@ -3421,14 +3936,17 @@ Trace* ChoiceNode::EmitFixedLengthLoop(
   //   after_body_match_attempt:
   //     <continuation>
   //   step_label:
-  //     CheckFixedLengthLoop(backtrack) // at the marker? give up
+  //     CheckFixedLengthLoop(backtrack) // at the marker? loop-exit backtrack
   //     AdvanceCurrentPosition(-len)    // else step back one iteration ...
   //     GoTo(after_body_match_attempt)  // ... and retry the continuation
   //
   // Replacing <body> with a single forward scan leaves this frame untouched, so
   // backtracking is identical.
+  //
+  // The reduced drain modes replace the step_label block (and, for kOmit,
+  // also the marker push); see DrainMode.
   DCHECK(trace->special_loop_state() == nullptr);
-  macro_assembler->PushCurrentPosition();
+  if (drain_mode != DrainMode::kOmit) macro_assembler->PushCurrentPosition();
   // This is the label for trying to match what comes after the greedy
   // quantifier, either because the body of the quantifier failed, or because
   // we have stepped back to try again with one iteration fewer.
@@ -3450,19 +3968,184 @@ Trace* ChoiceNode::EmitFixedLengthLoop(
   if (result.IsError()) return nullptr;
 
   Trace* new_trace = fixed_length_loop_state->backtrack_trace();
+  if (drain_mode == DrainMode::kOmit) {
+    // Skip the drain epilogue entirely.  Continuation failure goes straight
+    // to the outer backtrack handler.
+    new_trace->set_backtrack(trace->backtrack());
+  }
 
   // In a fixed length loop there is only one other choice, which is what
   // comes after the greedy quantifer.  Try to match that now.
-  result = EmitChoices(compiler, alt_gens, 1, new_trace, preload, flags);
+  result = EmitChoices(compiler, alt_gens, 1, new_trace, preload, flags,
+                       body_parked_grant);
   if (result.IsError()) return nullptr;
 
+  // kOmit emitted no marker and no step label; everything below is the
+  // step-label epilogue for the other modes.
+  if (drain_mode == DrainMode::kOmit) return new_trace;
+
   fixed_length_loop_state->BindStepLabel(macro_assembler);
-  // If we have unwound to the bottom then backtrack.
-  macro_assembler->CheckFixedLengthLoop(trace->backtrack());
-  // Otherwise try the second priority at an earlier position.
-  macro_assembler->AdvanceCurrentPosition(-text_length);
-  macro_assembler->GoTo(&after_body_match_attempt);
+  switch (drain_mode) {
+    case DrainMode::kFull:
+      // If we have unwound to the bottom then backtrack.
+      macro_assembler->CheckFixedLengthLoop(trace->backtrack());
+      // Otherwise try the second priority at an earlier position.
+      macro_assembler->AdvanceCurrentPosition(-text_length);
+      macro_assembler->GoTo(&after_body_match_attempt);
+      break;
+    case DrainMode::kRetryAtEntry:
+      // If the failed attempt was already at the entry marker, pop it and
+      // backtrack.
+      macro_assembler->CheckFixedLengthLoop(trace->backtrack());
+      // Otherwise restore straight to the marker (interior positions are
+      // futile) and retry the continuation there once.  Its failure
+      // re-enters this block at the marker and takes the loop-exit backtrack
+      // above.
+      macro_assembler->PopCurrentPosition();
+      macro_assembler->PushCurrentPosition();
+      macro_assembler->GoTo(&after_body_match_attempt);
+      break;
+    case DrainMode::kRestoreOnly:
+      // Every retry is futile: restore the position to the entry marker and
+      // take the loop-exit backtrack.  Final state matches kFull's exhausted
+      // drain exactly.
+      macro_assembler->PopCurrentPosition();
+      macro_assembler->GoTo(trace->backtrack());  // Backtracks if null.
+      break;
+    case DrainMode::kOmit:
+      UNREACHABLE();
+  }
   return new_trace;
+}
+
+// The machine-generated `.*?` loop that PreprocessRegExp prepends to every
+// unanchored, non-sticky pattern to retry the match at each start position.
+// Recognized structurally: a two-alternative loop whose second alternative is
+// an omnivorous (matches-anything) text looping back to the loop.  A
+// user-written loop of that exact shape (e.g. /[\s\S]*?foo/) matches too, which
+// is harmless -- its loop-exit backtrack has the same rescan-forward behavior.
+bool LoopChoiceNode::IsImplicitSearchLoop(Compiler* compiler) {
+  if (alternatives_->length() != 2) return false;
+  GuardedAlternative alt1 = alternatives_->at(1);
+  if (alt1.guards() != nullptr && alt1.guards()->length() != 0) return false;
+  return alt1.node()->GetSuccessorOfOmnivorousTextNode(compiler) == this;
+}
+
+namespace {
+
+// Tracks that a run of text all draws from one character source: a single
+// ClassRanges node (e.g. the `[a-z]` of /[a-z]+/) or a single literal code
+// unit.  Comparison is by AST-node identity, which suffices because quantifier
+// unrolling reuses the same node for a loop's mandatory copies and its body
+// (see Quantifier::ToNode); two equal-but-distinct classes are conservatively
+// treated as different sources (rejected).
+struct UniformTextSource {
+  ClassRanges* class_ranges = nullptr;
+  base::uc16 atom_char = 0;
+  bool is_atom = false;
+  bool is_empty = true;
+
+  // Folds |text| into the source.  Returns false if |text| introduces a
+  // second source (a different class node, or a different literal character).
+  bool Accumulate(TextNode* text) {
+    if (text->read_backward()) return false;
+    ZoneList<TextElement>* elms = text->elements();
+    for (int i = 0; i < elms->length(); i++) {
+      TextElement& elm = elms->at(i);
+      if (elm.text_type() == TextElement::CLASS_RANGES) {
+        ClassRanges* cr = elm.class_ranges();
+        if (!is_empty && (is_atom || class_ranges != cr)) return false;
+        class_ranges = cr;
+        is_empty = false;
+      } else {
+        DCHECK_EQ(elm.text_type(), TextElement::ATOM);
+        base::Vector<const base::uc16> data = elm.atom()->data();
+        for (int j = 0; j < data.length(); j++) {
+          if (!is_empty && (!is_atom || atom_char != data[j])) return false;
+          is_atom = true;
+          atom_char = data[j];
+          is_empty = false;
+        }
+      }
+    }
+    return true;
+  }
+};
+
+// Whether the alternative rooted at |node| can only match at the input start,
+// i.e. its chain hits an AT_START (^) assertion before consuming or
+// repositioning (e.g. the `^b` arm of /a*|^b/).  A parked loop-exit backtrack
+// leaves the position at or past where the attempt began, so the positions it
+// skips are all strictly after start; such an alternative therefore cannot
+// match at a skipped position, and an inherited grant may cross it safely.
+bool AlternativeMatchesOnlyAtStart(Node* node) {
+  for (int depth = 0; depth <= Compiler::kMaxRecursion; depth++) {
+    ActionNode* action = node->AsActionNode();
+    if (action == nullptr) {
+      AssertionNode* assertion = node->AsAssertionNode();
+      return assertion != nullptr &&
+             assertion->assertion_type() == AssertionNode::AT_START;
+    }
+    if (!action->IsRegisterOnlyAction()) return false;
+    node = action->on_success();
+  }
+  return false;
+}
+
+}  // namespace
+
+// The grant the search-loop body carries (kNone off the search loop).  The
+// body's loop-exit backtrack always targets the advance-and-retry alternative,
+// which rescans forward, so the base kParked always holds.  This walk looks for
+// the stronger
+// kParkedUniformPrefix: the body reaches a trailing atomic loop after consuming
+// only that loop's own character source, so the mandatory prefix is uniform (a
+// `+` loop like /\s+$/, whose leading `\s` would otherwise force the O(n^2)
+// restore; see the ParkedGrant levels in regexp-nodes.h).
+ParkedGrant LoopChoiceNode::ComputeSearchBodyParkedGrant(Compiler* compiler) {
+  if (!IsImplicitSearchLoop(compiler)) return ParkedGrant::kNone;
+  // The walk mirrors body emission exactly: only zero-width assertions,
+  // register-only actions, and text advances leave the granted trace uniform.
+  // Anything else ends the grant's reach and yields the base kParked (a choice
+  // retargets the backtrack; back references, submatches, and flushes restart
+  // from a trivial trace).
+  UniformTextSource source;
+  Node* node = alternatives_->at(0).node();
+  for (int depth = 0; depth <= Compiler::kMaxRecursion; depth++) {
+    if (AssertionNode* assertion = node->AsAssertionNode()) {
+      // Zero-width and emitted with the trace unchanged, so prefix
+      // uniformity is preserved (a leading \b as in /\b\w+\b/ is fine).
+      node = assertion->on_success();
+      continue;
+    }
+    if (ActionNode* action = node->AsActionNode()) {
+      // Only register-only actions keep the prefix uniform; others reposition
+      // (RESTORE_POSITION, submatches) or change what matches (MODIFY_FLAGS).
+      if (!action->IsRegisterOnlyAction()) return ParkedGrant::kParked;
+      node = action->on_success();
+      continue;
+    }
+    if (TextNode* text = node->AsTextNode()) {
+      if (!source.Accumulate(text)) return ParkedGrant::kParked;
+      node = text->on_success();
+      continue;
+    }
+    LoopChoiceNode* loop = node->AsLoopChoiceNode();
+    if (loop == nullptr ||
+        loop->atomic_loop_kind(compiler->flags()) == AtomicLoopKind::kNone) {
+      return ParkedGrant::kParked;
+    }
+    // The loop body must draw from the same source as the prefix.
+    Node* body = loop->alternatives()->at(0).node();
+    for (int i = 0; i <= Compiler::kMaxRecursion; i++) {
+      if (body == loop) return ParkedGrant::kParkedUniformPrefix;
+      TextNode* body_text = body->AsTextNode();
+      if (body_text == nullptr || !source.Accumulate(body_text)) break;
+      body = body_text->on_success();
+    }
+    return ParkedGrant::kParked;
+  }
+  return ParkedGrant::kParked;
 }
 
 int ChoiceNode::EmitOptimizedUnanchoredSearch(
@@ -3470,16 +4153,8 @@ int ChoiceNode::EmitOptimizedUnanchoredSearch(
     bool* bm_scan_emitted) {
   *bm_scan_emitted = false;
   int eats_at_least = PreloadState::kEatsAtLeastNotYetInitialized;
-  if (alternatives_->length() != 2) return eats_at_least;
-
-  GuardedAlternative alt1 = alternatives_->at(1);
-  if (alt1.guards() != nullptr && alt1.guards()->length() != 0) {
-    TRACE(
-        "  Alternatives with guards -> Can't emit optimized unanchored search");
-    return eats_at_least;
-  }
-  Node* eats_anything_node = alt1.node();
-  if (eats_anything_node->GetSuccessorOfOmnivorousTextNode(compiler) != this) {
+  LoopChoiceNode* loop_choice = AsLoopChoiceNode();
+  if (loop_choice == nullptr || !loop_choice->IsImplicitSearchLoop(compiler)) {
     return eats_at_least;
   }
 
@@ -3584,15 +4259,8 @@ Node* ChoiceNode::MatchLazyStarLoopBody(Compiler* compiler,
                                         ActionNode** wrapper_out) {
   // The caller has established that `this` is some LoopChoiceNode with a
   // trivial entry trace, but it might just be a `(?:foo)*` quantifier loop.
-  // We only fire on the implicit `.*?` shape: alt 1 is an omnivorous Text
-  // node re-entering this loop. Same predicate that
-  // EmitOptimizedUnanchoredSearch uses.
-  if (alternatives_->length() != 2) return nullptr;
-  GuardedAlternative alt1 = alternatives_->at(1);
-  if (alt1.guards() != nullptr && alt1.guards()->length() != 0) return nullptr;
-  if (alt1.node()->GetSuccessorOfOmnivorousTextNode(compiler) != this) {
-    return nullptr;
-  }
+  // We only fire on the implicit `.*?` shape.
+  if (!AsLoopChoiceNode()->IsImplicitSearchLoop(compiler)) return nullptr;
   return FindBodyNodeUnderOneWrapper(alternatives_->at(0).node(), wrapper_out);
 }
 
@@ -4453,7 +5121,8 @@ std::optional<EmitResult> ChoiceNode::TryEmitMaskedValueDispatch(
 EmitResult ChoiceNode::EmitChoices(Compiler* compiler,
                                    AlternativeGenerationList* alt_gens,
                                    int first_choice, Trace* trace,
-                                   PreloadState* preload, Flags flags) {
+                                   PreloadState* preload, Flags flags,
+                                   ParkedGrant body_parked_grant) {
   TRACE("* Emit Choices");
   RegExpMacroAssembler* macro_assembler = compiler->macro_assembler();
   SetUpPreLoad(compiler, trace, preload);
@@ -4474,6 +5143,26 @@ EmitResult ChoiceNode::EmitChoices(Compiler* compiler,
   bool quick_check_flags =
       v8_flags.regexp_optimization && v8_flags.regexp_quick_check;
 
+  // Landing stub for parked loop-exit backtracks from the body's inline
+  // emission; see its use below and the binding after the loop.
+  Label parked_reentry;
+
+  // An inherited parked-position grant may flow into an alternative only if no
+  // sibling can match at a position the park skips (/:|\w*\s/ on "c:" must
+  // still match ":" at index 1).  "Floating" = an alternative that can match
+  // away from the input start; a start-anchored sibling matches only at
+  // position 0, which a park never skips (see AlternativeMatchesOnlyAtStart),
+  // so the grant is safe exactly when at most the current alternative floats.
+  int floating_alternatives = 0;
+  int last_floating = -1;
+  if (trace->parked_grant() != ParkedGrant::kNone) {
+    for (int i = 0; i < choice_count; i++) {
+      if (AlternativeMatchesOnlyAtStart(alternatives_->at(i).node())) continue;
+      floating_alternatives++;
+      last_floating = i;
+    }
+  }
+
   for (int i = first_choice; i < choice_count; i++) {
     compiler->set_flags(flags);
     bool is_last = i == choice_count - 1;
@@ -4484,6 +5173,10 @@ EmitResult ChoiceNode::EmitChoices(Compiler* compiler,
     const ZoneList<Guard*>* guards = alternative.guards();
     int guard_count = (guards == nullptr) ? 0 : guards->length();
     Trace new_trace(*trace);
+    const bool siblings_all_anchored =
+        floating_alternatives == 0 ||
+        (floating_alternatives == 1 && last_floating == i);
+    if (!siblings_all_anchored) new_trace.reset_parked_grant();
     new_trace.set_characters_preloaded(
         preload->preload_is_current_ ? preload->preload_characters_ : 0);
     if (preload->preload_has_checked_bounds_) {
@@ -4492,7 +5185,18 @@ EmitResult ChoiceNode::EmitChoices(Compiler* compiler,
     new_trace.quick_check_performed()->Clear();
     if (not_at_start_) new_trace.set_at_start(Trace::FALSE_VALUE);
     if (!is_last) {
-      new_trace.set_backtrack(&alt_gen->after);
+      // Parked loop-exit backtracks arrive with the position moved,
+      // invalidating the preload register and bounds guarantee the next
+      // alternative may assume; route them through a checked reload.
+      if (body_parked_grant != ParkedGrant::kNone) {
+        // The grant is only ever set on the two-alternative search loop, so
+        // the granted alternative is the body at index 0.
+        DCHECK_EQ(0, i);
+        new_trace.set_backtrack(&parked_reentry);
+        new_trace.set_parked_grant(body_parked_grant);
+      } else {
+        new_trace.set_backtrack(&alt_gen->after);
+      }
     }
     alt_gen->expects_preload = preload->preload_is_current_;
     bool generate_full_check_inline = false;
@@ -4544,15 +5248,34 @@ EmitResult ChoiceNode::EmitChoices(Compiler* compiler,
     }
     macro_assembler->Bind(&alt_gen->after);
   }
+
+  if (parked_reentry.is_linked()) {
+    // Re-establish the preload register and bounds guarantee with a checked
+    // reload before re-entering the advance-and-retry alternative (a parked
+    // position can be as far as the subject end).  Running out of input
+    // here ends the search: the reload width is bounded by the choice's
+    // EatsAtLeast, so every later attempt runs out of input as well.  With
+    // preload width zero there is no contract to re-establish.
+    macro_assembler->Bind(&parked_reentry);
+    if (preload->preload_characters_ > 0) {
+      Label out_of_input;
+      macro_assembler->LoadCurrentCharacter(trace->cp_offset(), &out_of_input,
+                                            true, preload->preload_characters_);
+      macro_assembler->GoTo(&alt_gens->at(0)->after);
+      macro_assembler->Bind(&out_of_input);
+      macro_assembler->GoTo(trace->backtrack());  // Backtracks if null.
+    } else {
+      macro_assembler->GoTo(&alt_gens->at(0)->after);
+    }
+  }
+
   return EmitResult::Success();
 }
 
-EmitResult ChoiceNode::EmitOutOfLineContinuation(Compiler* compiler,
-                                                 Trace* trace,
-                                                 GuardedAlternative alternative,
-                                                 AlternativeGeneration* alt_gen,
-                                                 int preload_characters,
-                                                 bool next_expects_preload) {
+EmitResult ChoiceNode::EmitOutOfLineContinuation(
+    Compiler* compiler, Trace* trace, GuardedAlternative alternative,
+    AlternativeGeneration* alt_gen, int preload_characters,
+    bool next_expects_preload, ParkedGrant parked_grant) {
   if (!alt_gen->possible_success.is_linked()) return EmitResult::Success();
   TRACE_WITH_NODE_AND_TRACE(compiler, "* Emit Out-of-Line Continuation for ",
                             alternative.node(), trace);
@@ -4565,26 +5288,52 @@ EmitResult ChoiceNode::EmitOutOfLineContinuation(Compiler* compiler,
   if (not_at_start_) out_of_line_trace.set_at_start(Trace::FALSE_VALUE);
   const ZoneList<Guard*>* guards = alternative.guards();
   int guard_count = (guards == nullptr) ? 0 : guards->length();
-  if (next_expects_preload) {
-    Label reload_current_char;
+  Label reload_current_char;
+  Label parked_landing;
+  if (parked_grant != ParkedGrant::kNone) {
+    // Parked loop-exit backtracks arrive with the position moved -- up to and
+    // including the subject end (a kDisjoint or kBoundary continuation can fail
+    // at the end, unlike AT_END).  That invalidates the preload register and
+    // bounds guarantee the next alternative may assume; route everything
+    // through a checked landing stub.
+    out_of_line_trace.set_backtrack(&parked_landing);
+    out_of_line_trace.set_parked_grant(parked_grant);
+  } else if (next_expects_preload) {
+    // reload_current_char is a pure forwarder to alt_gen->after: it reloads
+    // relative to the current position.
     out_of_line_trace.set_backtrack(&reload_current_char);
-    for (int j = 0; j < guard_count; j++) {
-      GenerateGuard(macro_assembler, guards->at(j), &out_of_line_trace);
+  } else {
+    out_of_line_trace.set_backtrack(&(alt_gen->after));
+  }
+  for (int j = 0; j < guard_count; j++) {
+    GenerateGuard(macro_assembler, guards->at(j), &out_of_line_trace);
+  }
+  RETURN_IF_ERROR(alternative.node()->Emit(compiler, &out_of_line_trace));
+  if (parked_grant != ParkedGrant::kNone) {
+    macro_assembler->Bind(&parked_landing);
+    if (preload_characters > 0) {
+      // Checked reload; running out of input here ends the search (the
+      // reload width is bounded by the choice's EatsAtLeast, so every
+      // later attempt runs out of input as well).
+      Label out_of_input;
+      macro_assembler->LoadCurrentCharacter(trace->cp_offset(), &out_of_input,
+                                            true, preload_characters);
+      macro_assembler->GoTo(&(alt_gen->after));
+      macro_assembler->Bind(&out_of_input);
+      macro_assembler->GoTo(trace->backtrack());  // Backtracks if null.
+    } else {
+      // Preload width zero: there is no preload contract to re-establish,
+      // and the next alternative checks its own bounds.
+      macro_assembler->GoTo(&(alt_gen->after));
     }
-    RETURN_IF_ERROR(alternative.node()->Emit(compiler, &out_of_line_trace));
+  } else if (next_expects_preload) {
     macro_assembler->Bind(&reload_current_char);
-    // Reload the current character, since the next quick check expects that.
-    // We don't need to check bounds here because we only get into this
-    // code through a quick check which already did the checked load.
+    // Reload the current character, since the next quick check expects
+    // that.  We don't need to check bounds here because we only get into
+    // this code through a quick check which already did the checked load.
     macro_assembler->LoadCurrentCharacter(trace->cp_offset(), nullptr, false,
                                           preload_characters);
     macro_assembler->GoTo(&(alt_gen->after));
-  } else {
-    out_of_line_trace.set_backtrack(&(alt_gen->after));
-    for (int j = 0; j < guard_count; j++) {
-      GenerateGuard(macro_assembler, guards->at(j), &out_of_line_trace);
-    }
-    RETURN_IF_ERROR(alternative.node()->Emit(compiler, &out_of_line_trace));
   }
   return EmitResult::Success();
 }
