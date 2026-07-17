@@ -244,6 +244,7 @@ class InjectedScript::ProtocolPromiseHandler {
     V8InspectorSessionImpl* session =
         m_inspector->sessionById(m_contextGroupId, m_sessionId);
     if (!session) return;
+    V8InspectorSessionImpl::KeepSessionAliveScope keepAlive(*session);
     InjectedScript::ContextScope scope(session, m_executionContextId);
     Response response = scope.initialize();
     if (!response.IsSuccess()) return;
@@ -291,6 +292,7 @@ class InjectedScript::ProtocolPromiseHandler {
     V8InspectorSessionImpl* session =
         m_inspector->sessionById(m_contextGroupId, m_sessionId);
     if (!session) return;
+    V8InspectorSessionImpl::KeepSessionAliveScope keepAlive(*session);
     InjectedScript::ContextScope scope(session, m_executionContextId);
     Response response = scope.initialize();
     if (!response.IsSuccess()) return;

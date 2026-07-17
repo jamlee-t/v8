@@ -26,6 +26,7 @@
   # Tests that need to run sequentially (e.g. due to memory consumption).
   'runtime/console-messages-limits': [PASS, SLOW, HEAVY],
   'runtime/regression-732717': [PASS, HEAVY],
+  'runtime/regress-520052954': [PASS, ['not asan', SKIP]],
 }],  # ALWAYS
 
 ##############################################################################
