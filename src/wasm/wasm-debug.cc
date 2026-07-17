@@ -53,42 +53,67 @@ Address FindNewPC(WasmFrame* frame, WasmCode* wasm_code, int byte_offset,
   WasmCode* old_code = frame->wasm_code();
   int pc_offset = static_cast<int>(frame->pc() - old_code->instruction_start());
   base::Vector<const uint8_t> old_pos_table = old_code->source_positions();
-  SourcePositionTableIterator old_it(old_pos_table);
   int call_offset = -1;
-  while (!old_it.done() && old_it.code_offset() < pc_offset) {
+  for (SourcePositionTableIterator old_it(old_pos_table);
+       !old_it.done() && old_it.code_offset() < pc_offset; old_it.Advance()) {
     call_offset = old_it.code_offset();
-    old_it.Advance();
   }
   DCHECK_LE(0, call_offset);
   int call_instruction_size = pc_offset - call_offset;
 
-  // If {return_location == kAfterBreakpoint} we search for the first code
-  // offset which is marked as instruction (i.e. not the breakpoint).
-  // If {return_location == kAfterWasmCall} we return the last code offset
-  // associated with the byte offset.
+  // If {return_location == kAfterBreakpoint}, we want to skip the breakpoint
+  // preamble/handler and resume at the first instruction representing the Wasm
+  // statement. Thus, we find the first code offset marked as a statement.
+  // If {return_location == kAfterWasmCall}, the frame is waiting for a call
+  // to return. The call instruction may be inline or inside Out-Of-Line (OOL)
+  // code (which is appended at the end of the function). In both cases, the
+  // call is the last instruction emitted for this bytecode offset. Thus, we
+  // want the last matching code offset.
   SourcePositionTableIterator it(new_pos_table);
   while (true) {
     CHECK(!it.done());
     if (it.source_position().ScriptOffset() == byte_offset) break;
     it.Advance();
   }
+  int code_offset;
   if (return_location == kAfterBreakpoint) {
     while (!it.is_statement()) {
       it.Advance();
       CHECK(!it.done());
     }
     DCHECK_EQ(byte_offset, it.source_position().ScriptOffset());
-    return wasm_code->instruction_start() + it.code_offset() +
-           call_instruction_size;
-  }
-
-  DCHECK_EQ(kAfterWasmCall, return_location);
-  int code_offset;
-  while (true) {
     code_offset = it.code_offset();
-    it.Advance();
-    if (it.done() || it.source_position().ScriptOffset() != byte_offset) break;
+  } else {
+    DCHECK_EQ(kAfterWasmCall, return_location);
+    // Find the last matching entry in the old code. If the old suspend point
+    // was the last match, we want the last match in the new code (e.g. for OOL
+    // trap). Otherwise we want the inline call (which is the last matching
+    // entry in the first contiguous run).
+    int last_old_match = -1;
+    for (SourcePositionTableIterator old_group_it(old_pos_table);
+         !old_group_it.done(); old_group_it.Advance()) {
+      if (old_group_it.source_position().ScriptOffset() == byte_offset) {
+        last_old_match = old_group_it.code_offset();
+      }
+    }
+    bool was_last_entry = (call_offset == last_old_match);
+
+    // Find the last match in the first contiguous run.
+    code_offset = it.code_offset();
+    for (; !it.done() && it.source_position().ScriptOffset() == byte_offset;
+         it.Advance()) {
+      code_offset = it.code_offset();
+    }
+    if (was_last_entry) {
+      // Find the absolute last match in the rest of the table (e.g., OOL trap).
+      for (; !it.done(); it.Advance()) {
+        if (it.source_position().ScriptOffset() == byte_offset) {
+          code_offset = it.code_offset();
+        }
+      }
+    }
   }
+  CHECK_NE(code_offset, -1);
   return wasm_code->instruction_start() + code_offset + call_instruction_size;
 }
 
