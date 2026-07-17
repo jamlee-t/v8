@@ -514,11 +514,9 @@ ReduceResult MaglevReducer<BaseT>::BuildStoreTrustedPointerField(
 template <typename BaseT>
 bool MaglevReducer<BaseT>::CanElideWriteBarrier(ValueNode* object,
                                                 ValueNode* value) {
-  // Ideally, all callers would handle the "value has an empty type" outside.
-  // But this requires some more wiring to work. TODO(marja): Enable this:
-  // DCHECK(!IsEmptyNodeType(GetType(value)));
+  DCHECK(!IsEmptyNodeType(GetType(value)));
   if (value->Is<RootConstant>() || value->Is<ConsStringMap>()) return true;
-  if (!IsEmptyNodeType(GetType(value)) && CheckType(value, NodeType::kSmi)) {
+  if (CheckType(value, NodeType::kSmi)) {
     return true;
   }
 
@@ -1486,17 +1484,8 @@ ReduceResult MaglevReducer<BaseT>::GetTruncatedInt32ForToNumber(
   switch (representation) {
     case ValueRepresentation::kTagged: {
       NodeType old_type;
-      // TODO(dmercadier): make EnsureType return a 3-value enum, something like
-      // kAlreadyTargetType, kNeedsCheck, and kImpossible, and handle
-      // kImpossible by emitting an unconditional deopt, instead of having to
-      // check after EnsureType whether its input now has type kNone or not.
-      RecordType(value, allowed_input_type, &old_type);
-
-      // Check for the empty type first, so that we don't emit unsafe conversion
-      // nodes below.
-      if (IsEmptyNodeType(old_type) || IsEmptyNodeType(value)) {
-        return EmitUnconditionalDeopt(DeoptimizeReason::kWrongValue);
-      }
+      RETURN_IF_ABORT(EnsureType(value, allowed_input_type,
+                                 DeoptimizeReason::kWrongValue, &old_type));
 
       if (NodeTypeIsSmi(old_type)) {
         // Smi untagging can be cached as an int32 alternative, not just a
@@ -2647,12 +2636,7 @@ MaybeReduceResult MaglevReducer<BaseT>::TryReduceFunctionPrototypeHasInstance(
 template <typename BaseT>
 ReduceResult MaglevReducer<BaseT>::BuildCheckSmi(ValueNode* object) {
   if (object->StaticTypeIs(broker(), NodeType::kSmi)) return object;
-  // Check for the empty type first so that we catch the case where
-  // GetType(object) is already empty.
-  if (IsEmptyNodeType(IntersectType(GetType(object), NodeType::kSmi))) {
-    return EmitUnconditionalDeopt(DeoptimizeReason::kSmi);
-  }
-  if (EnsureType(object, NodeType::kSmi)) return object;
+  RETURN_IF_DONE(EnsureType(object, NodeType::kSmi, DeoptimizeReason::kSmi));
   // For non-tagged constants, we may be able to skip the runtime check: every
   // non-tagged arm of the switch below emits a value-range check, which is
   // exactly what `Smi::IsValid` proves. For tagged inputs the runtime check
@@ -2697,10 +2681,11 @@ ReduceResult MaglevReducer<BaseT>::BuildSmiUntag(ValueNode* node) {
   // This is called when converting inputs in AddNewNode. We might already have
   // an empty type for `node` here. Make sure we don't add unsafe conversion
   // nodes in that case by checking for the empty node type explicitly.
-  if (IsEmptyNodeType(node) || !NodeTypeCanBe(GetType(node), NodeType::kSmi)) {
+  EnsureTypeResult ensure_res =
+      known_node_aspects().EnsureType(broker(), node, NodeType::kSmi);
+  if (ensure_res == EnsureTypeResult::kContradiction) {
     return EmitUnconditionalDeopt(DeoptimizeReason::kNotASmi);
-  }
-  if (EnsureType(node, NodeType::kSmi)) {
+  } else if (ensure_res == EnsureTypeResult::kAlreadyHadType) {
     return AddNewNodeNoInputConversion<UnsafeSmiUntag>({node});
   } else {
     return AddNewNodeNoInputConversion<CheckedSmiUntag>({node});
@@ -2710,14 +2695,8 @@ ReduceResult MaglevReducer<BaseT>::BuildSmiUntag(ValueNode* node) {
 template <typename BaseT>
 ReduceResult MaglevReducer<BaseT>::BuildCheckString(ValueNode* object) {
   NodeType known_type;
-  // Check for the empty type first so that we catch the case where
-  // GetType(object) is already empty.
-  if (IsEmptyNodeType(IntersectType(GetType(object), NodeType::kString))) {
-    return EmitUnconditionalDeopt(DeoptimizeReason::kNotAString);
-  }
-  if (EnsureType(object, NodeType::kString, &known_type)) {
-    return ReduceResult::Done();
-  }
+  RETURN_IF_DONE(EnsureType(object, NodeType::kString,
+                            DeoptimizeReason::kNotAString, &known_type));
   return AddNewNode<CheckString>({object}, GetCheckType(known_type));
 }
 
@@ -2781,7 +2760,12 @@ ReduceResult MaglevReducer<BaseT>::BuildNumberOrOddballToFloat64OrHoleyFloat64(
   NodeType old_type;
   TaggedToFloat64ConversionType conversion_type =
       GetTaggedToFloat64ConversionType(allowed_input_type);
-  if (EnsureType(node, allowed_input_type, &old_type)) {
+  EnsureTypeResult ensure_res = known_node_aspects().EnsureType(
+      broker(), node, allowed_input_type, &old_type);
+  if (ensure_res == EnsureTypeResult::kContradiction) {
+    return EmitUnconditionalDeopt(DeoptimizeReason::kWrongValue);
+  }
+  if (ensure_res == EnsureTypeResult::kAlreadyHadType) {
     if (old_type == NodeType::kSmi) {
       ValueNode* untagged_smi;
       GET_VALUE_OR_ABORT(untagged_smi, BuildSmiUntag(node));
@@ -3229,7 +3213,7 @@ MaybeReduceResult MaglevReducer<BaseT>::TryFoldInt32BinaryOperation(
         // TODO(victorgomes): This should actually be NodeType::kInt32, but we
         // don't have it. The idea here is that the value is either 0 or 1, so
         // we can cast Uint32 to Int32 without a check.
-        RecordType(sign_bit, NodeType::kSmi);
+        RETURN_IF_ABORT(RecordType(sign_bit, NodeType::kSmi));
         ValueNode* result;
         GET_VALUE_OR_ABORT(result,
                            AddNewNode<Int32Add>({shifted_quot, sign_bit}));
@@ -4375,14 +4359,8 @@ ReduceResult MaglevReducer<BaseT>::BuildCheckInstanceType(ValueNode* object,
                                                           InstanceType first,
                                                           InstanceType last) {
   NodeType known_type;
-  // Check for the empty type first so that we catch the case where
-  // GetType(object) is already empty or disjoint.
-  if (IsEmptyNodeType(IntersectType(GetType(object), target_type))) {
-    return EmitUnconditionalDeopt(DeoptimizeReason::kWrongInstanceType);
-  }
-  if (EnsureType(object, target_type, &known_type)) {
-    return ReduceResult::Done();
-  }
+  RETURN_IF_DONE(EnsureType(object, target_type,
+                            DeoptimizeReason::kWrongInstanceType, &known_type));
   return AddNewNode<CheckInstanceType>({object}, GetCheckType(known_type),
                                        first, last);
 }

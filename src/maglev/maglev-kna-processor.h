@@ -19,6 +19,7 @@
 #include "src/maglev/maglev-known-node-aspects.h"
 #include "src/maglev/maglev-node-type.h"
 #include "src/maglev/maglev-post-hoc-optimizations-processors.h"
+#include "src/maglev/maglev-reducer.h"
 #include "src/maglev/maglev-tracer.h"
 #include "src/objects/map.h"
 
@@ -51,7 +52,8 @@ class RecomputeKnownNodeAspectsProcessor {
       : graph_(graph),
         known_node_aspects_(nullptr),
         tracker_(tracker),
-        tracer_(graph->compilation_info()) {}
+        tracer_(graph->compilation_info()),
+        reducer_(this, graph) {}
 
   void PreProcessGraph(Graph* graph) {
     known_node_aspects_ = zone()->New<KnownNodeAspects>(zone());
@@ -65,7 +67,18 @@ class RecomputeKnownNodeAspectsProcessor {
   BlockProcessResult PostProcessBasicBlock(BasicBlock* block) {
     return BlockProcessResult::kContinue;
   }
+
+  NodeBase* current_node() const { return current_node_; }
+
+  DeoptFrame* GetDeoptFrameForEagerDeopt() {
+    CHECK(current_node()->properties().has_eager_deopt_info());
+    return &current_node()->eager_deopt_info()->top_frame();
+  }
+
   BlockProcessResult PreProcessBasicBlock(BasicBlock* block) {
+    // TODO(victorgomes): Clean up set_current_block usage; now both
+    // MaglevGraphOptimizer and RecomputeKnownNodeAspectsProcessor set it.
+    reducer_.set_current_block(block);
     bool is_fallthrough = false;
     if (block->is_loop() && block->state()->is_resumable_loop()) {
       // TODO(victorgomes): Ideally, we should use the loop backedge KNA cache
@@ -159,6 +172,7 @@ class RecomputeKnownNodeAspectsProcessor {
 
   template <IsNodeT NodeT>
   ProcessResult Process(NodeT* node, const ProcessingState& state) {
+    current_node_ = node;
     if constexpr (NodeT::kProperties.can_throw()) {
       ProcessThrowingNode(node);
     }
@@ -240,6 +254,8 @@ class RecomputeKnownNodeAspectsProcessor {
   KnownNodeAspects* known_node_aspects_;
   ReachableExceptionHandlerTracker& tracker_;
   Tracer tracer_;
+  MaglevReducer<RecomputeKnownNodeAspectsProcessor> reducer_;
+  NodeBase* current_node_ = nullptr;
 
   Zone* zone() { return graph_->zone(); }
   compiler::JSHeapBroker* broker() { return graph_->broker(); }
@@ -248,9 +264,7 @@ class RecomputeKnownNodeAspectsProcessor {
     return known_node_aspects().GetOrCreateInfoFor(broker(), node);
   }
 
-  void RecordType(ValueNode* node, NodeType type) {
-    known_node_aspects().EnsureType(broker(), node, type);
-  }
+  V8_NODISCARD ProcessResult RecordType(ValueNode* node, NodeType type);
 
   void Merge(BasicBlock* block) {
     while (block->is_edge_split_block()) {
@@ -267,10 +281,9 @@ class RecomputeKnownNodeAspectsProcessor {
                                                 graph_->is_tracing_enabled());
   }
 
-#define PROCESS_CHECK(Type)                             \
-  ProcessResult ProcessNode(Check##Type* node) {        \
-    RecordType(node->input_node(0), NodeType::k##Type); \
-    return ProcessResult::kContinue;                    \
+#define PROCESS_CHECK(Type)                                    \
+  ProcessResult ProcessNode(Check##Type* node) {               \
+    return RecordType(node->input_node(0), NodeType::k##Type); \
   }
   PROCESS_CHECK(Smi)
   PROCESS_CHECK(String)
@@ -282,27 +295,41 @@ class RecomputeKnownNodeAspectsProcessor {
   ProcessResult ProcessNode(CheckNumber* node) {
     switch (node->mode()) {
       case Object::Conversion::kToNumber:
-        RecordType(node->input_node(0), NodeType::kNumber);
-        break;
+        return RecordType(node->input_node(0), NodeType::kNumber);
       case Object::Conversion::kToNumeric:
         // Smi, HeapNumber or BigInt.
-        RecordType(node->input_node(0), NodeType::kNumeric);
-        break;
+        return RecordType(node->input_node(0), NodeType::kNumeric);
     }
     return ProcessResult::kContinue;
   }
 
-#define PROCESS_SAFE_CONV(Node, Alt, Type)                                     \
-  ProcessResult ProcessNode(Node* node) {                                      \
-    NodeInfo* info = GetOrCreateInfoFor(node->input_node(0));                  \
-    if (!info->alternative().Alt()) {                                          \
-      /* TODO(victorgomes): What happens if we we have an alternative already? \
-       * Should we remove this one as well? */                                 \
-      info->alternative().set_##Alt(node);                                     \
-    }                                                                          \
-    info->IntersectType(NodeType::k##Type);                                    \
-    return ProcessResult::kContinue;                                           \
-  }
+#define SAFE_CONVERSION_LIST(V)                                            \
+  V(CheckedSmiUntag, int32, Smi)                                           \
+  V(CheckedSmiTagInt32, tagged, Smi)                                       \
+  V(CheckedSmiTagUint32, tagged, Smi)                                      \
+  V(CheckedSmiTagIntPtr, tagged, Smi)                                      \
+  V(CheckedSmiTagFloat64, tagged, Smi)                                     \
+  V(TruncateCheckedNumberOrOddballToInt32, truncated_int32_to_number,      \
+    NumberOrOddball)                                                       \
+  V(CheckedUint32ToInt32, int32, Number)                                   \
+  V(CheckedIntPtrToInt32, int32, Number)                                   \
+  V(CheckedFloat64ToInt32, int32, Number)                                  \
+  V(CheckedHoleyFloat64ToInt32, int32, Number)                             \
+  V(CheckedNumberToInt32, int32, Number)                                   \
+  /* TODO(victorgomes): pass node->conversion_type() rather than always */ \
+  /* NumberOrOddball for CheckedNumberOrOddballToFloat64. */               \
+  V(CheckedNumberOrOddballToFloat64, float64, NumberOrOddball)             \
+  V(CheckedNumberToFloat64, float64, Number)                               \
+  V(CheckedHoleyFloat64ToFloat64, float64, Number)                         \
+  V(ChangeInt32ToFloat64, float64, Number)                                 \
+  V(ChangeInt32ToHoleyFloat64, holey_float64, Number)
+
+#define DECLARE_ProcessNode(Node, Alt, Type) \
+  ProcessResult ProcessNode(Node* node);
+
+  SAFE_CONVERSION_LIST(DECLARE_ProcessNode)
+#undef DECLARE_ProcessNode
+
 // TODO(victorgomes): Ideally we would like to check we already know the type,
 // but currently we cannot. The issue is that if the GraphBuilder emits a
 // node A and then Ensure(A, kSmi), we are not able to recover that A is an Smi.
@@ -318,40 +345,20 @@ class RecomputeKnownNodeAspectsProcessor {
     /* CHECK(NodeTypeIs(GetType(node->input_node(0)), NodeType::k##Type)); */  \
     return ProcessResult::kContinue;                                           \
   }
-  PROCESS_SAFE_CONV(CheckedSmiUntag, int32, Smi)
   PROCESS_UNSAFE_CONV(UnsafeSmiUntag, int32, Smi)
-  PROCESS_SAFE_CONV(CheckedSmiTagInt32, tagged, Smi)
   PROCESS_UNSAFE_CONV(UnsafeSmiTagInt32, tagged, Smi)
-  PROCESS_SAFE_CONV(CheckedSmiTagUint32, tagged, Smi)
   PROCESS_UNSAFE_CONV(UnsafeSmiTagUint32, tagged, Smi)
-  PROCESS_SAFE_CONV(CheckedSmiTagIntPtr, tagged, Smi)
   PROCESS_UNSAFE_CONV(UnsafeSmiTagIntPtr, tagged, Smi)
-  PROCESS_SAFE_CONV(CheckedSmiTagFloat64, tagged, Smi)
   PROCESS_UNSAFE_CONV(UnsafeSmiTagFloat64, tagged, Smi)
   PROCESS_UNSAFE_CONV(UnsafeSmiTagHoleyFloat64, tagged, Smi)
-  PROCESS_SAFE_CONV(TruncateCheckedNumberOrOddballToInt32,
-                    truncated_int32_to_number, NumberOrOddball)
   PROCESS_UNSAFE_CONV(TruncateUnsafeNumberOrOddballToInt32,
                       truncated_int32_to_number, NumberOrOddball)
-  PROCESS_SAFE_CONV(CheckedUint32ToInt32, int32, Number)
-  PROCESS_SAFE_CONV(CheckedIntPtrToInt32, int32, Number)
-  PROCESS_SAFE_CONV(CheckedFloat64ToInt32, int32, Number)
-  PROCESS_SAFE_CONV(CheckedHoleyFloat64ToInt32, int32, Number)
   PROCESS_UNSAFE_CONV(UnsafeFloat64ToInt32, int32, Number)
   PROCESS_UNSAFE_CONV(UnsafeHoleyFloat64ToInt32, int32, Number)
-  PROCESS_SAFE_CONV(CheckedNumberToInt32, int32, Number)
   PROCESS_UNSAFE_CONV(ChangeIntPtrToFloat64, float64, Number)
-  // TODO(victorgomes): pass node->conversion_type() rather than always
-  // NumberOrOddball for CheckedNumberOrOddballToFloat64.
-  PROCESS_SAFE_CONV(CheckedNumberOrOddballToFloat64, float64, NumberOrOddball)
-  PROCESS_SAFE_CONV(CheckedNumberToFloat64, float64, Number)
   PROCESS_UNSAFE_CONV(UnsafeNumberOrOddballToFloat64, float64, NumberOrOddball)
   PROCESS_UNSAFE_CONV(UnsafeNumberToFloat64, float64, Number)
-  PROCESS_SAFE_CONV(CheckedHoleyFloat64ToFloat64, float64, Number)
   PROCESS_UNSAFE_CONV(HoleyFloat64ToSilencedFloat64, float64, Number)
-  PROCESS_SAFE_CONV(ChangeInt32ToFloat64, float64, Number)
-  PROCESS_SAFE_CONV(ChangeInt32ToHoleyFloat64, holey_float64, Number)
-#undef PROCESS_SAFE_CONV
 #undef PROCESS_UNSAFE_CONV
 
   ProcessResult ProcessNode(LoadTaggedField* node) {
@@ -479,8 +486,7 @@ class RecomputeKnownNodeAspectsProcessor {
   }
 
   ProcessResult ProcessNode(AssumeType* node) {
-    RecordType(node->input_node(0), node->asserted_type());
-    return ProcessResult::kContinue;
+    return RecordType(node->input_node(0), node->asserted_type());
   }
 
   ProcessResult ProcessNode(Node* node) { return ProcessResult::kContinue; }

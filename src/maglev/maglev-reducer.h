@@ -33,6 +33,7 @@ namespace v8 {
 namespace internal {
 namespace maglev {
 
+enum class EnsureTypeResult;
 struct MaglevCallSiteInfo;
 class MaglevGraphBuilder;
 template <typename BaseT>
@@ -1459,26 +1460,54 @@ class MaglevReducer {
     return known_node_aspects().CheckTypes(broker(), node, types);
   }
 
-  V8_NODISCARD bool EnsureType(ValueNode* node, NodeType type,
-                               NodeType* old = nullptr) {
-    return known_node_aspects().EnsureType(broker(), node, type, old);
+  // Record type information for `node`. The caller needs to insert the
+  // corresponding Check node after this, if needed. If the resulting
+  // type is empty (i.e., it's impossible that `node` has the wanted type),
+  // insert an unconditional deopt.
+  MaybeReduceResult EnsureType(ValueNode* node, NodeType type,
+                               DeoptimizeReason reason,
+                               NodeType* old_type = nullptr) {
+    EnsureTypeResult ensure_res =
+        known_node_aspects().EnsureType(broker(), node, type, old_type);
+    if (ensure_res == EnsureTypeResult::kAlreadyHadType) {
+      return node;
+    }
+    if (ensure_res == EnsureTypeResult::kContradiction) {
+      return EmitUnconditionalDeopt(reason);
+    }
+    return {};
   }
 
-  void RecordType(ValueNode* node, NodeType type, NodeType* old = nullptr) {
+  // Record type information for `node`, when we already know it must have the
+  // given type. When the resulting type is empty (i.e., it's impossible that
+  // `node` has the wanted type), insert an Abort.
+  ReduceResult RecordType(ValueNode* node, NodeType type,
+                          NodeType* old = nullptr) {
     DCHECK(!node->Is<VirtualObject>());
 
+    EnsureTypeResult ensure_res =
+        known_node_aspects().EnsureType(broker(), node, type, old);
+    if (ensure_res == EnsureTypeResult::kContradiction) {
+      return BuildAbort(AbortReason::kUnreachable);
+    }
     // For Turbolev, we insert an AssumeType node when recording a previously
     // not-known type so that the GraphOptimizer (and in particular the KNA
     // processor) can also be aware of this type when non-eagerly reoptimizing
     // the graph later.
-    if (const bool already_known = EnsureType(node, type, old);
-        already_known || !is_turbolev()) {
-      return;
+    if (ensure_res == EnsureTypeResult::kAlreadyHadType || !is_turbolev()) {
+      return ReduceResult::Done();
     }
 
     auto* assume_node = NodeBase::New<AssumeType>(zone(), 1, type);
     assume_node->set_input(0, node);
     AttachExtraInfoAndAddToGraph(assume_node);
+    return ReduceResult::Done();
+  }
+
+  void RecordTypeNoAbort(ValueNode* node, NodeType type,
+                         NodeType* old = nullptr) {
+    ReduceResult result = RecordType(node, type, old);
+    CHECK(result.IsDoneWithoutAbort());
   }
 
   bool IsEmptyNodeType(NodeType type) {

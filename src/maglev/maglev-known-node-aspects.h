@@ -23,6 +23,8 @@ struct LoopEffects;
 class KnownNodeAspects;
 class TraceLogger;
 
+enum class EnsureTypeResult { kAlreadyHadType, kTypeUpdated, kContradiction };
+
 using PossibleMaps = compiler::ZoneRefSet<Map>;
 
 #ifdef DEBUG
@@ -529,25 +531,32 @@ class KnownNodeAspects {
         GetTypeUnchecked(broker, node));
   }
 
-  bool EnsureType(compiler::JSHeapBroker* broker, ValueNode* node,
-                  NodeType type, NodeType* old_type = nullptr) {
+  EnsureTypeResult EnsureType(compiler::JSHeapBroker* broker, ValueNode* node,
+                              NodeType type, NodeType* old_type = nullptr) {
     NodeType static_type = node->GetStaticType(broker);
     if (old_type) *old_type = static_type;
-    // TODO(428667907): Ideally we should bail out early for the kNone type.
     if (NodeTypeIs(static_type, type, NodeTypeIsVariant::kAllowNone)) {
-      return true;
+      if (static_type == NodeType::kNone) {
+        return EnsureTypeResult::kContradiction;
+      }
+      return EnsureTypeResult::kAlreadyHadType;
     }
     NodeInfo* known_info = GetOrCreateInfoFor(broker, node);
     if (old_type) *old_type = known_info->type();
-    // TODO(428667907): Ideally we should bail out early for the kNone type.
     if (NodeTypeIs(known_info->type(), type, NodeTypeIsVariant::kAllowNone)) {
-      return true;
+      if (known_info->type() == NodeType::kNone) {
+        return EnsureTypeResult::kContradiction;
+      }
+      return EnsureTypeResult::kAlreadyHadType;
     }
     known_info->IntersectType(type);
     if (auto phi = node->TryCast<Phi>()) {
       known_info->IntersectType(phi->type());
     }
-    return false;
+    if (known_info->type() == NodeType::kNone) {
+      return EnsureTypeResult::kContradiction;
+    }
+    return EnsureTypeResult::kTypeUpdated;
   }
 
   void Merge(const KnownNodeAspects& other, Zone* zone);

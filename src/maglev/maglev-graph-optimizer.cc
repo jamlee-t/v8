@@ -770,19 +770,6 @@ ProcessResult MaglevGraphOptimizer::ProcessLoadContextSlot(NodeT* node) {
   return ProcessResult::kContinue;
 }
 
-MaybeReduceResult MaglevGraphOptimizer::EnsureType(ValueNode* node,
-                                                   NodeType type,
-                                                   DeoptimizeReason reason) {
-  if (IsEmptyNodeType(IntersectType(reducer_.GetType(node), type))) {
-    return reducer_.EmitUnconditionalDeopt(reason);
-  }
-  if (!reducer_.EnsureType(node, type)) {
-    return {};
-  }
-
-  return ReduceResult::Done();
-}
-
 ProcessResult MaglevGraphOptimizer::VisitAssertInt32(
     AssertInt32* node, const ProcessingState& state) {
   return ProcessResult::kContinue;
@@ -865,7 +852,7 @@ ProcessResult MaglevGraphOptimizer::VisitCheckHoleyFloat64IsSmi(
 
 ProcessResult MaglevGraphOptimizer::VisitCheckHeapObject(
     CheckHeapObject* node, const ProcessingState& state) {
-  REMOVE_AND_RETURN_IF_DONE(EnsureType(
+  REMOVE_AND_RETURN_IF_DONE(reducer_.EnsureType(
       node->input_node(0), NodeType::kAnyHeapObject, DeoptimizeReason::kSmi));
   return ProcessResult::kContinue;
 }
@@ -984,8 +971,9 @@ ProcessResult MaglevGraphOptimizer::VisitCheckDetectableCallable(
 ProcessResult MaglevGraphOptimizer::VisitCheckJSReceiverOrNullOrUndefined(
     CheckJSReceiverOrNullOrUndefined* node, const ProcessingState& state) {
   ValueNode* input = node->input_node(0);
-  REMOVE_AND_RETURN_IF_DONE(
-      EnsureType(input, NodeType::kJSReceiverOrNullOrUndefined));
+  REMOVE_AND_RETURN_IF_DONE(reducer_.EnsureType(
+      input, NodeType::kJSReceiverOrNullOrUndefined,
+      DeoptimizeReason::kNotAJavaScriptObjectOrNullOrUndefined));
   return ProcessResult::kContinue;
 }
 
@@ -1089,8 +1077,8 @@ ProcessResult MaglevGraphOptimizer::VisitCheckInstanceType(
 
   if (node->first_instance_type() == FIRST_JS_RECEIVER_TYPE &&
       node->last_instance_type() == LAST_JS_RECEIVER_TYPE) {
-    REMOVE_AND_RETURN_IF_DONE(EnsureType(input, NodeType::kJSReceiver,
-                                         DeoptimizeReason::kWrongInstanceType));
+    REMOVE_AND_RETURN_IF_DONE(reducer_.EnsureType(
+        input, NodeType::kJSReceiver, DeoptimizeReason::kWrongInstanceType));
   }
 
   return ProcessResult::kContinue;
@@ -1671,7 +1659,9 @@ ProcessResult MaglevGraphOptimizer::VisitCallKnownJSFunction(
       node->shared_function_info().object()->construct_as_builtin()) {
     // The invariant of such builtin targets is that the return value is a
     // JSReceiver. Set the type accordingly here.
-    known_node_aspects().EnsureType(broker(), node, NodeType::kJSReceiver);
+    CHECK_NE(
+        known_node_aspects().EnsureType(broker(), node, NodeType::kJSReceiver),
+        EnsureTypeResult::kContradiction);
   }
   return ProcessResult::kContinue;
 }
