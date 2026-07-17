@@ -155,7 +155,8 @@ TEST(MemoryAccessInformationTest, ParseInstructionWidthAndExtension) {
   {
     MemoryAccessInformation info =
         ParseMemoryAccessInformationFromInstruction("rep movsb", regs);
-    EXPECT_EQ(MemoryAccessInformation::kWrite, info.kind);
+    EXPECT_EQ(MemoryAccessInformation::kRepMovs, info.kind);
+    EXPECT_EQ(1, info.access_width);
   }
   {
     MemoryAccessInformation info =

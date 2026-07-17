@@ -16,10 +16,38 @@
 
 namespace v8 {
 
+namespace {
+int width_from_suffix(char c) {
+  switch (c) {
+    case 'b':
+      return 1;
+    case 'w':
+      return 2;
+    case 'l':
+    case 'd':
+      return 4;
+    case 'q':
+      return 8;
+    default:
+      return 8;
+  }
+}
+}  // namespace
+
 MemoryAccessInformation ParseMemoryAccessInformationFromInstruction(
     const char* insn_pos, struct user_regs_struct& regs) {
-  if (memcmp(insn_pos, "rep ", 4) == 0 || memcmp(insn_pos, "repne ", 6) == 0) {
-    // Treat any repeating string instruction as a write, which is safely
+  if (memcmp(insn_pos, "rep movs", 8) == 0) {
+    int width = width_from_suffix(insn_pos[8]);
+    return {.kind = MemoryAccessInformation::kRepMovs,
+            .result_reg = nullptr,
+            .xmm_reg_index = -1,
+            .k_reg_index = -1,
+            .access_width = width,
+            .dest_width = width,
+            .extension = MemoryAccessInformation::kNoExtend};
+  } else if (memcmp(insn_pos, "rep ", 4) == 0 ||
+             memcmp(insn_pos, "repne ", 6) == 0) {
+    // Treat other repeating string instructions as a write, which is safely
     // ignored.
     return {.kind = MemoryAccessInformation::kWrite,
             .result_reg = nullptr,
@@ -61,21 +89,6 @@ MemoryAccessInformation ParseMemoryAccessInformationFromInstruction(
     dest_suffix = suffix;
   }
 
-  auto width_from_suffix = [](char c) -> int {
-    switch (c) {
-      case 'b':
-        return 1;
-      case 'w':
-        return 2;
-      case 'l':
-      case 'd':
-        return 4;
-      case 'q':
-        return 8;
-      default:
-        return 8;
-    }
-  };
   access_width = width_from_suffix(suffix);
   int dest_width = width_from_suffix(dest_suffix);
 

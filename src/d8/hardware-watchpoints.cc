@@ -126,19 +126,14 @@ void SetNewWatchpoints() {
                      offsetof(struct user, u_debugreg[7]), dr7));
 }
 
-void MutateRegister(reg_value_type* reg_ptr,
-                    const MemoryAccessInformation& access_info) {
+uint64_t MutateValue(uint64_t val, int width) {
   // TODO(clemensb): Add API for specifying how to manipulate the value.
   // TODO(clemensb): Look into strategies used by AFL:
   // https://lcamtuf.blogspot.com/2014/08/binary-fuzzing-strategies-what-works.html.
   // TODO(clemensb): Unify with strategies used by Samuel's trap-based fuzzer
   // (https://crbug.com/361277236).
-  uint64_t read_value = static_cast<uint64_t>(*reg_ptr);
-  uint64_t new_value = read_value;
-  // This function only handles general-purpose registers, which are at most 8
-  // bytes on x64. Wider vector registers are handled in a separate code path.
-  CHECK_LE(access_info.access_width, 8);
-  int bit_width = access_info.access_width * 8;
+  uint64_t new_value = val;
+  int bit_width = width * 8;
   switch (g_support.rng.NextInt(4)) {
     case 0:
       new_value += 10;
@@ -156,7 +151,23 @@ void MutateRegister(reg_value_type* reg_ptr,
   }
   uint64_t mask =
       (bit_width == 64) ? ~uint64_t{0} : ((uint64_t{1} << bit_width) - 1);
-  uint64_t mutated_bits = new_value & mask;
+  return (val & ~mask) | (new_value & mask);
+}
+
+void MutateRegister(reg_value_type* reg_ptr,
+                    const MemoryAccessInformation& access_info) {
+  uint64_t read_value = static_cast<uint64_t>(*reg_ptr);
+  // This function only handles general-purpose registers, which are at most 8
+  // bytes on x64. Wider vector registers are handled in a separate code path.
+  CHECK_LE(access_info.access_width, 8);
+
+  uint64_t mutated_val = MutateValue(read_value, access_info.access_width);
+
+  int bit_width = access_info.access_width * 8;
+  uint64_t mask =
+      (bit_width == 64) ? ~uint64_t{0} : ((uint64_t{1} << bit_width) - 1);
+  uint64_t mutated_bits = mutated_val & mask;
+  uint64_t new_value = mutated_val;
 
   if (access_info.extension == MemoryAccessInformation::kSignExtend) {
     // Sign-extend the source value up to the destination register width, then
@@ -173,14 +184,53 @@ void MutateRegister(reg_value_type* reg_ptr,
     new_value = mutated_bits & dest_mask;
   } else if (access_info.extension == MemoryAccessInformation::kZeroExtend) {
     new_value = mutated_bits;
-  } else {
-    new_value = (read_value & ~mask) | mutated_bits;
   }
 
   TRACE("[debugger] Changing value in result register from %" PRIu64 "/%" PRIx64
         " to %" PRIu64 "/%" PRIx64 ".\n",
         read_value, read_value, new_value, new_value);
   *reg_ptr = static_cast<reg_value_type>(new_value);
+}
+
+void MutateRepMovsDestination(struct user_regs_struct& regs,
+                              const MemoryAccessInformation& access_info) {
+  // rep movs copied a value of size `access_info.access_width` from `[rsi]` to
+  // `[rdi]`. Because watchpoints are traps, the iteration has already
+  // completed. The registers rsi, rdi and rcx have been updated: rsi and rdi
+  // have been incremented (or decremented) by `access_info.access_width`.
+  // Therefore, the destination address of the completed write is:
+  // - regs.rdi - access_info.access_width (if DF is clear, i.e., incrementing)
+  // - regs.rdi + access_info.access_width (if DF is set, i.e., decrementing)
+
+  bool df = (regs.eflags & (1 << 10)) != 0;
+  uint64_t dest_addr = df ? (regs.rdi + access_info.access_width)
+                          : (regs.rdi - access_info.access_width);
+
+  // Align dest_addr to 8 bytes (sizeof(long)) for ptrace read-modify-write.
+  uintptr_t aligned_addr = dest_addr & ~7;
+  size_t offset = dest_addr & 7;
+
+  errno = 0;
+  uint64_t data = ptrace(PTRACE_PEEKTEXT, g_support.d8_pid, aligned_addr, 0);
+  CHECK_EQ(0, errno);
+
+  // Extract the bytes that we actually want to mutate.
+  uint64_t original_val = 0;
+  memcpy(&original_val, reinterpret_cast<char*>(&data) + offset,
+         access_info.access_width);
+
+  // Mutate/fuzz the original_val using the shared MutateValue helper.
+  uint64_t mutated_val = MutateValue(original_val, access_info.access_width);
+
+  // Write the mutated bytes back into the 64-bit word.
+  memcpy(reinterpret_cast<char*>(&data) + offset, &mutated_val,
+         access_info.access_width);
+
+  CHECK_EQ(0, ptrace(PTRACE_POKETEXT, g_support.d8_pid, aligned_addr, data));
+  TRACE(
+      "[debugger] Mutated rep movs destination memory at 0x%lx (width %d) from "
+      "0x%lx to 0x%lx\n",
+      dest_addr, access_info.access_width, original_val, mutated_val);
 }
 
 void DisassemblePreviousInstruction(struct user_regs_struct& regs,
@@ -559,6 +609,10 @@ bool HandleWatchpoint(struct user_regs_struct& regs) {
 
     case MemoryAccessInformation::kWrite:
       TRACE("[debugger] Ignoring write.\n");
+      break;
+
+    case MemoryAccessInformation::kRepMovs:
+      MutateRepMovsDestination(regs, access_info);
       break;
 
     case MemoryAccessInformation::kCmp:

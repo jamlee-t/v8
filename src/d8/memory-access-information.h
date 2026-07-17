@@ -18,7 +18,7 @@ namespace v8 {
 using reg_value_type = unsigned long long;  // NOLINT(runtime/int)
 
 struct MemoryAccessInformation {
-  enum Kind { kRead, kWrite, kCmp, kCmpxchg };
+  enum Kind { kRead, kWrite, kCmp, kCmpxchg, kRepMovs };
   enum Extension { kZeroExtend, kSignExtend, kNoExtend };
 
   Kind kind;
