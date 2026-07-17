@@ -1053,6 +1053,14 @@ class FieldValuesTracker : public CandidateAnalyzer {
 
     int backedge_index = header->predecessor_count() - 1;
     for (auto& [phi, key] : *new_phis().at(header)) {
+      InlinedAllocation* alloc = key.data().base;
+      if (data_.HasEscaped(alloc)) {
+        // If {alloc} was marked as escaping while visiting the loop, there is
+        // no need to patch its backedge, in particular since calling
+        // `fields_values().Get(key)` could produce a garbage value.
+        continue;
+      }
+
       ValueNode* backedge_val = field_values().Get(key);
       DCHECK_NOT_NULL(backedge_val);
       TRACE(">> Updating loop phi backedge: "
@@ -1407,6 +1415,12 @@ class Elider {
       TRACE("> Inserting new phis");
       DCHECK(block->has_state());
       for (auto& [phi, key] : *data_.new_phis.at(block)) {
+        if (data_.HasEscaped(key.data().base)) {
+          // {new_phis} can contain phis for objects that were marked as
+          // escaping while revisiting a loop; we skip those.
+          continue;
+        }
+
         block->AddPhi(phi);
       }
     }
