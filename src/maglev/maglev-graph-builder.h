@@ -1001,11 +1001,11 @@ class MaglevGraphBuilder {
       compiler::SharedFunctionInfoRef shared, CallArguments& args);
   bool ShouldEagerInlineCall(compiler::SharedFunctionInfoRef shared,
                              CallArguments& args);
-  ReduceResult BuildEagerInlineCall(ValueNode* context, ValueNode* function,
-                                    ValueNode* new_target,
-                                    compiler::SharedFunctionInfoRef shared,
-                                    compiler::FeedbackCellRef feedback_cell,
-                                    CallArguments& args, float call_frequency);
+  ReduceResult BuildEagerInlineCall(
+      ValueNode* context, ValueNode* function, ValueNode* new_target,
+      compiler::SharedFunctionInfoRef shared,
+      compiler::FeedbackCellRef feedback_cell,
+      const base::Vector<ValueNode*> arguments_vector, float call_frequency);
   MaybeReduceResult TryBuildInlineCall(
       ValueNode* context, ValueNode* function, ValueNode* new_target,
       JSDispatchHandle dispatch_handle,

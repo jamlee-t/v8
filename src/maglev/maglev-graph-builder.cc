@@ -7882,7 +7882,7 @@ MaybeReduceResult MaglevGraphBuilder::TryBuildInlineCall(
   if (ShouldEagerInlineCall(shared, args)) {
     graph()->add_inlined_bytecode_size_small(bytecode.length());
     return BuildEagerInlineCall(context, function, new_target, shared,
-                                feedback_cell, args, call_frequency);
+                                feedback_cell, arguments, call_frequency);
   }
 
   if (!is_turbolev() && only_inline_small_) {
@@ -7917,7 +7917,7 @@ MaybeReduceResult MaglevGraphBuilder::TryBuildInlineCall(
 
     graph()->add_inlined_bytecode_size(bytecode.length());
     return BuildEagerInlineCall(context, function, new_target, shared,
-                                feedback_cell, args, call_frequency);
+                                feedback_cell, arguments, call_frequency);
   }
 
   // Creating the CallKnownJSFUnction node will conservatively clear the
@@ -7961,10 +7961,8 @@ MaybeReduceResult MaglevGraphBuilder::TryBuildInlineCall(
 ReduceResult MaglevGraphBuilder::BuildEagerInlineCall(
     ValueNode* context, ValueNode* function, ValueNode* new_target,
     compiler::SharedFunctionInfoRef shared,
-    compiler::FeedbackCellRef feedback_cell, CallArguments& args,
-    float call_frequency) {
-  DCHECK_EQ(args.mode(), CallArguments::kDefault);
-
+    compiler::FeedbackCellRef feedback_cell,
+    const base::Vector<ValueNode*> arguments_vector, float call_frequency) {
   // Merge catch block state if needed.
   CatchBlockDetails catch_block_details = GetCurrentTryCatchBlock();
   if (catch_block_details.ref &&
@@ -7981,10 +7979,6 @@ ReduceResult MaglevGraphBuilder::BuildEagerInlineCall(
   MaglevCompilationUnit* inner_unit = MaglevCompilationUnit::NewInner(
       zone(), compilation_unit_, shared, feedback_cell);
 
-  // Propagate details.
-  auto [arguments_result, arguments_vector] =
-      GetArgumentsAsArrayOfValueNodes(shared, args);
-  RETURN_IF_ABORT(arguments_result);
   DeoptFrame* deopt_frame =
       GetDeoptFrameForEagerCall(inner_unit, function, arguments_vector);
   MaglevCallerDetails* caller_details = zone()->New<MaglevCallerDetails>(
