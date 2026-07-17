@@ -9,6 +9,10 @@ class C {
   constructor(x) { this.x = x; }
 }
 
+// Keep the transition map alive to prevent GC from clearing feedback.
+let gc_keep_alive = new C(1);
+gc_keep_alive.y = 2;
+
 function foo(x, b, deopt) {
   x = x + 2;
   let o = new C(x);
