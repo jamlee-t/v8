@@ -568,7 +568,8 @@ assert(!v8_enable_generated_code_validator || v8_current_cpu == "x64" ||
            v8_current_cpu == "arm64",
        "Generated code verifier is only supported on x64 and arm64")
 if (v8_enable_disassembler == "") {
-  v8_enable_disassembler = v8_enable_debugging_features
+  v8_enable_disassembler =
+      v8_enable_debugging_features || v8_enable_generated_code_validator
 }
 if (v8_enable_trace_maps == "") {
   v8_enable_trace_maps = v8_enable_debugging_features
@@ -604,6 +605,7 @@ if (v8_enable_snapshot_code_comments) {
 if (v8_enable_debug_code == "") {
   v8_enable_debug_code = v8_enable_verification_features || v8_dcheck_always_on
 }
+
 if (v8_enable_snapshot_native_code_counters == "") {
   v8_enable_snapshot_native_code_counters = v8_enable_debugging_features
 }
@@ -6918,8 +6920,10 @@ v8_cluster_source_set("v8_base_without_compiler") {
     ]
     if (v8_current_cpu == "x64") {
       deps += [ "//third_party/fadec" ]
+      sources += [ "src/sandbox/generated-code-validator-x64.cc" ]
     } else if (v8_current_cpu == "arm64") {
       deps += [ "//third_party/disarm" ]
+      sources += [ "src/sandbox/generated-code-validator-arm64.cc" ]
     }
   }
 

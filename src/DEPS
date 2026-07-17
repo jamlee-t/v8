@@ -153,4 +153,10 @@ specific_include_rules = {
     "+src/heap/cppgc-js/cpp-heap.h",
     "+src/heap/cppgc-js/cpp-snapshot.h",
   ],
+  "generated-code-validator-arm64\.cc": [
+    "+third_party/disarm/src/disarm64.h",
+  ],
+  "generated-code-validator-x64\.cc": [
+    "+third_party/fadec/src/fadec.h",
+  ],
 }

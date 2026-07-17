@@ -165,11 +165,6 @@ v8_flag(name = "v8_enable_test_features")
 v8_flag(name = "v8_wasm_random_fuzzers")
 
 v8_flag(
-    name = "v8_enable_generated_code_validator",
-    default = False,
-)
-
-v8_flag(
     name = "v8_enable_maglev",
     default = True,
 )
@@ -504,22 +499,6 @@ selects.config_setting_group(
     ],
 )
 
-selects.config_setting_group(
-    name = "is_x64_and_generated_code_validator",
-    match_all = [
-        "@v8//bazel/config:v8_target_x64",
-        ":is_v8_enable_generated_code_validator",
-    ],
-)
-
-selects.config_setting_group(
-    name = "is_arm64_and_generated_code_validator",
-    match_all = [
-        "@v8//bazel/config:v8_target_arm64",
-        ":is_v8_enable_generated_code_validator",
-    ],
-)
-
 v8_custom_config(name = "default")
 
 v8_config(
@@ -531,7 +510,6 @@ v8_config(
         "v8_deprecation_warnings": "V8_DEPRECATION_WARNINGS",
         "v8_imminent_deprecation_warnings": "V8_IMMINENT_DEPRECATION_WARNINGS",
         "v8_enable_debug_code": "V8_ENABLE_DEBUG_CODE",
-        "v8_enable_generated_code_validator": "V8_ENABLE_GENERATED_CODE_VALIDATOR",
         "v8_enable_disassembler": "ENABLE_DISASSEMBLER",
         "v8_enable_global_handle_zapping": "ENABLE_GLOBAL_HANDLE_ZAPPING",
         "v8_enable_local_handle_zapping": "ENABLE_LOCAL_HANDLE_ZAPPING",
@@ -2798,12 +2776,6 @@ filegroup(
         ":v8_bigint",
         ":v8_heap_base_files",
     ] + select({
-        ":is_v8_enable_generated_code_validator": [
-            "src/sandbox/generated-code-validator.cc",
-            "src/sandbox/generated-code-validator.h",
-        ],
-        "//conditions:default": [],
-    }) + select({
         "@v8//bazel/config:v8_target_ia32": [
             "src/baseline/ia32/baseline-assembler-ia32-inl.h",
             "src/baseline/ia32/baseline-compiler-ia32-inl.h",
@@ -4746,11 +4718,7 @@ v8_library(
         "@abseil-cpp//absl/container:flat_hash_set",
         "@abseil-cpp//absl/functional:overload",
         "@highway//:hwy",
-    ] + select({
-        ":is_x64_and_generated_code_validator": ["//third_party/fadec"],
-        ":is_arm64_and_generated_code_validator": ["//third_party/disarm"],
-        "//conditions:default": [],
-    }),
+    ],
 )
 
 v8_library(

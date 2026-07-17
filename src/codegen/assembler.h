@@ -544,9 +544,15 @@ class V8_EXPORT_PRIVATE AssemblerBase : public Malloced {
 
   bool ShouldRecordRelocInfo(RelocInfo::Mode rmode) const {
     DCHECK(!RelocInfo::IsNoInfo(rmode));
+    // Don't record reloc info that will never be used. This applies to certain
+    // reference types that are only needed for (de)serialization and are never
+    // updated by the GC. Omitting reloc info in this cases reduce the amount of
+    // memory used. This memory optimization is overriden when debug feature
+    // that need to track all references are enabled.
     if (RelocInfo::IsOnlyForSerializer(rmode) &&
         !options().record_reloc_info_for_serialization &&
-        !v8_flags.debug_code && !v8_flags.slow_debug_code) {
+        !v8_flags.debug_code && !v8_flags.slow_debug_code &&
+        !v8_flags.validate_generated_code) {
       return false;
     }
     return true;
