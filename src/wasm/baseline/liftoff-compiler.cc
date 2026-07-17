@@ -3790,15 +3790,13 @@ class LiftoffCompiler {
     VarState index = PopIndexToVarState(&index_high_word, &pinned);
     // Trap if any bit in the high word was set.
     CheckHighWordEmptyForTableType(decoder, index_high_word, &pinned);
-    VarState extract_shared_part{kI32, 0, 0};
 
     bool is_funcref = IsSubtypeOf(imm.table->type, kWasmFuncRef, env_->module);
     auto stub =
         is_funcref ? Builtin::kWasmTableSetFuncRef : Builtin::kWasmTableSet;
 
-    CallBuiltin(stub, MakeSig::Params(kI32, kI32, kIntPtrKind, kRefNull),
-                {table_index, extract_shared_part, index, value},
-                decoder->position());
+    CallBuiltin(stub, MakeSig::Params(kI32, kIntPtrKind, kRefNull),
+                {table_index, index, value}, decoder->position());
 
     RegisterDebugSideTableEntry(decoder, DebugSideTableBuilder::kDidSpill);
   }
@@ -7727,7 +7725,6 @@ class LiftoffCompiler {
     VarState table_index = LoadSmiConstant(imm.table.index, &pinned);
     VarState segment_index =
         LoadSmiConstant(imm.element_segment.index, &pinned);
-    VarState extract_shared_data = LoadSmiConstant(0, &pinned);
 
     VarState size = __ PopVarState();
     if (size.is_reg()) pinned.set(size.reg());
@@ -7739,11 +7736,10 @@ class LiftoffCompiler {
     // Trap if any bit in high word was set.
     CheckHighWordEmptyForTableType(decoder, index_high_word, &pinned);
 
-    CallBuiltin(
-        Builtin::kWasmTableInit,
-        MakeSig::Params(kIntPtrKind, kI32, kI32, kSmiKind, kSmiKind, kSmiKind),
-        {dst, src, size, table_index, segment_index, extract_shared_data},
-        decoder->position());
+    CallBuiltin(Builtin::kWasmTableInit,
+                MakeSig::Params(kIntPtrKind, kI32, kI32, kSmiKind, kSmiKind),
+                {dst, src, size, table_index, segment_index},
+                decoder->position());
 
     RegisterDebugSideTableEntry(decoder, DebugSideTableBuilder::kDidSpill);
   }
@@ -7779,7 +7775,6 @@ class LiftoffCompiler {
 
     VarState table_src_index = LoadSmiConstant(imm.table_src.index, &pinned);
     VarState table_dst_index = LoadSmiConstant(imm.table_dst.index, &pinned);
-    VarState extract_shared_data = LoadSmiConstant(0, &pinned);
 
     VarState size = PopIndexToVarState(&index_high_word, &pinned);
     VarState src = PopIndexToVarState(&index_high_word, &pinned);
@@ -7788,12 +7783,11 @@ class LiftoffCompiler {
     // Trap if any bit in the combined high words was set.
     CheckHighWordEmptyForTableType(decoder, index_high_word, &pinned);
 
-    CallBuiltin(
-        Builtin::kWasmTableCopy,
-        MakeSig::Params(kIntPtrKind, kIntPtrKind, kIntPtrKind, kSmiKind,
-                        kSmiKind, kSmiKind),
-        {dst, src, size, table_dst_index, table_src_index, extract_shared_data},
-        decoder->position());
+    CallBuiltin(Builtin::kWasmTableCopy,
+                MakeSig::Params(kIntPtrKind, kIntPtrKind, kIntPtrKind, kSmiKind,
+                                kSmiKind),
+                {dst, src, size, table_dst_index, table_src_index},
+                decoder->position());
 
     RegisterDebugSideTableEntry(decoder, DebugSideTableBuilder::kDidSpill);
     MaybeOSR();
@@ -7811,13 +7805,11 @@ class LiftoffCompiler {
     // If `delta` is, OOB table.grow should return -1.
     VarState delta = PopIndexToVarStateSaturating(&pinned);
     VarState value = __ PopVarState();
-    VarState extract_shared_data(kI32, 0, 0);
 
-    CallBuiltin(Builtin::kWasmTableGrow,
-                MakeSig::Returns(kSmiKind).Params(kSmiKind, kIntPtrKind, kI32,
-                                                  kRefNull),
-                {table_index, delta, extract_shared_data, value},
-                decoder->position());
+    CallBuiltin(
+        Builtin::kWasmTableGrow,
+        MakeSig::Returns(kSmiKind).Params(kSmiKind, kIntPtrKind, kRefNull),
+        {table_index, delta, value}, decoder->position());
 
     RegisterDebugSideTableEntry(decoder, DebugSideTableBuilder::kDidSpill);
     MaybeOSR();
@@ -7879,7 +7871,6 @@ class LiftoffCompiler {
     LiftoffRegList pinned;
 
     VarState table_index = LoadSmiConstant(imm.index, &pinned);
-    VarState extract_shared_data{kI32, 0, 0};
 
     VarState count = PopIndexToVarState(&high_words, &pinned);
     VarState value = __ PopVarState();
@@ -7888,11 +7879,9 @@ class LiftoffCompiler {
     // Trap if any bit in the combined high words was set.
     CheckHighWordEmptyForTableType(decoder, high_words, &pinned);
 
-    CallBuiltin(
-        Builtin::kWasmTableFill,
-        MakeSig::Params(kIntPtrKind, kIntPtrKind, kI32, kSmiKind, kRefNull),
-        {start, count, extract_shared_data, table_index, value},
-        decoder->position());
+    CallBuiltin(Builtin::kWasmTableFill,
+                MakeSig::Params(kIntPtrKind, kIntPtrKind, kSmiKind, kRefNull),
+                {start, count, table_index, value}, decoder->position());
 
     RegisterDebugSideTableEntry(decoder, DebugSideTableBuilder::kDidSpill);
   }
@@ -8551,21 +8540,15 @@ class LiftoffCompiler {
         pinned.set(__ GetUnusedRegister(kGpReg, pinned));
     LoadSmi(is_element_reg, array_imm.array_type->element_type().is_ref());
 
-    LiftoffRegister extract_shared_data_reg =
-        pinned.set(__ GetUnusedRegister(kGpReg, pinned));
-    LoadSmi(extract_shared_data_reg, 0);
-
     CallBuiltin(
         Builtin::kWasmArrayNewSegment,
-        MakeSig::Returns(kRef).Params(kI32, kI32, kI32, kSmiKind, kSmiKind,
-                                      kRef),
+        MakeSig::Returns(kRef).Params(kI32, kI32, kI32, kSmiKind, kRef),
         {
             VarState{kI32, static_cast<int>(segment_imm.index), 0},  // segment
             __ cache_state()->stack_state.end()[-2],                 // offset
             __ cache_state()->stack_state.end()[-1],                 // length
-            VarState{kSmiKind, is_element_reg, 0},           // is_element
-            VarState{kSmiKind, extract_shared_data_reg, 0},  // shared
-            VarState{kRef, rtt, 0}                           // rtt
+            VarState{kSmiKind, is_element_reg, 0},  // is_element
+            VarState{kRef, rtt, 0}                  // rtt
         },
         decoder->position());
 
@@ -8597,21 +8580,15 @@ class LiftoffCompiler {
         pinned.set(__ GetUnusedRegister(kGpReg, pinned));
     LoadSmi(is_element_reg, array_imm.array_type->element_type().is_ref());
 
-    LiftoffRegister extract_shared_data_reg =
-        pinned.set(__ GetUnusedRegister(kGpReg, pinned));
-    LoadSmi(extract_shared_data_reg, 0);
-
     // Builtin parameter order: array_index, segment_offset, length,
     //                          segment_index, array.
     CallBuiltin(Builtin::kWasmArrayInitSegment,
-                MakeSig::Params(kI32, kI32, kI32, kSmiKind, kSmiKind, kSmiKind,
-                                kRefNull),
+                MakeSig::Params(kI32, kI32, kI32, kSmiKind, kSmiKind, kRefNull),
                 {__ cache_state()->stack_state.end()[-3],
                  __ cache_state()->stack_state.end()[-2],
                  __ cache_state()->stack_state.end()[-1],
                  VarState{kSmiKind, segment_index_reg, 0},
                  VarState{kSmiKind, is_element_reg, 0},
-                 VarState{kSmiKind, extract_shared_data_reg, 0},
                  __ cache_state()->stack_state.end()[-4]},
                 decoder->position());
     __ DropValues(4);
@@ -8686,14 +8663,8 @@ class LiftoffCompiler {
 
   LiftoffRegister RttCanon(FullDecoder* decoder, ModuleTypeIndex type_index,
                            LiftoffRegList pinned) {
-    SharedFlag is_shared = decoder->module_->type(type_index).is_shared;
     LiftoffRegister rtt = pinned.set(__ GetUnusedRegister(kGpReg, pinned));
-    if (is_shared) {
-      LOAD_PROTECTED_PTR_INSTANCE_FIELD(rtt.gp(), SharedPart, pinned);
-      LOAD_TAGGED_PTR_FROM_INSTANCE(rtt.gp(), ManagedObjectMaps, rtt.gp())
-    } else {
-      LOAD_TAGGED_PTR_INSTANCE_FIELD(rtt.gp(), ManagedObjectMaps, pinned);
-    }
+    LOAD_TAGGED_PTR_INSTANCE_FIELD(rtt.gp(), ManagedObjectMaps, pinned);
     __ LoadTaggedPointer(
         rtt.gp(), rtt.gp(), no_reg,
         FixedArray::OffsetOfElementAt(type_index.index) - kHeapObjectTag);

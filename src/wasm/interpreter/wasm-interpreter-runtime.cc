@@ -535,8 +535,8 @@ void WasmInterpreterRuntime::TableInit(const uint8_t*& current_code,
 
   std::optional<MessageTemplate> msg_template =
       WasmTrustedInstanceData::InitTableEntries(
-          isolate_, trusted_data, trusted_data, table_index,
-          element_segment_index, dst, src, size);
+          isolate_, trusted_data, table_index, element_segment_index, dst, src,
+          size);
   // See WasmInstanceObject::InitTableEntries.
   if (msg_template == MessageTemplate::kWasmTrapTableOutOfBounds) {
     SetTrap(MessageTemplate::kWasmTrapTableOutOfBounds, current_code);

@@ -373,8 +373,6 @@ WTI_TAGGED_ACCESSORS(tables, Tagged<FixedArray>, kTablesOffset)
 WTI_OPTIONAL_TAGGED_ACCESSORS(interpreter_object, Tagged<Tuple2>,
                               kInterpreterObjectOffset)
 #endif  // V8_ENABLE_DRUMBRAKE
-WTI_PROTECTED_POINTER_ACCESSORS(shared_part, WasmTrustedInstanceData,
-                                kProtectedSharedPartOffset)
 WTI_PROTECTED_POINTER_ACCESSORS(dispatch_table0, WasmDispatchTable,
                                 kProtectedDispatchTable0Offset)
 WTI_PROTECTED_POINTER_ACCESSORS(dispatch_tables, ProtectedFixedArray,

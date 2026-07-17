@@ -578,7 +578,7 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
   Handle<Foreign> NewForeign(
       Address addr, AllocationType allocation_type = AllocationType::kYoung);
 
-  Handle<TrustedForeign> NewTrustedForeign(Address addr, SharedFlag shared);
+  Handle<TrustedForeign> NewTrustedForeign(Address addr);
 
   Handle<Cell> NewCell(Tagged<Smi> value);
   Handle<Cell> NewCell();
@@ -853,12 +853,11 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
       DirectHandle<Map> map);
 
 #if V8_ENABLE_WEBASSEMBLY
-  DirectHandle<WasmTrustedInstanceData> NewWasmTrustedInstanceData(
-      SharedFlag shared);
+  DirectHandle<WasmTrustedInstanceData> NewWasmTrustedInstanceData();
   DirectHandle<WasmDispatchTable> NewWasmDispatchTable(
-      int length, wasm::CanonicalValueType table_type, SharedFlag shared);
+      int length, wasm::CanonicalValueType table_type);
   DirectHandle<WasmDispatchTableForImports> NewWasmDispatchTableForImports(
-      int length, SharedFlag shared);
+      int length);
   DirectHandle<WasmTypeInfo> NewWasmTypeInfo(
       wasm::CanonicalValueType type, wasm::CanonicalValueType element_type,
       DirectHandle<Map> opt_parent, int num_supertypes, SharedFlag shared);
@@ -925,7 +924,6 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
   // {MessageTemplate} if computing the array's elements leads to an error.
   DirectHandle<Object> NewWasmArrayFromElementSegment(
       DirectHandle<WasmTrustedInstanceData> trusted_instance_data,
-      DirectHandle<WasmTrustedInstanceData> shared_trusted_instance_data,
       uint32_t segment_index, uint32_t start_offset, uint32_t length,
       DirectHandle<Map> map, AllocationType allocation,
       wasm::CanonicalValueType element_type);

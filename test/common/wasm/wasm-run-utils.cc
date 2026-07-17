@@ -218,9 +218,7 @@ uint8_t* TestingModuleBuilder::AddMemory(uint32_t size, SharedFlag shared,
   mem0_size_ = size;
   CHECK(size == 0 || mem0_start_);
 
-  // TODO(14616): Add shared_trusted_instance_data_.
   WasmMemoryObject::UseInInstance(isolate_, memory_object,
-                                  trusted_instance_data_,
                                   trusted_instance_data_, 0);
   // TODO(wasm): Delete the following line when test-run-wasm will use a
   // multiple of kPageSize as memory size. At the moment, the effect of these
@@ -498,7 +496,7 @@ DirectHandle<WasmInstanceObject> TestingModuleBuilder::InitInstanceObject() {
 
   DirectHandle<WasmTrustedInstanceData> trusted_data =
       WasmTrustedInstanceData::New(isolate_, module_object,
-                                   std::move(native_module), SharedFlag{false});
+                                   std::move(native_module));
   // TODO(42204563): Avoid crashing if the instance object is not available.
   CHECK(trusted_data->has_instance_object());
   DirectHandle<WasmInstanceObject> instance_object(

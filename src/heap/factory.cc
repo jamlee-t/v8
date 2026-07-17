@@ -2040,12 +2040,10 @@ Factory::NewPromiseResolveThenableJobTask(
 
 #if V8_ENABLE_WEBASSEMBLY
 
-DirectHandle<WasmTrustedInstanceData> Factory::NewWasmTrustedInstanceData(
-    SharedFlag shared) {
+DirectHandle<WasmTrustedInstanceData> Factory::NewWasmTrustedInstanceData() {
   Tagged<WasmTrustedInstanceData> result =
       TrustedCast<WasmTrustedInstanceData>(AllocateRawWithImmortalMap(
-          WasmTrustedInstanceData::kSize,
-          shared ? AllocationType::kSharedTrusted : AllocationType::kTrusted,
+          WasmTrustedInstanceData::kSize, AllocationType::kTrusted,
           read_only_roots().wasm_trusted_instance_data_map()));
   DisallowGarbageCollection no_gc;
   // Published after fields are initialized on the caller side.
@@ -2061,7 +2059,7 @@ DirectHandle<WasmTrustedInstanceData> Factory::NewWasmTrustedInstanceData(
 }
 
 DirectHandle<WasmDispatchTable> Factory::NewWasmDispatchTable(
-    int length, wasm::CanonicalValueType table_type, SharedFlag shared) {
+    int length, wasm::CanonicalValueType table_type) {
   CHECK_LE(length, WasmDispatchTable::kMaxLength);
 
   DirectHandle<TrustedManaged<WasmDispatchTableData>> offheap_data;
@@ -2070,15 +2068,13 @@ DirectHandle<WasmDispatchTable> Factory::NewWasmDispatchTable(
     size_t estimated_offheap_size = 0;
     offheap_data = TrustedManaged<WasmDispatchTableData>::From(
         isolate(), estimated_offheap_size,
-        std::make_shared<WasmDispatchTableData>(), shared);
+        std::make_shared<WasmDispatchTableData>());
   }
 
   int bytes = WasmDispatchTable::SizeFor(length);
-  Tagged<WasmDispatchTable> result =
-      UncheckedCast<WasmDispatchTable>(AllocateRawWithImmortalMap(
-          bytes,
-          shared ? AllocationType::kSharedTrusted : AllocationType::kTrusted,
-          read_only_roots().wasm_dispatch_table_map()));
+  Tagged<WasmDispatchTable> result = UncheckedCast<WasmDispatchTable>(
+      AllocateRawWithImmortalMap(bytes, AllocationType::kTrusted,
+                                 read_only_roots().wasm_dispatch_table_map()));
   DisallowGarbageCollection no_gc;
   result->WriteField<int>(WasmDispatchTable::kLengthOffset, length);
   result->WriteField<int>(WasmDispatchTable::kCapacityOffset, length);
@@ -2097,7 +2093,7 @@ DirectHandle<WasmDispatchTable> Factory::NewWasmDispatchTable(
 }
 
 DirectHandle<WasmDispatchTableForImports>
-Factory::NewWasmDispatchTableForImports(int length, SharedFlag shared) {
+Factory::NewWasmDispatchTableForImports(int length) {
   CHECK_LE(length, WasmDispatchTableForImports::kMaxLength);
 
   // Very rough estimate: half the imports need wrappers, each wrapper needs
@@ -2110,13 +2106,12 @@ Factory::NewWasmDispatchTableForImports(int length, SharedFlag shared) {
   DirectHandle<TrustedManaged<WasmDispatchTableData>> offheap_data =
       TrustedManaged<WasmDispatchTableData>::From(
           isolate(), estimated_offheap_size,
-          std::make_shared<WasmDispatchTableData>(), shared);
+          std::make_shared<WasmDispatchTableData>());
 
   int bytes = WasmDispatchTableForImports::SizeFor(length);
   Tagged<WasmDispatchTableForImports> result =
       UncheckedCast<WasmDispatchTableForImports>(AllocateRawWithImmortalMap(
-          bytes,
-          shared ? AllocationType::kSharedTrusted : AllocationType::kTrusted,
+          bytes, AllocationType::kTrusted,
           read_only_roots().wasm_dispatch_table_for_imports_map()));
   DisallowGarbageCollection no_gc;
   result->WriteField<int>(WasmDispatchTableForImports::kLengthOffset, length);
@@ -2490,7 +2485,6 @@ DirectHandle<WasmArray> Factory::NewWasmArrayFromMemory(
 
 DirectHandle<Object> Factory::NewWasmArrayFromElementSegment(
     DirectHandle<WasmTrustedInstanceData> trusted_instance_data,
-    DirectHandle<WasmTrustedInstanceData> shared_trusted_instance_data,
     uint32_t segment_index, uint32_t start_offset, uint32_t length,
     DirectHandle<Map> map, AllocationType allocation,
     wasm::CanonicalValueType element_type) {
@@ -2500,8 +2494,7 @@ DirectHandle<Object> Factory::NewWasmArrayFromElementSegment(
   // If the element segment has not been initialized yet, lazily initialize it
   // now.
   std::optional<MessageTemplate> opt_error = wasm::InitializeElementSegment(
-      isolate(), trusted_instance_data, shared_trusted_instance_data,
-      segment_index);
+      isolate(), trusted_instance_data, segment_index);
   if (opt_error.has_value()) {
     return direct_handle(Smi::FromEnum(opt_error.value()), isolate());
   }
@@ -5372,16 +5365,13 @@ DirectHandle<DictionaryTemplateInfo> Factory::NewDictionaryTemplateInfo(
   return direct_handle(obj, isolate());
 }
 
-Handle<TrustedForeign> Factory::NewTrustedForeign(Address addr,
-                                                  SharedFlag shared) {
+Handle<TrustedForeign> Factory::NewTrustedForeign(Address addr) {
   // Statically ensure that it is safe to allocate foreigns in paged spaces.
   static_assert(sizeof(TrustedForeign) <= kMaxRegularHeapObjectSize);
   Tagged<Map> map = *trusted_foreign_map();
   Tagged<TrustedForeign> foreign =
       TrustedCast<TrustedForeign>(AllocateRawWithImmortalMap(
-          map->instance_size(),
-          shared ? AllocationType::kSharedTrusted : AllocationType::kTrusted,
-          map));
+          map->instance_size(), AllocationType::kTrusted, map));
   DisallowGarbageCollection no_gc;
   foreign->set_foreign_address(addr);
   return handle(foreign, isolate());

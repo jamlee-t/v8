@@ -3430,7 +3430,6 @@ void WasmTrustedInstanceData::WasmTrustedInstanceDataPrint(std::ostream& os) {
   PrintHeader(os, "WasmTrustedInstanceData");
   PRINT_OPTIONAL_WASM_INSTANCE_FIELD(instance_object, Brief);
   PRINT_OPTIONAL_WASM_INSTANCE_FIELD(native_context, Brief);
-  PRINT_WASM_INSTANCE_FIELD(shared_part, Brief);
   PRINT_WASM_INSTANCE_FIELD(memory_objects, Brief);
   PRINT_WASM_INSTANCE_FIELD(untagged_globals_buffer, Brief);
   PRINT_WASM_INSTANCE_FIELD(tagged_globals_buffer, Brief);

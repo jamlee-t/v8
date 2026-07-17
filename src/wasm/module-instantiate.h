@@ -114,7 +114,6 @@ MaybeDirectHandle<WasmInstanceObject> InstantiateToInstanceObject(
 std::optional<MessageTemplate> InitializeElementSegment(
     Isolate* isolate,
     DirectHandle<WasmTrustedInstanceData> trusted_instance_data,
-    DirectHandle<WasmTrustedInstanceData> shared_trusted_instance_data,
     uint32_t segment_index,
     PrecreateExternal precreate_external_functions = kOnlyInternalFunction);
 

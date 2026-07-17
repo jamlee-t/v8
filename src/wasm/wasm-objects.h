@@ -410,7 +410,6 @@ V8_OBJECT class WasmMemoryObject : public JSObject {
   V8_EXPORT_PRIVATE static void UseInInstance(
       Isolate* isolate, DirectHandle<WasmMemoryObject> memory,
       DirectHandle<WasmTrustedInstanceData> trusted_instance_data,
-      DirectHandle<WasmTrustedInstanceData> shared_trusted_instance_data,
       uint32_t memory_index_in_instance);
   inline bool has_maximum_pages();
 
@@ -608,7 +607,6 @@ V8_OBJECT class V8_EXPORT_PRIVATE WasmTrustedInstanceData
   // interpreter.
   DECL_ACCESSORS(imported_function_indices, Tagged<FixedInt32Array>)
 #endif  // V8_ENABLE_DRUMBRAKE
-  DECL_PROTECTED_POINTER_ACCESSORS(shared_part, WasmTrustedInstanceData)
   DECL_PROTECTED_POINTER_ACCESSORS(dispatch_table0, WasmDispatchTable)
   DECL_PROTECTED_POINTER_ACCESSORS(dispatch_tables, ProtectedFixedArray)
   inline Tagged<WasmDispatchTable> dispatch_table(uint32_t i) const;
@@ -672,7 +670,6 @@ V8_OBJECT class V8_EXPORT_PRIVATE WasmTrustedInstanceData
   V(kElementSegmentsOffset, kTaggedSize)                                  \
   V(kInstanceObjectOffset, kTaggedSize)                                   \
   V(kNativeContextOffset, kTaggedSize)                                    \
-  V(kProtectedSharedPartOffset, kTaggedSize)                              \
   V(kMemoryObjectsOffset, kTaggedSize)                                    \
   V(kUntaggedGlobalsBufferOffset, kTaggedSize)                            \
   V(kTaggedGlobalsBufferOffset, kTaggedSize)                              \
@@ -725,7 +722,6 @@ V8_OBJECT class V8_EXPORT_PRIVATE WasmTrustedInstanceData
                     "imported_function_indices")                              \
   V(kElementSegmentsOffset, "element_segments")
 #define WASM_PROTECTED_INSTANCE_DATA_FIELDS(V)                             \
-  V(kProtectedSharedPartOffset, "shared_part")                             \
   V(kProtectedMemoryBasesAndSizesOffset, "memory_bases_and_sizes")         \
   V(kProtectedDataSegmentsOffset, "data_segments")                         \
   V(kProtectedDispatchTable0Offset, "dispatch_table0")                     \
@@ -780,7 +776,7 @@ V8_OBJECT class V8_EXPORT_PRIVATE WasmTrustedInstanceData
 
   static DirectHandle<WasmTrustedInstanceData> New(
       Isolate*, DirectHandle<WasmModuleObject>,
-      std::shared_ptr<wasm::NativeModule>, SharedFlag shared);
+      std::shared_ptr<wasm::NativeModule>);
 
   WasmCodePointer GetCallTarget(uint32_t func_index);
 
@@ -797,7 +793,6 @@ V8_OBJECT class V8_EXPORT_PRIVATE WasmTrustedInstanceData
   static std::optional<MessageTemplate> InitTableEntries(
       Isolate* isolate,
       DirectHandle<WasmTrustedInstanceData> trusted_instance_data,
-      DirectHandle<WasmTrustedInstanceData> shared_trusted_instance_data,
       uint32_t table_index, uint32_t segment_index, uint32_t dst, uint32_t src,
       uint32_t count) V8_WARN_UNUSED_RESULT;
 

@@ -334,8 +334,6 @@ uint32_t WasmModuleDebug::GetWasmData(Zone* zone, Isolate* isolate,
   if (!instance.is_null()) {
     DirectHandle<WasmTrustedInstanceData> trusted_data(
         instance->trusted_data(isolate), isolate);
-    DirectHandle<WasmTrustedInstanceData> shared_data(
-        trusted_data->shared_part(), isolate);
     Handle<WasmModuleObject> module_object(instance->module_object(), isolate);
     auto native_module = module_object->native_module();
     const wasm::WasmModule* module = native_module->module();
@@ -343,7 +341,7 @@ uint32_t WasmModuleDebug::GetWasmData(Zone* zone, Isolate* isolate,
       const WasmDataSegment& segment = module->data_segments[0];
       wasm::ValueOrError result = wasm::EvaluateConstantExpression(
           zone, segment.dest_addr, wasm::kWasmI32, module, isolate,
-          trusted_data, shared_data);
+          trusted_data);
 
       if (!wasm::is_error(result)) {
         uint32_t data_offset = wasm::to_value(result).to_u32();

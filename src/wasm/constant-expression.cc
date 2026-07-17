@@ -8,7 +8,6 @@
 #include "src/handles/handles.h"
 #include "src/heap/factory-inl.h"
 #include "src/heap/factory.h"
-#include "src/objects/oddball.h"
 #include "src/roots/roots.h"
 #include "src/wasm/constant-expression-interface.h"
 #include "src/wasm/function-body-decoder-impl.h"
@@ -30,8 +29,7 @@ WireBytesRef ConstantExpression::wire_bytes_ref() const {
 ValueOrError EvaluateConstantExpression(
     Zone* zone, ConstantExpression expr, ValueType expected,
     const WasmModule* module, Isolate* isolate,
-    DirectHandle<WasmTrustedInstanceData> trusted_instance_data,
-    DirectHandle<WasmTrustedInstanceData> shared_trusted_instance_data) {
+    DirectHandle<WasmTrustedInstanceData> trusted_instance_data) {
   switch (expr.kind()) {
     case ConstantExpression::Kind::kEmpty:
       UNREACHABLE();
@@ -72,8 +70,7 @@ ValueOrError EvaluateConstantExpression(
         WasmFullDecoder<Decoder::FullValidationTag, ConstantExpressionInterface,
                         kConstantExpression>
             decoder(zone, module, WasmEnabledFeatures::All(), &detected, body,
-                    module, isolate, trusted_instance_data,
-                    shared_trusted_instance_data);
+                    module, isolate, trusted_instance_data);
 
         decoder.DecodeFunctionBody();
 

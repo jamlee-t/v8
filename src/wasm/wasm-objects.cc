@@ -212,9 +212,9 @@ DirectHandle<WasmTableObject> WasmTableObject::New(
   }
   bool is_function_table = canonical_type.IsFunctionType();
   DirectHandle<WasmDispatchTable> dispatch_table =
-      is_function_table ? isolate->factory()->NewWasmDispatchTable(
-                              initial, canonical_type, SharedFlag{false})
-                        : isolate->factory()->empty_wasm_dispatch_table();
+      is_function_table
+          ? isolate->factory()->NewWasmDispatchTable(initial, canonical_type)
+          : isolate->factory()->empty_wasm_dispatch_table();
 
   DirectHandle<UnionOf<Undefined, Number, BigInt>> max =
       isolate->factory()->undefined_value();
@@ -895,16 +895,10 @@ MaybeDirectHandle<WasmMemoryObject> WasmMemoryObject::New(
 void WasmMemoryObject::UseInInstance(
     Isolate* isolate, DirectHandle<WasmMemoryObject> memory,
     DirectHandle<WasmTrustedInstanceData> trusted_instance_data,
-    DirectHandle<WasmTrustedInstanceData> shared_trusted_instance_data,
     uint32_t memory_index_in_instance) {
   SetInstanceMemory(*trusted_instance_data, memory->array_buffer(),
                     memory->backing_store().as_shared_ptr(),
                     memory_index_in_instance);
-  if (!shared_trusted_instance_data.is_null()) {
-    SetInstanceMemory(*shared_trusted_instance_data, memory->array_buffer(),
-                      memory->backing_store().as_shared_ptr(),
-                      memory_index_in_instance);
-  }
   DirectHandle<WeakArrayList> instances{memory->instances(), isolate};
   auto weak_instance_object = MaybeObjectDirectHandle::Weak(
       trusted_instance_data->instance_object(), isolate);
@@ -1454,7 +1448,7 @@ DirectHandle<Tuple2> WasmTrustedInstanceData::GetInterpreterObject(
 
 DirectHandle<WasmTrustedInstanceData> WasmTrustedInstanceData::New(
     Isolate* isolate, DirectHandle<WasmModuleObject> module_object,
-    std::shared_ptr<wasm::NativeModule> native_module, SharedFlag shared) {
+    std::shared_ptr<wasm::NativeModule> native_module) {
   // We don't read the NativeModule from the WasmModuleObject here to guard
   // against swapping attacks.
   DCHECK_EQ(native_module.get(), module_object->native_module().raw());
@@ -1464,31 +1458,30 @@ DirectHandle<WasmTrustedInstanceData> WasmTrustedInstanceData::New(
   // initialized yet, which can lead to heap verification errors.
   const WasmModule* module = native_module->module();
 
-  AllocationType allocation =
-      shared ? AllocationType::kSharedOld : AllocationType::kYoung;
-  AllocationType trusted_allocation =
-      shared ? AllocationType::kSharedTrusted : AllocationType::kTrusted;
-
   uint32_t num_imported_functions = module->num_imported_functions;
   DirectHandle<WasmDispatchTableForImports> dispatch_table_for_imports =
-      isolate->factory()->NewWasmDispatchTableForImports(num_imported_functions,
-                                                         shared);
+      isolate->factory()->NewWasmDispatchTableForImports(
+          num_imported_functions);
   DirectHandle<FixedArray> well_known_imports =
-      isolate->factory()->NewFixedArray(num_imported_functions, allocation);
+      isolate->factory()->NewFixedArray(num_imported_functions,
+                                        AllocationType::kYoung);
 
   DirectHandle<FixedArray> func_refs =
       isolate->factory()->NewFixedArrayWithZeroes(
-          static_cast<uint32_t>(module->functions.size()), allocation);
+          static_cast<uint32_t>(module->functions.size()),
+          AllocationType::kYoung);
 
   uint32_t num_imported_mutable_globals = module->num_imported_mutable_globals;
-  DirectHandle<FixedArray> imported_mutable_globals_buffers =
-      FixedArray::New(isolate, num_imported_mutable_globals, allocation);
+  DirectHandle<FixedArray> imported_mutable_globals_buffers = FixedArray::New(
+      isolate, num_imported_mutable_globals, AllocationType::kYoung);
   DirectHandle<FixedUInt32Array> imported_mutable_globals_offsets =
-      FixedUInt32Array::New(isolate, num_imported_mutable_globals, allocation);
+      FixedUInt32Array::New(isolate, num_imported_mutable_globals,
+                            AllocationType::kYoung);
 
   DirectHandle<TrustedPodArray<wasm::WireBytesRef>> data_segments =
       TrustedPodArray<wasm::WireBytesRef>::New(
-          isolate, module->num_declared_data_segments, trusted_allocation);
+          isolate, module->num_declared_data_segments,
+          AllocationType::kTrusted);
 
 #if V8_ENABLE_DRUMBRAKE
   DirectHandle<FixedInt32Array> imported_function_indices =
@@ -1498,15 +1491,15 @@ DirectHandle<WasmTrustedInstanceData> WasmTrustedInstanceData::New(
   static_assert(wasm::kV8MaxWasmMemories < kMaxInt / 2);
   uint32_t num_memories = static_cast<uint32_t>(module->memories.size());
   DirectHandle<FixedArray> memory_objects =
-      isolate->factory()->NewFixedArray(num_memories, allocation);
+      isolate->factory()->NewFixedArray(num_memories, AllocationType::kYoung);
   DirectHandle<TrustedFixedAddressArray> memory_bases_and_sizes =
       TrustedFixedAddressArray::New(isolate, 2 * num_memories,
-                                    trusted_allocation);
+                                    AllocationType::kTrusted);
 
   // TODO(clemensb): Should we have singleton empty dispatch table in the
   // trusted space?
   DirectHandle<WasmDispatchTable> empty_dispatch_table =
-      isolate->factory()->NewWasmDispatchTable(0, wasm::kWasmFuncRef, shared);
+      isolate->factory()->NewWasmDispatchTable(0, wasm::kWasmFuncRef);
   DirectHandle<ProtectedFixedArray> empty_protected_fixed_array =
       isolate->factory()->empty_protected_fixed_array();
 
@@ -1517,13 +1510,13 @@ DirectHandle<WasmTrustedInstanceData> WasmTrustedInstanceData::New(
       module_object->managed_native_module()->estimated_size();
   DirectHandle<TrustedManaged<wasm::NativeModule>>
       trusted_managed_native_module = TrustedManaged<wasm::NativeModule>::From(
-          isolate, estimated_size, native_module, shared);
+          isolate, estimated_size, native_module);
 
   // Now allocate the WasmTrustedInstanceData.
   // During this step, no more allocations should happen because the instance is
   // incomplete yet, so we should not trigger heap verification at this point.
   DirectHandle<WasmTrustedInstanceData> trusted_data =
-      isolate->factory()->NewWasmTrustedInstanceData(shared);
+      isolate->factory()->NewWasmTrustedInstanceData();
   {
     DisallowHeapAllocation no_gc;
 
@@ -1543,16 +1536,13 @@ DirectHandle<WasmTrustedInstanceData> WasmTrustedInstanceData::New(
         *imported_mutable_globals_offsets);
     trusted_data->set_dispatch_table0(*empty_dispatch_table);
     trusted_data->set_dispatch_tables(*empty_protected_fixed_array);
-    trusted_data->set_shared_part(*trusted_data);  // TODO(14616): Good enough?
     trusted_data->set_data_segments(*data_segments);
     trusted_data->set_element_segments(empty_fixed_array);
     trusted_data->set_managed_native_module(*trusted_managed_native_module);
 #if V8_ENABLE_DRUMBRAKE
     trusted_data->set_imported_function_indices(*imported_function_indices);
 #endif  // V8_ENABLE_DRUMBRAKE
-    if (!shared) {
-      trusted_data->set_native_context(*isolate->native_context());
-    }
+    trusted_data->set_native_context(*isolate->native_context());
     trusted_data->set_jump_table_start(native_module->jump_table_start());
     trusted_data->set_hook_on_function_call_address(
         isolate->debug()->hook_on_function_call_address());
@@ -1582,28 +1572,27 @@ DirectHandle<WasmTrustedInstanceData> WasmTrustedInstanceData::New(
   // initialized.
   trusted_data->Publish(isolate);
 
-  if (!shared) {
-    // Allocate the WasmInstanceObject (JS wrapper).
-    DirectHandle<JSFunction> instance_cons(
-        isolate->native_context()->wasm_instance_constructor(), isolate);
-    DirectHandle<WasmInstanceObject> instance_object = Cast<WasmInstanceObject>(
-        isolate->factory()->NewJSObject(instance_cons, AllocationType::kOld));
-    instance_object->set_trusted_data(*trusted_data);
-    instance_object->set_module_object(*module_object);
-    trusted_data->set_instance_object(*instance_object);
+  // Allocate the WasmInstanceObject (JS wrapper).
+  DirectHandle<JSFunction> instance_cons(
+      isolate->native_context()->wasm_instance_constructor(), isolate);
+  DirectHandle<WasmInstanceObject> instance_object = Cast<WasmInstanceObject>(
+      isolate->factory()->NewJSObject(instance_cons, AllocationType::kOld));
+  instance_object->set_trusted_data(*trusted_data);
+  instance_object->set_module_object(*module_object);
+  trusted_data->set_instance_object(*instance_object);
 
-    // Insert the new instance into the scripts weak list of instances. This
-    // list is used for breakpoints affecting all instances belonging to the
-    // script.
-    if (module_object->script()->type() == Script::Type::kWasm) {
-      DirectHandle<WeakArrayList> weak_instance_list(
-          module_object->script()->wasm_weak_instance_list(), isolate);
-      weak_instance_list =
-          WeakArrayList::Append(isolate, weak_instance_list,
-                                MaybeObjectDirectHandle::Weak(instance_object));
-      module_object->script()->set_wasm_weak_instance_list(*weak_instance_list);
-    }
+  // Insert the new instance into the scripts weak list of instances. This
+  // list is used for breakpoints affecting all instances belonging to the
+  // script.
+  if (module_object->script()->type() == Script::Type::kWasm) {
+    DirectHandle<WeakArrayList> weak_instance_list(
+        module_object->script()->wasm_weak_instance_list(), isolate);
+    weak_instance_list =
+        WeakArrayList::Append(isolate, weak_instance_list,
+                              MaybeObjectDirectHandle::Weak(instance_object));
+    module_object->script()->set_wasm_weak_instance_list(*weak_instance_list);
   }
+
   return trusted_data;
 }
 
@@ -1688,32 +1677,20 @@ bool WasmTrustedInstanceData::CopyTableEntries(
 std::optional<MessageTemplate> WasmTrustedInstanceData::InitTableEntries(
     Isolate* isolate,
     DirectHandle<WasmTrustedInstanceData> trusted_instance_data,
-    DirectHandle<WasmTrustedInstanceData> shared_trusted_instance_data,
     uint32_t table_index, uint32_t segment_index, uint32_t dst, uint32_t src,
     uint32_t count) {
-  const WasmModule* module = trusted_instance_data->module();
-
-  SharedFlag table_is_shared = module->tables[table_index].shared;
-  SharedFlag segment_is_shared = module->elem_segments[segment_index].shared;
-
   DirectHandle<WasmTableObject> table_object(
-      Cast<WasmTableObject>((table_is_shared ? shared_trusted_instance_data
-                                             : trusted_instance_data)
-                                ->tables()
-                                ->get(table_index)),
+      Cast<WasmTableObject>(trusted_instance_data->tables()->get(table_index)),
       isolate);
 
   // If needed, try to lazily initialize the element segment.
   std::optional<MessageTemplate> opt_error = wasm::InitializeElementSegment(
-      isolate, trusted_instance_data, shared_trusted_instance_data,
-      segment_index);
+      isolate, trusted_instance_data, segment_index);
   if (opt_error.has_value()) return opt_error;
 
   DirectHandle<FixedArray> elem_segment(
-      Cast<FixedArray>((segment_is_shared ? shared_trusted_instance_data
-                                          : trusted_instance_data)
-                           ->element_segments()
-                           ->get(segment_index)),
+      Cast<FixedArray>(
+          trusted_instance_data->element_segments()->get(segment_index)),
       isolate);
   if (!base::IsInBounds<uint64_t>(dst, count, table_object->current_length())) {
     return {MessageTemplate::kWasmTrapTableOutOfBounds};
@@ -1723,9 +1700,7 @@ std::optional<MessageTemplate> WasmTrustedInstanceData::InitTableEntries(
     return {MessageTemplate::kWasmTrapElementSegmentOutOfBounds};
   }
   DirectHandle<WasmDispatchTable> dispatch_table(
-      (table_is_shared ? shared_trusted_instance_data : trusted_instance_data)
-          ->dispatch_table(table_index),
-      isolate);
+      trusted_instance_data->dispatch_table(table_index), isolate);
   for (size_t i = 0; i < count; i++) {
     WasmTableObject::Set(
         isolate, table_object, dispatch_table, static_cast<int>(dst + i),
@@ -2493,9 +2468,8 @@ DirectHandle<WasmDispatchTable> WasmDispatchTable::Grow(
   uint32_t new_capacity = old_capacity + grow;
   DCHECK_LE(new_capacity, limit);
   DirectHandle<WasmDispatchTable> new_table =
-      isolate->factory()->NewWasmDispatchTable(
-          new_capacity, old_table->table_type(),
-          SharedFlag(HeapLayout::InAnySharedSpace(*old_table)));
+      isolate->factory()->NewWasmDispatchTable(new_capacity,
+                                               old_table->table_type());
 
   DisallowGarbageCollection no_gc;
   // Writing non-atomically is fine here because this is a freshly allocated
@@ -3060,8 +3034,7 @@ Handle<AsmWasmData> AsmWasmData::New(
       wasm::WasmCodeManager::EstimateNativeModuleMetaDataSize(module);
   DirectHandle<TrustedManaged<wasm::NativeModule>> managed_native_module =
       TrustedManaged<wasm::NativeModule>::From(isolate, memory_estimate,
-                                               std::move(native_module),
-                                               SharedFlag{false});
+                                               std::move(native_module));
   return isolate->factory()->NewAsmWasmData(managed_native_module, uses_bitset);
 }
 
