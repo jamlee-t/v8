@@ -5287,36 +5287,25 @@ ReduceResult MaglevGraphBuilder::BuildLoadConstantTypedArrayElement(
 }
 
 ReduceResult MaglevGraphBuilder::BuildStoreTypedArrayElement(
-    ValueNode* object, ValueNode* index, ElementsKind elements_kind) {
+    ValueNode* object, ValueNode* index, ElementsKind elements_kind,
+    ValueNode* value) {
 #define BUILD_STORE_TYPED_ARRAY(Type, value)                  \
   RETURN_IF_ABORT(AddNewNode<Store##Type##TypedArrayElement>( \
       {object, index, (value)}, elements_kind));
 
-  // TODO(leszeks): These operations have a deopt loop when the ToNumber
-  // conversion sees a type other than number or oddball. Turbofan has the same
-  // deopt loop, but ideally we'd avoid it.
   switch (elements_kind) {
-    case UINT8_CLAMPED_ELEMENTS: {
-      BUILD_STORE_TYPED_ARRAY(Int, GetAccumulatorUint8ClampedForToNumber())
-      break;
-    }
+    case UINT8_CLAMPED_ELEMENTS:
     case INT8_ELEMENTS:
     case INT16_ELEMENTS:
     case INT32_ELEMENTS:
     case UINT8_ELEMENTS:
     case UINT16_ELEMENTS:
     case UINT32_ELEMENTS: {
-      ValueNode* value;
-      GET_VALUE_OR_ABORT(value, GetAccumulatorTruncatedInt32ForToNumber(
-                                    NodeType::kNumberOrOddball));
       BUILD_STORE_TYPED_ARRAY(Int, value)
       break;
     }
     case FLOAT32_ELEMENTS:
     case FLOAT64_ELEMENTS: {
-      ValueNode* value;
-      GET_VALUE_OR_ABORT(
-          value, GetAccumulatorFloat64ForToNumber(NodeType::kNumberOrOddball));
       BUILD_STORE_TYPED_ARRAY(Double, value)
       break;
     }
@@ -5329,37 +5318,24 @@ ReduceResult MaglevGraphBuilder::BuildStoreTypedArrayElement(
 
 ReduceResult MaglevGraphBuilder::BuildStoreConstantTypedArrayElement(
     compiler::JSTypedArrayRef typed_array, ValueNode* index,
-    ElementsKind elements_kind) {
+    ElementsKind elements_kind, ValueNode* value) {
 #define BUILD_STORE_CONSTANT_TYPED_ARRAY(Type, value)                 \
   RETURN_IF_ABORT(AddNewNode<Store##Type##ConstantTypedArrayElement>( \
       {index, (value)}, typed_array, elements_kind));
 
-  // TODO(leszeks): These operations have a deopt loop when the ToNumber
-  // conversion sees a type other than number or oddball. Turbofan has the same
-  // deopt loop, but ideally we'd avoid it.
   switch (elements_kind) {
-    case UINT8_CLAMPED_ELEMENTS: {
-      BUILD_STORE_CONSTANT_TYPED_ARRAY(Int,
-                                       GetAccumulatorUint8ClampedForToNumber())
-      break;
-    }
+    case UINT8_CLAMPED_ELEMENTS:
     case INT8_ELEMENTS:
     case INT16_ELEMENTS:
     case INT32_ELEMENTS:
     case UINT8_ELEMENTS:
     case UINT16_ELEMENTS:
     case UINT32_ELEMENTS: {
-      ValueNode* value;
-      GET_VALUE_OR_ABORT(value, GetAccumulatorTruncatedInt32ForToNumber(
-                                    NodeType::kNumberOrOddball));
       BUILD_STORE_CONSTANT_TYPED_ARRAY(Int, value)
       break;
     }
     case FLOAT32_ELEMENTS:
     case FLOAT64_ELEMENTS: {
-      ValueNode* value;
-      GET_VALUE_OR_ABORT(
-          value, GetAccumulatorFloat64ForToNumber(NodeType::kNumberOrOddball));
       BUILD_STORE_CONSTANT_TYPED_ARRAY(Double, value)
       break;
     }
@@ -5388,11 +5364,6 @@ MaybeReduceResult MaglevGraphBuilder::TryBuildElementAccessOnTypedArray(
   }
 
   if (keyed_mode.access_mode() == compiler::AccessMode::kStore &&
-      StoreModeIgnoresTypeArrayOOB(keyed_mode.store_mode())) {
-    // TODO(victorgomes): Handle OOB mode.
-    return {};
-  }
-  if (keyed_mode.access_mode() == compiler::AccessMode::kStore &&
       elements_kind == UINT8_CLAMPED_ELEMENTS &&
       !IsSupported(CpuOperation::kFloat64Round)) {
     // TODO(victorgomes): Technically we still support if value (in the
@@ -5416,19 +5387,23 @@ MaybeReduceResult MaglevGraphBuilder::TryBuildElementAccessOnTypedArray(
   bool is_load_handling_oob =
       keyed_mode.access_mode() == compiler::AccessMode::kLoad &&
       LoadModeHandlesOOB(keyed_mode.load_mode());
+  bool is_store_handling_oob =
+      keyed_mode.access_mode() == compiler::AccessMode::kStore &&
+      StoreModeIgnoresTypeArrayOOB(keyed_mode.store_mode());
+  bool is_handling_oob = is_load_handling_oob || is_store_handling_oob;
 
   ValueNode* index;
   // TODO(mrcvtl): GetInt32 deopts on strings/non-int32s, and
   // GetInt32ElementIndex deopts on negative numbers. We need a variant of
   // CheckedObjectToIndex that accepts negative values to properly support both.
-  GET_VALUE_OR_ABORT(index, is_load_handling_oob
+  GET_VALUE_OR_ABORT(index, is_handling_oob
                                 ? GetInt32(index_object, true)
                                 : GetInt32ElementIndex(index_object));
 
   ValueNode* length;
   GET_VALUE_OR_ABORT(length, BuildLoadTypedArrayLength(object, elements_kind));
 
-  if (!is_load_handling_oob) {
+  if (!is_handling_oob) {
     RETURN_IF_ABORT(AddNewNode<CheckTypedArrayBounds>({index, length}));
   }
 
@@ -5467,18 +5442,61 @@ MaybeReduceResult MaglevGraphBuilder::TryBuildElementAccessOnTypedArray(
       DCHECK(!LoadModeHandlesOOB(keyed_mode.load_mode()));
       return emit_load();
     }
-    case compiler::AccessMode::kStore:
-      DCHECK(StoreModeIsInBounds(keyed_mode.store_mode()));
-      if (auto constant = object->TryCast<HeapConstant>()) {
-        compiler::HeapObjectRef constant_object = constant->object();
-        if (constant_object.IsJSTypedArray() &&
-            constant_object.AsJSTypedArray().is_off_heap_non_rab_gsab(
-                broker())) {
-          return BuildStoreConstantTypedArrayElement(
-              constant_object.AsJSTypedArray(), index, elements_kind);
-        }
+    case compiler::AccessMode::kStore: {
+      // We must perform value type conversions (`ToNumber` / clamping) prior to
+      // branching on OOB bounds so that side effects and deopts occur reliably.
+      // TODO(leszeks): These operations have a deopt loop when the ToNumber
+      // conversion sees a type other than number or oddball. Turbofan has the
+      // same deopt loop, but ideally we'd avoid it.
+      ValueNode* value;
+      switch (elements_kind) {
+        case UINT8_CLAMPED_ELEMENTS:
+          GET_VALUE_OR_ABORT(value, GetAccumulatorUint8ClampedForToNumber());
+          break;
+        case INT8_ELEMENTS:
+        case INT16_ELEMENTS:
+        case INT32_ELEMENTS:
+        case UINT8_ELEMENTS:
+        case UINT16_ELEMENTS:
+        case UINT32_ELEMENTS:
+          GET_VALUE_OR_ABORT(value, GetAccumulatorTruncatedInt32ForToNumber(
+                                        NodeType::kNumberOrOddball));
+          break;
+        case FLOAT32_ELEMENTS:
+        case FLOAT64_ELEMENTS:
+          GET_VALUE_OR_ABORT(value, GetAccumulatorFloat64ForToNumber(
+                                        NodeType::kNumberOrOddball));
+          break;
+        default:
+          UNREACHABLE();
       }
-      return BuildStoreTypedArrayElement(object, index, elements_kind);
+
+      const auto emit_store = [&]() -> ReduceResult {
+        if (auto constant = object->TryCast<HeapConstant>()) {
+          compiler::HeapObjectRef constant_object = constant->object();
+          if (constant_object.IsJSTypedArray() &&
+              constant_object.AsJSTypedArray().is_off_heap_non_rab_gsab(
+                  broker())) {
+            return BuildStoreConstantTypedArrayElement(
+                constant_object.AsJSTypedArray(), index, elements_kind, value);
+          }
+        }
+        return BuildStoreTypedArrayElement(object, index, elements_kind, value);
+      };
+
+      if (is_store_handling_oob) {
+        Subgraph<MaglevGraphBuilder> subgraph(&reducer_, 0);
+        return subgraph.Branch(
+            {},
+            [&](BranchBuilder& builder) {
+              return builder.Build<BranchIfTypedArrayBounds>({index, length});
+            },
+            emit_store, [&] { return ReduceResult::Done(); });
+      }
+
+      DCHECK(StoreModeIsInBounds(keyed_mode.store_mode()));
+      return emit_store();
+    }
     case compiler::AccessMode::kHas:
       // TODO(victorgomes): Implement has element access.
       return {};

@@ -1385,10 +1385,11 @@ class MaglevGraphBuilder {
       compiler::JSTypedArrayRef typed_array, ValueNode* index,
       ElementsKind elements_kind);
   ReduceResult BuildStoreTypedArrayElement(ValueNode* object, ValueNode* index,
-                                           ElementsKind elements_kind);
+                                           ElementsKind elements_kind,
+                                           ValueNode* value);
   ReduceResult BuildStoreConstantTypedArrayElement(
       compiler::JSTypedArrayRef typed_array, ValueNode* index,
-      ElementsKind elements_kind);
+      ElementsKind elements_kind, ValueNode* value);
 
   MaybeReduceResult TryBuildElementAccessOnString(
       ValueNode* object, ValueNode* index,
