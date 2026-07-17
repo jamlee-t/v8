@@ -1537,9 +1537,6 @@ ProcessResult MaglevGraphOptimizer::VisitCall(Call* node,
     current_unit =
         &new_call_node->lazy_deopt_info()->top_frame().GetCompilationUnit();
   }
-  if (!reducer_.CanInlineCall(current_unit, shared, call_frequency)) {
-    return ReplaceWith(new_call_node);
-  }
 
   // Create and push MaglevCallSiteInfo
   // TODO(victorgomes): Investigate if we can avoid this copy.
@@ -1548,6 +1545,11 @@ ProcessResult MaglevGraphOptimizer::VisitCall(Call* node,
   arguments[0] = converted_receiver;
   for (int i = 1; i < node->num_args(); ++i) {
     arguments[i] = node->arg(i).node();
+  }
+
+  if (!reducer_.CanInlineCall(current_unit, shared, call_frequency, arguments,
+                              new_call_node->use_repr_hints())) {
+    return ReplaceWith(new_call_node);
   }
 
   CatchBlockDetails catch_details;

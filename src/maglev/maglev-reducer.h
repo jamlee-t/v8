@@ -1382,7 +1382,8 @@ class MaglevReducer {
                                   ConvertReceiverMode mode);
   bool CanInlineCall(const MaglevCompilationUnit* current_unit,
                      compiler::SharedFunctionInfoRef shared,
-                     float call_frequency);
+                     float call_frequency, base::Vector<ValueNode*> arguments,
+                     UseRepresentationSet use_repr_hints);
 
   ReduceResult BuildCheckedSmiSizedInt32(ValueNode* input);
 
@@ -1771,6 +1772,10 @@ class SubgraphBase {
   MaglevCompilationUnit* dummy_unit_;
   InterpreterFrameState variable_frame_;
 };
+
+bool IsSmallFunction(int bytecode_length, base::Vector<ValueNode*> arguments,
+                     UseRepresentationSet use_repr_hints,
+                     const CompilationFlags& flags);
 
 }  // namespace maglev
 }  // namespace internal

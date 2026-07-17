@@ -1938,7 +1938,8 @@ void MaglevReducer<BaseT>::FlushNodesToBlock() {
 template <typename BaseT>
 bool MaglevReducer<BaseT>::CanInlineCall(
     const MaglevCompilationUnit* current_unit,
-    compiler::SharedFunctionInfoRef shared, float call_frequency) {
+    compiler::SharedFunctionInfoRef shared, float call_frequency,
+    base::Vector<ValueNode*> arguments, UseRepresentationSet use_repr_hints) {
   auto tracer_ = tracer();
   if (static_cast<int>(graph()->inlined_functions().size()) >=
       SourcePosition::MaxInliningId()) {
@@ -1959,7 +1960,10 @@ bool MaglevReducer<BaseT>::CanInlineCall(
   }
   compiler::BytecodeArrayRef bytecode = shared.GetBytecodeArray(broker());
   const CompilationFlags& flags = graph()->compilation_info()->flags();
-  if (call_frequency < flags.min_inlining_frequency) {
+  bool is_small =
+      IsSmallFunction(bytecode.length(), arguments, use_repr_hints, flags);
+
+  if (!is_small && call_frequency < flags.min_inlining_frequency) {
     TRACE_CANNOT_INLINE("call frequency ("
                         << call_frequency << ") < minimum threshold ("
                         << flags.min_inlining_frequency << ")");
@@ -5857,6 +5861,35 @@ ReduceResult SubgraphBase<DerivedT, BaseT>::TrimPredecessorsAndBind(
   if (predecessors_so_far == 0) return ReduceResult::DoneWithAbort();
   static_cast<DerivedT*>(this)->Bind(label);
   return ReduceResult::Done();
+}
+
+inline bool IsSmallFunction(int bytecode_length,
+                            base::Vector<ValueNode*> arguments,
+                            UseRepresentationSet use_repr_hints,
+                            const CompilationFlags& flags) {
+  // TruncatedInt32 uses do not necessarily mean that the input is a
+  // HeapNumber, but when emitted operation that truncate their inputs to
+  // Int32, Maglev doesn't distinguish between Smis and HeapNumbers.
+  // TODO(dmercadier): distinguish between Smis and HeapNumbers in the graph
+  // builder for operations that truncate their inputs, and then in turn, make
+  // sure that we're not setting {has_heapnumber_input_output} to true for a
+  // function that has so far only returned Smis.
+  constexpr UseRepresentationSet kHeapNumRepresentations{
+      UseRepresentation::kFloat64, UseRepresentation::kHoleyFloat64,
+      UseRepresentation::kTruncatedInt32};
+
+  const bool has_heapnumber_input_output =
+      use_repr_hints.contains_any(kHeapNumRepresentations) ||
+      std::ranges::any_of(arguments, [](ValueNode* input) {
+        return input->UnwrapIdentities()->is_float64_or_holey_float64();
+      });
+
+  const int limit =
+      has_heapnumber_input_output
+          ? flags.max_inlined_bytecode_size_small_with_heapnum_in_out
+          : flags.max_inlined_bytecode_size_small;
+
+  return bytecode_length <= limit;
 }
 
 }  // namespace maglev

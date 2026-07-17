@@ -7892,7 +7892,11 @@ MaybeReduceResult MaglevGraphBuilder::TryBuildInlineCall(
   }
   float call_frequency = feedback_frequency * GetCurrentCallFrequency();
 
-  if (!reducer_.CanInlineCall(compilation_unit(), shared, call_frequency)) {
+  auto [result, arguments] = GetArgumentsAsArrayOfValueNodes(shared, args);
+  RETURN_IF_ABORT(result);
+
+  if (!reducer_.CanInlineCall(compilation_unit(), shared, call_frequency,
+                              arguments, {})) {
     return {};
   }
 
@@ -7937,9 +7941,6 @@ MaybeReduceResult MaglevGraphBuilder::TryBuildInlineCall(
     return BuildEagerInlineCall(context, function, new_target, shared,
                                 feedback_cell, args, call_frequency);
   }
-
-  auto [result, arguments] = GetArgumentsAsArrayOfValueNodes(shared, args);
-  RETURN_IF_ABORT(result);
 
   // Creating the CallKnownJSFUnction node will conservatively clear the
   // unstable maps from the KNA. So, we save them before doing this, since this
