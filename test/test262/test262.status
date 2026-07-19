@@ -1185,4 +1185,13 @@
 }],
 # End roll-watcher patch
 ####
+
+####
+# Roll-watcher patch
+[ALWAYS, {
+  'intl402/Locale/prototype/getHourCycles/region-priority': [SKIP],
+  'intl402/Locale/prototype/getHourCycles/subdivision-region': [SKIP],
+}],
+# End roll-watcher patch
+####
 ]
