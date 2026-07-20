@@ -235,6 +235,12 @@ enum class DrainMode : uint8_t {
 enum class AtomicLoopKind : uint8_t {
   kNone,
   kAtEnd,     // Continuation is AT_END + ACCEPT; every retry futile.
+  kTotal,     // Continuation always succeeds at the greedy extent (a
+              // nullable-to-ACCEPT chain, e.g. the trailing `;?` of /\w+;?/ or
+              // the `\D*` continuation of the `\d*` loop in /(\d*)(\D*)/), so
+              // the continuation never fails and the drain is 100% dead.
+              // Strictly stronger than kAtEnd (which can fail off the end);
+              // gated identically.
   kBoundary,  // Continuation starts with \b over a word-character body;
               // interior retries futile, the entry retry only with a word
               // character proven immediately before the entry.

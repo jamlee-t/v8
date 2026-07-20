@@ -526,3 +526,79 @@ check(/(?:[ab]a)*c/, "aaaaac", ["aaaac"], 1);
 check(/(?:aa)*$/, "aaa", ["aa"], 1);         // kAtEnd, odd length.
 check(/(?:aa)+\b/, "aaaaa aa", ["aaaa"], 1); // kBoundary, odd run.
 check(/(?:abc)+d/, "abcabcabd", null);       // width 3, no match.
+
+// ---------------------------------------------------------------------------
+// kTotal: the continuation always succeeds at the greedy extent (see
+// AtomicLoopKind::kTotal), so the drain is dead. Covers a bare tail loop, a
+// trailing optional, and the leading loop of an adjacent nullable chain.
+// ---------------------------------------------------------------------------
+// Bare ACCEPT continuation: a tail loop with no trailing assertion at all.
+check(/\w+/, '  abc  ', ['abc'], 2);
+check(/\w+/, '!!!', null);
+check(/(\S+)/, '  hi there', ['hi', 'hi'], 2);
+check(/([^;]*)/, 'a=b;c', ['a=b', 'a=b'], 0);
+check(/[a-z]+/, 'ABCabc', ['abc'], 3);
+assertEquals(['  ', '   '], 'aa  bb   cc'.match(/\s+/g));
+// A capture in the tail-loop body still records the last iteration.
+check(/(\d)+/, 'x123', ['123', '3'], 1);
+// Long non-matching run stays linear.
+check(/\d+/, 'a'.repeat(1 << 20), null);
+// Trailing optional / adjacent nullable chains.
+check(/\w+;?/, "abc;", ["abc;"], 0);
+check(/\w+;?/, "abc", ["abc"], 0);
+check(/\w+;?/, "  abc; ", ["abc;"], 2);
+check(/\w+(?:;|,)?/, "abc,", ["abc,"], 0);
+// Adjacent nullable loops: the leading loop's continuation is the trailing
+// loop chained to ACCEPT, which is nullable, so it too is kTotal.
+check(/(\d*)(\D*)/, "12ab", ["12ab", "12", "ab"], 0);
+check(/(\d*)(\D*)/, "ab", ["ab", "", "ab"], 0);
+check(/(\d*)(\D*)/, "12", ["12", "12", ""], 0);
+check(/(\d*)(\D*)/, "", ["", "", ""], 0);
+check(/a*b*/, "aabb", ["aabb"], 0);
+check(/a*b*/, "ba", ["b"], 0);
+check(/a*b*/, "", [""], 0);
+check(/(\w+)(\s*)/, "hi  x", ["hi  ", "hi", "  "], 0);
+check(/\w*(\d|)/, "ab3", ["ab3", ""], 0);
+
+// Priority is preserved: making the loop atomic must not reorder the
+// continuation's own alternatives. The greedy loop consumes the char the
+// later alternative would have matched, so the empty alternative wins.
+check(/\w+(a|)/, "test", ["test", ""], 0);
+check(/\w+(x|)/, "testx", ["testx", ""], 0);
+
+// Negative cases: the continuation is NOT total, so kTotal must not fire (a
+// wrong classification would park/omit the drain and change the result).
+// A `+` / mandatory continuation is not nullable (min-count guard on the exit
+// alternative, or a mandatory text node).
+check(/\w+\d+/, "ab12", ["ab12"], 0);
+check(/\w+\d+/, "ab", null);
+check(/\w+\d/, "ab1", ["ab1"], 0);
+check(/\w+\d/, "ab", null);
+// A positive lookahead consumes nothing but can fail, so it is not total.
+check(/\w+(?=;)/, "abc;", ["abc"], 0);
+check(/\w+(?=;)/, "abc", null);
+// A negative lookaround continuation is not a plain disjunction and forces a
+// retreat, so it must keep its drain.
+check(/\w+(?!;)/, "abc;", ["ab"], 0);
+check(/\w+(?!;)/, "abc", ["abc"], 0);
+// A backreference continuation is not nullable.
+check(/(a+)\1/, "aaaa", ["aaaa", "aa"], 0);
+check(/(a+)\1/, "aaa", ["aa", "a"], 0);
+
+// kTotal reaches through infallible actions, including a matched positive
+// lookahead: recursing into the lookahead body reports success only when the
+// body (and the outer continuation after it) is itself infallible. So a loop
+// before or inside a nullable lookahead is total, while a lookahead that can
+// fail keeps its drain. A negative lookaround always keeps its drain.
+check(/\w+(?=a*)/, "abc", ["abc"], 0);        // nullable lookahead: total.
+check(/\w+(?=a*)/, "abaa", ["abaa"], 0);
+check(/[ab]*(?=c*)/, "abcc", ["ab"], 0);
+check(/(?=a*)x/, "yx", ["x"], 1);             // loop inside the lookahead.
+check(/\w+(?=a)/, "testa", ["test"], 0);      // mandatory lookahead: not total.
+check(/\w+(?=a)/, "test", null);
+check(/\w+(?!a)/, "testa", ["testa"], 0);     // negative lookaround: not total.
+check(/\w+(?!a)/, "testb", ["testb"], 0);
+check(/\w+(?=a*)\d/, "ab5", ["ab5"], 0);      // outer continuation not total.
+check(/\w+(?=a*)z/, "ab", null);
+check(/x(?=(a*))y/, "xaay", null);            // capture inside lookahead.
+check(/x(?=(a*))y/, "xy", ["xy", ""], 0);

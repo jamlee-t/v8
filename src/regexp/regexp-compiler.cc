@@ -646,6 +646,8 @@ std::string_view AtomicLoopKindName(AtomicLoopKind kind) {
       return "none";
     case AtomicLoopKind::kAtEnd:
       return "at-end";
+    case AtomicLoopKind::kTotal:
+      return "total";
     case AtomicLoopKind::kBoundary:
       return "boundary";
     case AtomicLoopKind::kDisjoint:
@@ -762,6 +764,7 @@ EmitResult Trace::Flush(Compiler* compiler, Node* successor,
         case AtomicLoopKind::kNone:
           break;
         case AtomicLoopKind::kAtEnd:
+        case AtomicLoopKind::kTotal:
         case AtomicLoopKind::kDisjoint:
           if (cp_offset_ == 0 || (cp_offset_ > 0 && uniform_prefix)) {
             drain_useless_loop = loop;
@@ -2991,16 +2994,103 @@ AtomicLoopBodyAnalysis AnalyzeAtomicLoopBody(
   return result;
 }
 
+// Node-visit cap for ContinuationAlwaysSucceeds (see its |budget| comment).
+constexpr int kContinuationAlwaysSucceedsBudget = 1000;
+
+// Whether |node| has a guaranteed-success path: it reaches EndNode(ACCEPT)
+// consuming zero input and failing no assertion, so at any position it cannot
+// fail.  Then the loop's drain is dead code (see AtomicLoopKind::kTotal).
+//
+// |budget| bounds the total node visits: on a false result the walk explores
+// every path, and a re-convergent nullable subtree (/(?:a?|b?)(?:a?|b?).../)
+// is exponential in the number of forks, so it is capped and returns the
+// conservative false when spent.  Real always-succeeds continuations are short
+// nullable chains far under the cap.
+bool ContinuationAlwaysSucceeds(Node* node, int depth, int* budget) {
+  if (depth > Compiler::kMaxRecursion || node == nullptr) return false;
+  if (--*budget < 0) return false;
+  if (ActionNode* action = node->AsActionNode()) {
+    switch (action->action_type()) {
+      // These actions emit no failure branch of their own: ActionNode::Emit
+      // defers them to the trace or emits a pure state write (register, flag,
+      // position restore, or the no-op eats-at-least hint) and then
+      // unconditionally emits on_success, so the path's outcome is whatever
+      // follows.
+      // - POSITIVE_SUBMATCH_SUCCESS commits a matched positive lookahead (a
+      //   zero-width position/stackpointer restore); its only backtrack is the
+      //   register-clear cleanup, reached solely via on_success's own backtrack
+      //   (DCHECK(trace->backtrack() == nullptr) in its Emit).
+      // - BEGIN_POSITIVE_SUBMATCH starts a positive lookahead whose on_success
+      //   is its body.  The lookahead succeeds iff the body does; recursing
+      //   walks the body and reports success only for a body that reaches
+      //   ACCEPT infallibly (e.g. the nullable /a*/ of /\w+(?=a*)/), so a body
+      //   that can fail (/\w+(?=a)/) correctly returns false.
+      case ActionNode::STORE_POSITION:
+      case ActionNode::CLEAR_CAPTURES:
+      case ActionNode::SET_REGISTER_FOR_LOOP:
+      case ActionNode::INCREMENT_REGISTER:
+      case ActionNode::MODIFY_FLAGS:
+      case ActionNode::EATS_AT_LEAST:
+      case ActionNode::RESTORE_POSITION:
+      case ActionNode::POSITIVE_SUBMATCH_SUCCESS:
+      case ActionNode::BEGIN_POSITIVE_SUBMATCH:
+        return ContinuationAlwaysSucceeds(action->on_success(), depth + 1,
+                                          budget);
+      // EMPTY_MATCH_CHECK emits a conditional backtrack, so the path can fail.
+      // A negative lookaround fails whenever its inner match succeeds, which no
+      // walk of a single always-succeeding path can rule out.
+      case ActionNode::EMPTY_MATCH_CHECK:
+      case ActionNode::BEGIN_NEGATIVE_SUBMATCH:
+        return false;
+    }
+  }
+  if (EndNode* end = node->AsEndNode()) {
+    return end->action() == EndNode::ACCEPT;
+  }
+  // A LoopChoiceNode is a ChoiceNode too: a `*` / `{0,n}` loop reaches ACCEPT
+  // through its unguarded exit (continue) alternative, while a `+` / `{m,}`
+  // loop's exit carries a GEQ-min guard and is skipped below, leaving only its
+  // consuming body -- correctly not nullable.
+  if (ChoiceNode* choice = node->AsChoiceNode()) {
+    // A negative lookaround is not a plain disjunction (its first alternative
+    // must fail); do not treat it as one.
+    if (choice->AsNegativeLookaroundChoiceNode() != nullptr) return false;
+    // The disjunction succeeds if any unguarded alternative does: a
+    // lower-priority epsilon-accept alternative is still reached as a last
+    // resort by the continuation's own backtracking.  Guarded alternatives
+    // (e.g. a loop's GEQ-min exit guard) may be blocked, so they are skipped.
+    for (GuardedAlternative& alt : *choice->alternatives()) {
+      if (alt.guards() != nullptr && alt.guards()->length() != 0) continue;
+      if (ContinuationAlwaysSucceeds(alt.node(), depth + 1, budget)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  // A TextNode consumes; anything else is not provably infallible.
+  return false;
+}
+
 // Facts about a fixed-length loop's continuation alternative, computed by
 // AnalyzeAtomicLoopContinuation in one walk of the continuation chain.
+//
+// TODO(jgruber): at_end_accept, always_succeeds, starts_with_boundary and
+// first_set are all functions of the same subtree; a single recursive walk
+// co-computing nullable(C) and a fork-descending FIRST(C) would subsume them
+// and strengthen kDisjoint, but it changes landed kDisjoint/kBoundary behavior
+// so it belongs in its own fuzzer-gated refactor.
 struct AtomicLoopContinuationAnalysis {
   // The chain is AssertionNode(AT_END), zero or more position-insensitive
   // ActionNodes, EndNode(ACCEPT).  Such a continuation fails at every
   // retreat position (all strictly before the end).  AT_END is the only
   // retreat-insensitive assertion kind: AT_START becomes true at position
   // 0, AT_BOUNDARY / AT_NON_BOUNDARY / AFTER_NEWLINE depend on the
-  // surrounding characters.
+  // surrounding characters.  A bare ACCEPT with no leading AT_END is the
+  // stronger always_succeeds case below, not this one.
   bool at_end_accept = false;
+  // The continuation cannot fail at the greedy extent (see
+  // ContinuationAlwaysSucceeds, AtomicLoopKind::kTotal).
+  bool always_succeeds = false;
   // The chain starts with a \b assertion.  Over a word-character body,
   // every *interior* retreat position sits between two body characters
   // where \b is false, so interior retries fail at the assertion.  The
@@ -3025,6 +3115,10 @@ AtomicLoopContinuationAnalysis AnalyzeAtomicLoopContinuation(
   AtomicLoopContinuationAnalysis result;
   if (alt->guards() != nullptr && alt->guards()->length() != 0) return result;
   Node* node = alt->node();
+  // The always-succeeds fact needs a branch-descending walk (a disjunction
+  // succeeds if any alternative does), unlike the single-spine facts below.
+  int budget = kContinuationAlwaysSucceedsBudget;
+  result.always_succeeds = ContinuationAlwaysSucceeds(node, 0, &budget);
   if (AssertionNode* head = node->AsAssertionNode()) {
     result.starts_with_boundary =
         head->assertion_type() == AssertionNode::AT_BOUNDARY;
@@ -3035,7 +3129,8 @@ AtomicLoopContinuationAnalysis AnalyzeAtomicLoopContinuation(
   // ACCEPT with only a leading AT_END, first_alive while no node has yet
   // altered what the continuation's first consumed character can be (so once we
   // reach a TextNode its first element still overapproximates
-  // FIRST(continuation)).
+  // FIRST(continuation)). A bare ACCEPT with no leading AT_END is the stronger
+  // always_succeeds case above, not this walk.
   bool at_end_alive =
       node->AsAssertionNode() != nullptr &&
       node->AsAssertionNode()->assertion_type() == AssertionNode::AT_END;
@@ -3121,7 +3216,10 @@ AtomicLoopKind ClassifyAtomicLoop(LoopChoiceNode* loop, Flags flags) {
   AtomicLoopContinuationAnalysis cont =
       AnalyzeAtomicLoopContinuation(continuation, flags, zone, &first_set);
 
+  // Mutually exclusive: a leading AT_END fails the always-succeeds walk (it
+  // stops at the assertion), so only one of these fires.
   if (cont.at_end_accept) return AtomicLoopKind::kAtEnd;
+  if (cont.always_succeeds) return AtomicLoopKind::kTotal;
   if (!body_info.set_known) return AtomicLoopKind::kNone;
   CharacterRange::Canonicalize(&body_set);
   // Disjointness before the boundary rule: where both apply (a \b followed
@@ -3184,12 +3282,15 @@ DrainMode ChooseFixedLengthLoopDrainMode(ChoiceNode* choice, Trace* trace,
     case AtomicLoopKind::kNone:
       return DrainMode::kFull;
     case AtomicLoopKind::kAtEnd:
+    case AtomicLoopKind::kTotal:
       // Tail position (continuation ends in ACCEPT): the loop-exit backtrack
       // dispatches through the backtrack stack to frames that all restore or
       // ignore the position, so parking is safe with a null exit target, and
       // under any grant with a non-null one (keeps /x(a+$|a)/ siblings
       // correct).  Otherwise every retry is still futile, so restore-only
       // suffices (as for kDisjoint); no need for the char-by-char kFull drain.
+      // kTotal takes the same modes: it is strictly stronger (see
+      // AtomicLoopKind), so the drain is dead either way.
       return (parkable && (trace->backtrack() == nullptr ||
                            trace->parked_grant() != ParkedGrant::kNone))
                  ? DrainMode::kOmit
