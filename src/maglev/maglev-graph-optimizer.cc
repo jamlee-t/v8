@@ -2142,6 +2142,11 @@ ProcessResult MaglevGraphOptimizer::VisitCheckedSmiSizedInt32(
       return ReplaceWith(reducer_.GetInt32Constant(cst.value()));
     }
   }
+  if (auto range = GetRange(node->input_node(0))) {
+    if (Range::Smi().contains(*range)) {
+      return ReplaceWith(node->input_node(0));
+    }
+  }
   return ProcessResult::kContinue;
 }
 
