@@ -2478,14 +2478,6 @@ ProcessResult MaglevGraphOptimizer::VisitCheckedSmiTagHoleyFloat64(
   return ProcessResult::kContinue;
 }
 
-ProcessResult MaglevGraphOptimizer::VisitCheckedNumberOrOddballToHoleyFloat64(
-    CheckedNumberOrOddballToHoleyFloat64* node, const ProcessingState& state) {
-  REPLACE_AND_RETURN_IF_DONE(GetUntaggedValueWithRepresentation(
-      node->input_node(0), UseRepresentation::kHoleyFloat64,
-      node->conversion_type()));
-  return ProcessResult::kContinue;
-}
-
 #define UNTAGGING_CASE(Node, Repr, ConvType)                         \
   ProcessResult MaglevGraphOptimizer::Visit##Node(                   \
       Node* node, const ProcessingState& state) {                    \
@@ -2495,11 +2487,7 @@ ProcessResult MaglevGraphOptimizer::VisitCheckedNumberOrOddballToHoleyFloat64(
   }
 UNTAGGING_CASE(UnsafeSmiUntag, Int32, {})
 UNTAGGING_CASE(CheckedNumberToInt32, Int32, {})
-UNTAGGING_CASE(TruncateCheckedNumberOrOddballToInt32, TruncatedInt32,
-               node->conversion_type())
 UNTAGGING_CASE(TruncateUnsafeNumberOrOddballToInt32, TruncatedInt32,
-               node->conversion_type())
-UNTAGGING_CASE(CheckedNumberOrOddballToFloat64, Float64,
                node->conversion_type())
 UNTAGGING_CASE(UnsafeNumberOrOddballToFloat64, Float64, node->conversion_type())
 UNTAGGING_CASE(UnsafeNumberToFloat64, Float64,
@@ -2507,6 +2495,30 @@ UNTAGGING_CASE(UnsafeNumberToFloat64, Float64,
 UNTAGGING_CASE(UnsafeNumberOrOddballToHoleyFloat64, HoleyFloat64,
                node->conversion_type())
 #undef UNTAGGING_CASE
+
+// Checked tagged-input conversions whose check is already implied by the known
+// type of their input are downgraded in-place to their unsafe equivalent.
+#define DOWNGRADABLE_UNTAGGING_CASE(Node, UnsafeNode, Repr, ConvType)     \
+  ProcessResult MaglevGraphOptimizer::Visit##Node(                        \
+      Node* node, const ProcessingState& state) {                         \
+    REPLACE_AND_RETURN_IF_DONE(GetUntaggedValueWithRepresentation(        \
+        node->input_node(0), UseRepresentation::k##Repr, ConvType));      \
+    if (reducer_.CheckType(node->input_node(0),                           \
+                           GetAllowedTypeFromConversionType(ConvType))) { \
+      node->OverwriteWith(Opcode::k##UnsafeNode);                         \
+    }                                                                     \
+    return ProcessResult::kContinue;                                      \
+  }
+DOWNGRADABLE_UNTAGGING_CASE(TruncateCheckedNumberOrOddballToInt32,
+                            TruncateUnsafeNumberOrOddballToInt32,
+                            TruncatedInt32, node->conversion_type())
+DOWNGRADABLE_UNTAGGING_CASE(CheckedNumberOrOddballToFloat64,
+                            UnsafeNumberOrOddballToFloat64, Float64,
+                            node->conversion_type())
+DOWNGRADABLE_UNTAGGING_CASE(CheckedNumberOrOddballToHoleyFloat64,
+                            UnsafeNumberOrOddballToHoleyFloat64, HoleyFloat64,
+                            node->conversion_type())
+#undef DOWNGRADABLE_UNTAGGING_CASE
 
 ProcessResult MaglevGraphOptimizer::VisitCheckedSmiUntag(
     CheckedSmiUntag* node, const ProcessingState& state) {
@@ -2544,6 +2556,9 @@ ProcessResult MaglevGraphOptimizer::VisitCheckedSmiUntag(
   //   return ProcessResult::kTruncateBlock;
   // }
   // DCHECK(maybe_input.IsFail());
+  if (reducer_.CheckType(node->input_node(0), NodeType::kSmi)) {
+    node->OverwriteWith(Opcode::kUnsafeSmiUntag);
+  }
   return ProcessResult::kContinue;
 }
 
@@ -2554,18 +2569,19 @@ ProcessResult MaglevGraphOptimizer::VisitCheckedNumberToFloat64(
       TaggedToFloat64ConversionType::kOnlyNumber);
   if (maybe_alt.IsDoneWithValue()) {
     ValueNode* alt = maybe_alt.value();
-    if (alt->Is<CheckedNumberOrOddballToFloat64>() ||
-        alt->Is<UnsafeNumberOrOddballToFloat64>()) {
-      // The alternative check is weaker then the current node. We should not
-      // elide it.
-      // TODO(victorgomes): consider having a to_number alternative?
-      return ProcessResult::kContinue;
+    // If the alternative check is weaker then the current node, then
+    // we should not elide it.
+    // TODO(victorgomes): consider having a to_number alternative?
+    if (!alt->Is<CheckedNumberOrOddballToFloat64>() &&
+        !alt->Is<UnsafeNumberOrOddballToFloat64>()) {
+      return ReplaceWith(alt);
     }
-    return ReplaceWith(alt);
   } else if (maybe_alt.IsDoneWithAbort()) {
     return ProcessResult::kTruncateBlock;
   }
-  DCHECK(maybe_alt.IsFail());
+  if (reducer_.CheckType(node->input_node(0), NodeType::kNumber)) {
+    node->OverwriteWith(Opcode::kUnsafeNumberToFloat64);
+  }
   return ProcessResult::kContinue;
 }
 
@@ -3751,6 +3767,9 @@ ProcessResult MaglevGraphOptimizer::VisitTruncateCheckedNumberAsSafeIntToInt32(
   // TODO(b/424157317): Optimize.
   if (node->input_node(0)->Is<Int32ToNumber>()) {
     return ReplaceWith(node->input_node(0)->input_node(0));
+  }
+  if (reducer_.CheckType(node->input_node(0), NodeType::kNumber)) {
+    node->OverwriteWith(Opcode::kTruncateUnsafeNumberAsSafeIntToInt32);
   }
   return ProcessResult::kContinue;
 }
