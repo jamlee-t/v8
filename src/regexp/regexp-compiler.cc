@@ -351,7 +351,16 @@ Compiler::CompilationResult Compiler::Assemble(
   ZoneVector<Node*> work_list(zone());
   work_list_ = &work_list;
   Label fail;
-  macro_assembler_->PushBacktrack(&fail);
+  macro_assembler_->set_fail_label(&fail);
+  if (!macro_assembler_->prologue_pushes_fail_label()) {
+    // The fail label sits at the bottom of the backtrack stack: exhausting all
+    // real backtracks pops it and falls through to Fail below. We push it here,
+    // before the body is emitted. Assemblers that can elide the backtrack stack
+    // defer the push to their prologue instead: backtrack_stack_used() is only
+    // final once the whole body is emitted, so only there can they observe that
+    // the pattern never backtracks and drop the push (and the stack) entirely.
+    macro_assembler_->PushBacktrack(&fail);
+  }
   Trace new_trace;
   if (start->Emit(this, &new_trace).IsError()) {
     work_list_ = nullptr;
