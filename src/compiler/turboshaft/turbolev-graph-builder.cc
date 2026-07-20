@@ -3098,8 +3098,8 @@ class GraphBuildingNodeProcessor {
   }
   maglev::ProcessResult Process(maglev::InlinedAllocation* node,
                                 const maglev::ProcessingState& state) {
-    DCHECK(node->HasBeenAnalysed() &&
-           node->HasEscaped());  // Would have been removed otherwise.
+    DCHECK(!node->HasBeenAnalysed() ||
+           !node->HasBeenElided());  // Would have been removed otherwise.
     V<HeapObject> alloc = Map(node->allocation_block());
     SetMap(node, __ BitcastWordPtrToHeapObject(__ WordPtrAdd(
                      __ BitcastHeapObjectToWordPtr(alloc), node->offset())));
