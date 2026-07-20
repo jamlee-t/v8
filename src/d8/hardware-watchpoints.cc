@@ -209,24 +209,35 @@ void MutateRepMovsDestination(struct user_regs_struct& regs,
   // Align dest_addr to 8 bytes (sizeof(long)) for ptrace read-modify-write.
   uintptr_t aligned_addr = dest_addr & ~7;
   size_t offset = dest_addr & 7;
+  bool cross_boundary = (offset + access_info.access_width) > 8;
 
+  uint64_t data[2] = {0, 0};
   errno = 0;
-  uint64_t data = ptrace(PTRACE_PEEKTEXT, g_support.d8_pid, aligned_addr, 0);
+  data[0] = ptrace(PTRACE_PEEKTEXT, g_support.d8_pid, aligned_addr, 0);
   CHECK_EQ(0, errno);
+  if (cross_boundary) {
+    errno = 0;
+    data[1] = ptrace(PTRACE_PEEKTEXT, g_support.d8_pid, aligned_addr + 8, 0);
+    CHECK_EQ(0, errno);
+  }
 
   // Extract the bytes that we actually want to mutate.
   uint64_t original_val = 0;
-  memcpy(&original_val, reinterpret_cast<char*>(&data) + offset,
+  memcpy(&original_val, reinterpret_cast<char*>(data) + offset,
          access_info.access_width);
 
   // Mutate/fuzz the original_val using the shared MutateValue helper.
   uint64_t mutated_val = MutateValue(original_val, access_info.access_width);
 
-  // Write the mutated bytes back into the 64-bit word.
-  memcpy(reinterpret_cast<char*>(&data) + offset, &mutated_val,
+  // Write the mutated bytes back into the 64-bit word(s).
+  memcpy(reinterpret_cast<char*>(data) + offset, &mutated_val,
          access_info.access_width);
 
-  CHECK_EQ(0, ptrace(PTRACE_POKETEXT, g_support.d8_pid, aligned_addr, data));
+  CHECK_EQ(0, ptrace(PTRACE_POKETEXT, g_support.d8_pid, aligned_addr, data[0]));
+  if (cross_boundary) {
+    CHECK_EQ(0, ptrace(PTRACE_POKETEXT, g_support.d8_pid, aligned_addr + 8,
+                       data[1]));
+  }
   TRACE(
       "[debugger] Mutated rep movs destination memory at 0x%lx (width %d) from "
       "0x%lx to 0x%lx\n",
