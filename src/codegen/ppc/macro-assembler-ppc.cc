@@ -808,8 +808,10 @@ void MacroAssembler::RecordWriteField(Register object, int offset,
 
   AddS64(slot_address, object, Operand(offset - kHeapObjectTag));
   if (v8_flags.slow_debug_code) {
+    UseScratchRegisterScope temps(this);
+    Register scratch = temps.Acquire();
     Label ok;
-    andi(r0, slot_address, Operand(kTaggedSize - 1));
+    andi(scratch, slot_address, Operand(kTaggedSize - 1));
     beq(&ok, cr0);
     stop();
     bind(&ok);
