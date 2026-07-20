@@ -926,9 +926,7 @@ void Parser::PostProcessParseResult(IsolateT* isolate, ParseInfo* info,
     if (scope->is_script_scope()) {
       for (Variable* var : *scope->locals()) {
         var->set_is_used();
-        if (var->mode() != VariableMode::kConst || flags().is_repl_mode()) {
-          var->SetMaybeAssigned();
-        }
+        var->SetMaybeAssigned();
       }
     }
 
