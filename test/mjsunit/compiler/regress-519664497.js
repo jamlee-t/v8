@@ -22,11 +22,11 @@ const expected = left + left + "c";
 %PrepareFunctionForOptimization(f);
 assertEquals(expected, f());
 
-%BlockAt('NewConsString', 1000);
+%BlockAt('NewConsString', 10000);
 %OptimizeFunctionOnNextCall(f, "concurrent");
 assertEquals(expected, f());
 
-assertTrue(%WaitUntilBlocked('NewConsString', 1000));
+assertTrue(%WaitUntilBlocked('NewConsString', 10000));
 
 // Internalize the string. This will mutate the string on the main thread
 // and turn it into a ThinString, right while the background thread is
