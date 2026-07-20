@@ -4100,7 +4100,11 @@ DEFINE_BOOL(prof, false,
 DEFINE_IMPLICATION(prof, prof_cpp)
 DEFINE_IMPLICATION(prof, log_code)
 
-DEFINE_BOOL(ll_prof, false, "Enable low-level linux profiler.")
+// Enable low-level linux profiler.
+// When active, V8 will log code events (like code creation and code moving)
+// to v8.log and will signal code-moving GC events to synchronize system-level
+// profilers (like Linux perf) with V8's heap relocations via fake mmaps.
+DEFINE_DEVELOPER_FLAG(ll_prof, "Enable low-level linux profiler.")
 
 #if V8_OS_LINUX || V8_OS_DARWIN
 #define DEFINE_PERF_PROF_BOOL(nam, cmt) DEFINE_BOOL(nam, false, cmt)
@@ -4157,6 +4161,10 @@ DEFINE_BOOL_READONLY(
 #undef DEFINE_PERF_PROF_BOOL
 #undef DEFINE_PERF_PROF_IMPLICATION
 
+// Specify the name of the file for fake gc mmap used in ll_prof.
+// V8 will perform a temporary mmap/munmap on this file during a code-moving GC
+// event, which injects a marker into the system-level profiler (e.g. perf)
+// stream to align/synchronize V8 code log timestamps with the system trace.
 DEFINE_STRING(gc_fake_mmap, "/tmp/__v8_gc__",
               "Specify the name of the file for fake gc mmap used in ll_prof")
 
