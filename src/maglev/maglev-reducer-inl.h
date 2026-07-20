@@ -582,12 +582,16 @@ ReduceResult MaglevReducer<BaseT>::BuildStoreMap(ValueNode* object,
   NodeType object_type = StaticTypeForMap(map, broker());
   NodeInfo* node_info = GetOrCreateInfoFor(object);
   if (map.is_stable()) {
-    node_info->SetPossibleMaps(PossibleMaps{map}, false, object_type, broker(),
-                               known_node_aspects());
+    if (!node_info->SetPossibleMaps(PossibleMaps{map}, false, object_type,
+                                    broker(), known_node_aspects())) {
+      return EmitUnconditionalDeopt(DeoptimizeReason::kWrongValue);
+    }
     broker()->dependencies()->DependOnStableMap(map);
   } else {
-    node_info->SetPossibleMaps(PossibleMaps{map}, true, object_type, broker(),
-                               known_node_aspects());
+    if (!node_info->SetPossibleMaps(PossibleMaps{map}, true, object_type,
+                                    broker(), known_node_aspects())) {
+      return EmitUnconditionalDeopt(DeoptimizeReason::kWrongValue);
+    }
     known_node_aspects().MarkSideEffectsRequireInvalidation();
   }
   return ReduceResult::Done();
@@ -2063,7 +2067,11 @@ ReduceResult MaglevReducer<BaseT>::BuildCheckMaps(
                                           GetCheckType(known_info->type())));
   }
 
-  merger.UpdateKnownNodeAspects(object, known_node_aspects());
+  if (!merger.UpdateKnownNodeAspects(object, known_node_aspects())) {
+    // If the type is empty, it means that the Check inserted above will deopt.
+    // From here on, the code is dead.
+    return BuildAbort(AbortReason::kUnreachable);
+  }
   return ReduceResult::Done();
 }
 

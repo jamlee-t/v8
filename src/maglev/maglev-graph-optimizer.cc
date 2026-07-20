@@ -933,7 +933,9 @@ ProcessResult MaglevGraphOptimizer::ProcessCheckMaps(NodeT* node,
     node->set_check_type(reducer_.GetCheckType(known_info->type()));
   }
 
-  merger.UpdateKnownNodeAspects(object, known_node_aspects());
+  if (!merger.UpdateKnownNodeAspects(object, known_node_aspects())) {
+    return DeoptAndTruncate(DeoptimizeReason::kWrongValue);
+  }
   return ProcessResult::kContinue;
 }
 

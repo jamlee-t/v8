@@ -3874,10 +3874,12 @@ ReduceResult MaglevGraphBuilder::BuildTransitionElementsKindOrCheckMap(
       {heap_object, object_map}, transition_sources, transition_target));
   // After this operation, heap_object's map is transition_target (or we
   // deopted).
-  known_info->SetPossibleMaps(PossibleMaps{transition_target},
-                              !transition_target.is_stable(),
-                              StaticTypeForMap(transition_target, broker()),
-                              broker(), known_node_aspects());
+  if (!known_info->SetPossibleMaps(
+          PossibleMaps{transition_target}, !transition_target.is_stable(),
+          StaticTypeForMap(transition_target, broker()), broker(),
+          known_node_aspects())) {
+    return reducer_.BuildAbort(AbortReason::kUnreachable);
+  }
   DCHECK(transition_target.IsJSReceiverMap());
   if (!transition_target.is_stable()) {
     known_node_aspects().MarkSideEffectsRequireInvalidation();
@@ -3938,7 +3940,9 @@ ReduceResult MaglevGraphBuilder::BuildCompareMaps(
     sub_graph->Goto(&*map_matched);
     sub_graph->Bind(&*map_matched);
   }
-  merger.UpdateKnownNodeAspects(object, known_node_aspects());
+  if (!merger.UpdateKnownNodeAspects(object, known_node_aspects())) {
+    return reducer_.EmitUnconditionalDeopt(DeoptimizeReason::kWrongValue);
+  }
   return ReduceResult::Done();
 }
 
@@ -3966,10 +3970,12 @@ ReduceResult MaglevGraphBuilder::BuildTransitionElementsKindAndCompareMaps(
       &*if_not_matched, {new_map, GetConstant(transition_target)}));
   // After the branch, object's map is transition_target.
   DCHECK(transition_target.IsJSReceiverMap());
-  known_info->SetPossibleMaps(PossibleMaps{transition_target},
-                              !transition_target.is_stable(),
-                              StaticTypeForMap(transition_target, broker()),
-                              broker(), known_node_aspects());
+  if (!known_info->SetPossibleMaps(
+          PossibleMaps{transition_target}, !transition_target.is_stable(),
+          StaticTypeForMap(transition_target, broker()), broker(),
+          known_node_aspects())) {
+    return reducer_.EmitUnconditionalDeopt(DeoptimizeReason::kWrongValue);
+  }
   if (!transition_target.is_stable()) {
     known_node_aspects().MarkSideEffectsRequireInvalidation();
   } else {
@@ -4489,9 +4495,11 @@ ReduceResult MaglevGraphBuilder::BuildLoadField(
         access_info.field_map().value().is_stable()) {
       DCHECK(access_info.field_map().value().IsJSReceiverMap());
       auto map = access_info.field_map().value();
-      known_info->SetPossibleMaps(PossibleMaps{map}, false,
-                                  StaticTypeForMap(map, broker()), broker(),
-                                  known_node_aspects());
+      if (!known_info->SetPossibleMaps(PossibleMaps{map}, false,
+                                       StaticTypeForMap(map, broker()),
+                                       broker(), known_node_aspects())) {
+        return reducer_.EmitUnconditionalDeopt(DeoptimizeReason::kWrongValue);
+      }
       broker()->dependencies()->DependOnStableMap(map);
     } else {
       known_info->IntersectType(NodeType::kAnyHeapObject);
@@ -5959,6 +5967,9 @@ MaybeReduceResult MaglevGraphBuilder::TryBuildPolymorphicElementAccess(
     if (map_check_result.IsDoneWithAbort()) {
       // We know from known possible maps that this branch is not reachable,
       // so don't emit any code for it.
+      if (check_next_map.has_value()) {
+        sub_graph.Bind(&*check_next_map);
+      }
       continue;
     }
     MaybeReduceResult result;
@@ -8299,10 +8310,12 @@ MaybeReduceResult MaglevGraphBuilder::TryReduceArrayIteratingBuiltin(
   // Reset the known receiver maps if necessary.
   if (receiver_maps_were_unstable) {
     DCHECK(node_info);
-    node_info->SetPossibleMaps(
-        receiver_maps_before_loop, receiver_maps_were_unstable,
-        // Node type is monotonic, no need to reset it.
-        NodeType::kUnknown, broker(), known_node_aspects());
+    if (!node_info->SetPossibleMaps(
+            receiver_maps_before_loop, receiver_maps_were_unstable,
+            // Node type is monotonic, no need to reset it.
+            NodeType::kUnknown, broker(), known_node_aspects())) {
+      return reducer_.EmitUnconditionalDeopt(DeoptimizeReason::kWrongValue);
+    }
     known_node_aspects().MarkSideEffectsRequireInvalidation();
   } else {
     if (node_info) {
@@ -9939,9 +9952,11 @@ MaybeReduceResult MaglevGraphBuilder::TryReduceArrayPrototypeSort(
     }
     if (receiver_maps_were_unstable) {
       DCHECK(node_info);
-      node_info->SetPossibleMaps(
-          receiver_maps_before_loop, receiver_maps_were_unstable,
-          NodeType::kUnknown, broker(), known_node_aspects());
+      if (!node_info->SetPossibleMaps(
+              receiver_maps_before_loop, receiver_maps_were_unstable,
+              NodeType::kUnknown, broker(), known_node_aspects())) {
+        return reducer_.EmitUnconditionalDeopt(DeoptimizeReason::kWrongValue);
+      }
       known_node_aspects().MarkSideEffectsRequireInvalidation();
     }
     ValueNode* i_int32 = sub_builder.get(var_i);

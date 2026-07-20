@@ -34,6 +34,20 @@ ProcessResult RecomputeKnownNodeAspectsProcessor::RecordType(ValueNode* node,
   return ProcessResult::kContinue;
 }
 
+ProcessResult RecomputeKnownNodeAspectsProcessor::ProcessNode(AssumeMap* node) {
+  auto merger = KnownMapsMerger<compiler::ZoneRefSet<Map>>(broker(), zone(),
+                                                           node->maps());
+  merger.IntersectWithKnownNodeAspects(node->ObjectInput().node(),
+                                       known_node_aspects());
+  if (!merger.UpdateKnownNodeAspects(node->ObjectInput().node(),
+                                     known_node_aspects())) {
+    ReduceResult result = reducer_.BuildAbort(AbortReason::kUnreachable);
+    CHECK(result.IsDoneWithAbort());
+    return ProcessResult::kTruncateBlock;
+  }
+  return ProcessResult::kContinue;
+}
+
 #define DEFINE_PROCESS_SAFE_CONV(Node, Alt, Type)                              \
   ProcessResult RecomputeKnownNodeAspectsProcessor::ProcessNode(Node* node) {  \
     NodeInfo* info = GetOrCreateInfoFor(node->input_node(0));                  \

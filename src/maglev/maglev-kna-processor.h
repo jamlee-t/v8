@@ -475,15 +475,7 @@ class RecomputeKnownNodeAspectsProcessor {
     return ProcessResult::kContinue;
   }
 
-  ProcessResult ProcessNode(AssumeMap* node) {
-    auto merger = KnownMapsMerger<compiler::ZoneRefSet<Map>>(broker(), zone(),
-                                                             node->maps());
-    merger.IntersectWithKnownNodeAspects(node->ObjectInput().node(),
-                                         known_node_aspects());
-    merger.UpdateKnownNodeAspects(node->ObjectInput().node(),
-                                  known_node_aspects());
-    return ProcessResult::kContinue;
-  }
+  ProcessResult ProcessNode(AssumeMap* node);
 
   ProcessResult ProcessNode(AssumeType* node) {
     return RecordType(node->input_node(0), node->asserted_type());
