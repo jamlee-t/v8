@@ -5675,6 +5675,8 @@ MaybeReduceResult MaglevReducer<BaseT>::TryReduceRegExpPrototypeTest(
   ValueNode* last_index;
   GET_VALUE_OR_ABORT(
       last_index, BuildLoadTaggedField(receiver, JSRegExp::kLastIndexOffset));
+  // RegExpPrototypeTestFast requires lastIndex to be a positive Smi.
+  RETURN_IF_ABORT(BuildCheckSmi(last_index));
   // Virtual object tracking might return an Int32Constant, which cannot be
   // untagged.
   ValueNode* last_index_int32;
