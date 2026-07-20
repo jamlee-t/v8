@@ -6409,6 +6409,9 @@ Reduction JSCallReducer::ReduceJSConstructForwardAllArgs(Node* node) {
   if (outer_info.type() == FrameStateType::kInlinedExtraArguments) {
     frame_state = outer_state;
   }
+  if (frame_state.parameters()->opcode() == IrOpcode::kDeadValue) {
+    return NoChange();
+  }
 
   int argc = 0;
   StateValuesAccess parameters_access(frame_state.parameters());
