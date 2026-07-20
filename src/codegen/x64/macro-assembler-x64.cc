@@ -4488,9 +4488,19 @@ void MacroAssembler::LeaveFrame(StackFrame::Type type) {
   // IsJSFrame or similar. Could then unify with manual frame leaves in the
   // interpreter too.
   if (v8_flags.debug_code && !StackFrame::IsJavaScript(type)) {
+    Label ok;
     cmpq(Operand(rbp, CommonFrameConstants::kContextOrFrameTypeOffset),
          Immediate(StackFrame::TypeToMarker(type)));
-    Check(equal, AbortReason::kStackFrameTypesMustMatch);
+    j(equal, &ok, Label::kNear);
+#if V8_ENABLE_WEBASSEMBLY
+    if (type == StackFrame::WASM && v8_flags.wasm_growable_stacks) {
+      cmpq(Operand(rbp, CommonFrameConstants::kContextOrFrameTypeOffset),
+           Immediate(StackFrame::TypeToMarker(StackFrame::WASM_SEGMENT_START)));
+      j(equal, &ok, Label::kNear);
+    }
+#endif
+    Abort(AbortReason::kStackFrameTypesMustMatch);
+    bind(&ok);
   }
   movq(rsp, rbp);
   popq(rbp);
