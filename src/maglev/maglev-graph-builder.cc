@@ -5521,7 +5521,7 @@ ReduceResult MaglevGraphBuilder::BuildElementLoadOnJSArrayOrJSObject(
             // be refined to just Smi after we insert a hole check. This isn't
             // trivial because the Maglev type system currently doesn't have a
             // "Hole" type.
-            reducer_.RecordTypeNoAbort(result, NodeType::kSmi);
+            RETURN_IF_ABORT(reducer_.RecordType(result, NodeType::kSmi));
           }
         }
       }
