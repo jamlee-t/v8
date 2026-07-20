@@ -90,6 +90,10 @@ class V8_EXPORT_PRIVATE RegExpMacroAssemblerARM64
   void CheckPosition(int cp_offset, Label* on_outside_input) override;
   void CheckSpecialClassRanges(StandardCharacterSet type,
                                Label* on_no_match) override;
+  bool CanTableSwitchOnBits() override;
+  void TableSwitchOnBits(int shift, int table_size, Label* table) override;
+  void EmitTableSwitchTable(Label* table,
+                            base::Vector<Label* const> targets) override;
   void BindJumpTarget(Label* label = nullptr) override;
   void Fail() override;
   bool prologue_pushes_fail_label() const override { return true; }

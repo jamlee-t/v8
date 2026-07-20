@@ -211,6 +211,21 @@ class RegExpMacroAssembler {
   }
   virtual void SkipUntilOneOfMasked3(const SkipUntilOneOfMasked3Args& args);
 
+  // Dispatches on bits [shift, shift + log2(table_size)) of the current
+  // character: control continues at the code offset stored in the table at
+  // index (current_character >> shift) & (table_size - 1). table_size is a
+  // power of two. The caller later emits the table data in place via
+  // EmitTableSwitchTable, once every target label is bound. Only emitted
+  // when CanTableSwitchOnBits() is true.
+  virtual bool CanTableSwitchOnBits() { return false; }
+  virtual void TableSwitchOnBits(int shift, int table_size, Label* table) {
+    UNREACHABLE();
+  }
+  virtual void EmitTableSwitchTable(Label* table,
+                                    base::Vector<Label* const> targets) {
+    UNREACHABLE();
+  }
+
   // Checks whether the given offset from the current position is is in-bounds.
   // May overwrite the current character.
   virtual void CheckPosition(int cp_offset, Label* on_outside_input) = 0;

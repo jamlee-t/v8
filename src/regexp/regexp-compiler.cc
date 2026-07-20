@@ -1545,7 +1545,7 @@ void GenerateBranches(RegExpMacroAssembler* masm, ZoneList<base::uc32>* ranges,
 void EmitClassRanges(Compiler* compiler, RegExpMacroAssembler* macro_assembler,
                      ClassRanges* cr, bool one_byte, Label* on_failure,
                      int cp_offset, bool check_offset, bool preloaded,
-                     Zone* zone) {
+                     const QuickCheckDetails::Position* known, Zone* zone) {
   ZoneList<CharacterRange>* ranges = cr->ranges(zone);
   CharacterRange::Canonicalize(ranges);
 
@@ -1638,9 +1638,19 @@ void EmitClassRanges(Compiler* compiler, RegExpMacroAssembler* macro_assembler,
     }
     if (solutions != member_count) break;
     TRACE("* Fold masked class");
+    // A passed quick check may have already established (x & M') == c' for
+    // a superset mask M' of M; the mask equation then holds and only the
+    // range check remains.
+    const bool mask_known = known != nullptr && (known->mask & mask) == mask &&
+                            (known->value & mask) == c;
     if (!cr->is_negated()) {
-      macro_assembler->CheckNotCharacterAfterAnd(c, mask, on_failure);
+      if (!mask_known) {
+        macro_assembler->CheckNotCharacterAfterAnd(c, mask, on_failure);
+      }
       macro_assembler->CheckCharacterNotInRange(
+          static_cast<base::uc16>(lo), static_cast<base::uc16>(hi), on_failure);
+    } else if (mask_known) {
+      macro_assembler->CheckCharacterInRange(
           static_cast<base::uc16>(lo), static_cast<base::uc16>(hi), on_failure);
     } else {
       Label ok;
@@ -2626,8 +2636,13 @@ void TextNode::TextEmitPass(Compiler* compiler, TextEmitPassType pass,
         if (DeterminedAlready(quick_check, elm.cp_offset())) continue;
         ClassRanges* cr = elm.class_ranges();
         bool bounds_check = *checked_up_to < cp_offset || read_backward();
+        const QuickCheckDetails::Position* known =
+            quick_check != nullptr &&
+                    elm.cp_offset() < quick_check->characters()
+                ? quick_check->positions(elm.cp_offset())
+                : nullptr;
         EmitClassRanges(compiler, assembler, cr, one_byte, backtrack, cp_offset,
-                        bounds_check, preloaded, zone());
+                        bounds_check, preloaded, known, zone());
         UpdateBoundsCheck(cp_offset, checked_up_to);
       }
     }
@@ -5058,15 +5073,104 @@ std::optional<EmitResult> ChoiceNode::TryEmitMaskedValueDispatch(
   } else {
     load_mask = 0xffffffff;
   }
-  // If the mask already covers every bit the load can produce, the AND is a
-  // no-op and a plain character compare suffices.
-  const bool need_mask = (common_mask & load_mask) != load_mask;
-  for (int g = 0; g < group_count; g++) {
-    if (need_mask) {
-      assembler->CheckCharacterAfterAnd(group_values[g], common_mask,
-                                        group_labels[g]);
-    } else {
-      assembler->CheckCharacter(group_values[g], group_labels[g]);
+  // The bits on which the group values differ select the group; the
+  // remaining value bits are common to all groups.  When there are enough
+  // groups and the differing bits span a small window, dispatch through a
+  // jump table on that window instead of the compare chain.
+  //
+  // Three quantities drive the table: |value_diff| bounds the window (the
+  // contiguous bit range in which any two groups differ); |common_mask|
+  // says which bits within that window actually constrain the value (the
+  // rest are don't-cares that repeat a group across several indices); and
+  // the fill loop below replicates each group over its don't-care bits.
+  //
+  // Example: groups {0x41, 0x43, 0x61} under common_mask 0xFF differ only
+  // in bits 1 and 5, so value_diff = 0x22, table_shift = 1, table_bits = 5
+  // (a 32-entry table indexed by bits 1..5).  The common_mask bits outside
+  // the window (0xFF & ~0x3E = 0xC1) are constant across groups and are
+  // checked once up front (pre_mask); the table resolves the rest.
+  static constexpr int kMinGroupsForTableSwitch = 6;
+  static constexpr int kMaxTableSwitchBits = 6;  // Up to 64 entries.
+  uint32_t value_diff = 0;
+  for (int g = 1; g < group_count; g++) {
+    value_diff |= group_values[g] ^ group_values[0];
+  }
+  int table_shift = 0;
+  int table_bits = 0;
+  if (assembler->CanTableSwitchOnBits() &&
+      group_count >= kMinGroupsForTableSwitch && value_diff != 0) {
+    table_shift = base::bits::CountTrailingZeros(value_diff);
+    table_bits = 32 - base::bits::CountLeadingZeros(value_diff) - table_shift;
+    if (table_bits > kMaxTableSwitchBits) table_bits = 0;
+  }
+  // Zone-allocated for the error path: body emission below can bail out
+  // before the table data referencing this label is emitted.
+  Label* table_label = table_bits > 0 ? zone()->New<Label>() : nullptr;
+  base::SmallVector<Label*, 64> table;
+  Label no_group;
+  if (table_bits > 0) {
+    const int table_size = 1 << table_bits;
+    const uint32_t index_mask = table_size - 1;
+    const uint32_t span_mask = index_mask << table_shift;
+    // known_mask/known_value hold the bits, and their values, that a prior
+    // quick check on this path already proved.
+    uint32_t known_mask = 0;
+    uint32_t known_value = 0;
+    const QuickCheckDetails* prior = trace->quick_check_performed();
+    if (prior != nullptr) {
+      const uint32_t char_mask = CharMask(compiler->one_byte());
+      const int bits_per_char = compiler->one_byte() ? 8 : 16;
+      for (int i = 0; i < prior->characters() && i < preload_characters; i++) {
+        const QuickCheckDetails::Position* pos = prior->positions(i);
+        known_mask |= (pos->mask & char_mask) << (i * bits_per_char);
+        known_value |= (pos->value & char_mask) << (i * bits_per_char);
+      }
+    }
+    // Constrained bits outside the index window need a separate check.  Of
+    // those, drop the ones a prior quick check already pinned to the value
+    // we would test: known_mask picks the proven bits, and clearing where
+    // known_value disagrees with group_values[0] leaves only the redundant
+    // ones, which are removed from pre_mask.
+    uint32_t pre_mask = common_mask & ~span_mask;
+    pre_mask &= ~(known_mask & ~(known_value ^ group_values[0]));
+    if (pre_mask != 0) {
+      assembler->CheckNotCharacterAfterAnd(group_values[0] & pre_mask, pre_mask,
+                                           &no_group);
+    }
+    // Within the window, the masked bits select the group; the remaining
+    // (free) bits are unconstrained, so a group occupies every index formed
+    // by its masked bits OR any combination of the free bits.
+    const uint32_t masked_index_bits =
+        (common_mask >> table_shift) & index_mask;
+    const uint32_t free_bits = index_mask & ~masked_index_bits;
+    table.resize_no_init(table_size);
+    for (int idx = 0; idx < table_size; idx++) table[idx] = &no_group;
+    for (int g = 0; g < group_count; g++) {
+      const uint32_t group_bits =
+          (group_values[g] >> table_shift) & masked_index_bits;
+      // Enumerate the submasks of free_bits (including 0) to visit only this
+      // group's entries, rather than scanning the whole table per group.
+      for (uint32_t sub = free_bits;; sub = (sub - 1) & free_bits) {
+        DCHECK_EQ(table[group_bits | sub], &no_group);
+        table[group_bits | sub] = group_labels[g];
+        if (sub == 0) break;
+      }
+    }
+    assembler->TableSwitchOnBits(table_shift, table_size, table_label);
+    // The table dispatches with an indirect jump, so its targets need jump-
+    // target landing pads under control-flow integrity (BindJumpTarget).
+    assembler->BindJumpTarget(&no_group);
+  } else {
+    // If the mask already covers every bit the load can produce, the AND is
+    // a no-op and a plain character compare suffices.
+    const bool need_mask = (common_mask & load_mask) != load_mask;
+    for (int g = 0; g < group_count; g++) {
+      if (need_mask) {
+        assembler->CheckCharacterAfterAnd(group_values[g], common_mask,
+                                          group_labels[g]);
+      } else {
+        assembler->CheckCharacter(group_values[g], group_labels[g]);
+      }
     }
   }
   // A null backtrack target means Backtrack; GoTo handles that.
@@ -5082,7 +5186,14 @@ std::optional<EmitResult> ChoiceNode::TryEmitMaskedValueDispatch(
     chain_labels[i] = zone()->New<Label>();
   }
   for (int g = 0; g < group_count; g++) {
-    assembler->Bind(group_labels[g]);
+    // The table path reaches the group bodies through an indirect jump, so
+    // they need jump-target landing pads under control-flow integrity; the
+    // compare chain reaches them by a direct branch and does not.
+    if (table_bits > 0) {
+      assembler->BindJumpTarget(group_labels[g]);
+    } else {
+      assembler->Bind(group_labels[g]);
+    }
     int last_in_group = -1;
     for (int i = choice_count - 1; i >= 0; i--) {
       if (group_of_alt[i] == g) {
@@ -5121,6 +5232,12 @@ std::optional<EmitResult> ChoiceNode::TryEmitMaskedValueDispatch(
                                         preload_characters);
       }
     }
+  }
+
+  // All dispatch targets are bound now; emit the table data. The group
+  // bodies above never fall through past their last emitted instruction.
+  if (table_bits > 0) {
+    assembler->EmitTableSwitchTable(table_label, base::VectorOf(table));
   }
 
   preload->preload_is_current_ = false;

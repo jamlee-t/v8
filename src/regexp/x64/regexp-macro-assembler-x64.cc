@@ -1429,6 +1429,50 @@ void RegExpMacroAssemblerX64::BindJumpTarget(Label* label) {
   // more thought how to avoid perf regressions.
 }
 
+bool RegExpMacroAssemblerX64::CanTableSwitchOnBits() { return true; }
+
+void RegExpMacroAssemblerX64::TableSwitchOnBits(int shift, int table_size,
+                                                Label* table) {
+  DCHECK(base::bits::IsPowerOfTwo(table_size));
+  __ movl(rax, current_character());
+  if (shift > 0) __ shrl(rax, Immediate(shift));
+  __ andl(rax, Immediate(table_size - 1));
+  // The entries are table-relative (target minus the table's own position, as
+  // written by WriteBuiltinJumpTableEntry), so the target is reconstructed by
+  // adding the table's runtime address rather than the InstructionStream base.
+  __ leaq(rcx, Operand(table, 0));
+  __ movsxlq(rax, Operand(rcx, rax, times_4, 0));
+  __ addq(rcx, rax);
+  // TODO(sroettger): This jump needs an endbr64 instruction but the code is
+  // performance sensitive. Needs more thought how to do this in a fast way.
+  __ jmp(rcx, /*notrack=*/true);
+}
+
+void RegExpMacroAssemblerX64::EmitTableSwitchTable(
+    Label* table, base::Vector<Label* const> targets) {
+  // The table is emitted straight into the instruction stream; the caller
+  // guarantees the preceding code ends with an unconditional control
+  // transfer and that every target is already bound.
+  //
+  // The entries are raw offset words, not instructions. Bracket them with
+  // traps so that a stray fall-through or a jump into the data (rather than
+  // through the indirect dispatch) faults instead of executing the offsets
+  // as code. The entry trap precedes the alignment so the table itself
+  // stays aligned for the indexed load.
+  __ int3();
+  __ Align(kIntSize);
+  __ bind(table);
+  // WriteBuiltinJumpTableEntry emits each table-relative offset and records it
+  // in the jump table info, which lets the generated-code validator skip the
+  // data instead of decoding it as instructions.
+  const int table_pos = table->pos();
+  for (Label* target : targets) {
+    DCHECK(target->is_bound());
+    __ WriteBuiltinJumpTableEntry(target, table_pos);
+  }
+  __ int3();
+}
+
 void RegExpMacroAssemblerX64::Fail() {
   static_assert(FAILURE == 0);  // Return value for failure is zero.
   if (!global()) {

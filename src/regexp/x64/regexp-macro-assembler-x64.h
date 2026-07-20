@@ -86,6 +86,11 @@ class V8_EXPORT_PRIVATE RegExpMacroAssemblerX64
   void CheckSpecialClassRanges(StandardCharacterSet type,
                                Label* on_no_match) override;
 
+  bool CanTableSwitchOnBits() override;
+  void TableSwitchOnBits(int shift, int table_size, Label* table) override;
+  void EmitTableSwitchTable(Label* table,
+                            base::Vector<Label* const> targets) override;
+
   void BindJumpTarget(Label* label) override;
 
   void Fail() override;

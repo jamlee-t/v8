@@ -1360,6 +1360,54 @@ void RegExpMacroAssemblerARM64::CheckSpecialClassRanges(
   }
 }
 
+bool RegExpMacroAssemblerARM64::CanTableSwitchOnBits() { return true; }
+
+void RegExpMacroAssemblerARM64::TableSwitchOnBits(int shift, int table_size,
+                                                  Label* table) {
+  DCHECK(base::bits::IsPowerOfTwo(table_size));
+  const int index_bits = base::bits::WhichPowerOfTwo(table_size);
+  // Extract the index window (current_character >> shift) & (table_size - 1)
+  // and load the table-relative target offset the table holds for it. The
+  // offsets are table-relative (target minus the table's own position, as
+  // written by WriteJumpTableEntry), so the target is reconstructed by adding
+  // the table's runtime address, still held in x11 from the Adr above.
+  __ Ubfx(w10, current_character(), shift, index_bits);
+  __ Adr(x11, table, MacroAssembler::kAdrFar);
+  // Scale the index by kInt32Size (the entry size) to address the table.
+  __ Ldrsw(x10, MemOperand(x11, x10, LSL, 2));
+  __ Add(x10, x11, x10);
+  __ Br(x10);
+}
+
+void RegExpMacroAssemblerARM64::EmitTableSwitchTable(
+    Label* table, base::Vector<Label* const> targets) {
+  // The table is emitted straight into the instruction stream, so keep the
+  // constant and veneer pools out of the entries and align for the word loads
+  // in TableSwitchOnBits. The caller guarantees the preceding code ends with
+  // an unconditional control transfer and that every target is bound.
+  //
+  // The entries are raw offset words, not instructions. Bracket them with
+  // traps so that a stray fall-through or a jump into the data (rather than
+  // through the indirect dispatch) faults instead of executing the offsets
+  // as code. Both traps are kept inside the pool scope so nothing is inserted
+  // between them and the table.
+  const int table_size_in_bytes = static_cast<int>(targets.size()) * kInt32Size;
+  MacroAssembler::BlockPoolsScope no_pools(
+      masm_.get(), table_size_in_bytes + 2 * kInstrSize);
+  __ Brk(0);
+  __ Align(kInt32Size);
+  __ Bind(table);
+  // WriteJumpTableEntry emits each table-relative offset and records it in the
+  // jump table info, which lets the generated-code validator skip the data
+  // instead of decoding it as instructions.
+  const int table_pos = table->pos();
+  for (Label* target : targets) {
+    DCHECK(target->is_bound());
+    __ WriteJumpTableEntry(target, table_pos);
+  }
+  __ Brk(0);
+}
+
 void RegExpMacroAssemblerARM64::Fail() {
   __ Mov(w0, FAILURE);
   __ B(&exit_label_);
