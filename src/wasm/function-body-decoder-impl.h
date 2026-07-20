@@ -1093,7 +1093,7 @@ struct MemoryAccessImmediate {
                                   ValidationTag = {}) {
     // Check for the fast path (two single-byte LEBs, mem index 0).
     const bool two_bytes = !ValidationTag::validate || decoder->end() - pc >= 2;
-    const bool use_fast_path = two_bytes && !(pc[0] & 0xe0) && !(pc[1] & 0x80);
+    const bool use_fast_path = two_bytes && !(pc[0] & 0xd0) && !(pc[1] & 0x80);
     if (V8_LIKELY(use_fast_path)) {
       alignment = pc[0];
       mem_index = 0;
@@ -1138,7 +1138,7 @@ struct MemoryAccessImmediate {
       mem_index = 0;
     }
 
-    if (alignment & 0x20) {
+    if (alignment & 0x10) {
       if (!acquire_release_enabled) {
         DecodeError<ValidationTag>(decoder, pc,
                                    "invalid memory ordering: acquire-release "
@@ -1148,7 +1148,7 @@ struct MemoryAccessImmediate {
             decoder, pc,
             "memory ordering immediate invalid on non-atomic operation");
       } else {
-        alignment &= ~0x20;
+        alignment &= ~0x10;
         uint8_t order_imm =
             decoder->read_u8<ValidationTag>(pc + length, "memory order");
         length++;

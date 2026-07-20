@@ -1082,7 +1082,7 @@ class BodyGen {
     }
 
     // Format of the instruction (supports multi-memory):
-    // memory_op (align | 0x40 [ | 0x20 ]) memory_index [order_imm] offset
+    // memory_op (align | 0x40 [ | 0x10 ]) memory_index [order_imm] offset
     if (WasmOpcodes::IsPrefixOpcode(static_cast<WasmOpcode>(memory_op >> 8))) {
       DCHECK(memory_op >> 8 == kAtomicPrefix || memory_op >> 8 == kSimdPrefix);
       builder_->EmitWithPrefix(memory_op);
@@ -1091,7 +1091,7 @@ class BodyGen {
     }
     uint32_t align_byte = align | 0x40;
     if (emit_acq_rel) {
-      align_byte |= 0x20;
+      align_byte |= 0x10;
     }
     builder_->EmitU32V(align_byte);
     builder_->EmitU32V(memory_index);

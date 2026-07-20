@@ -15,7 +15,7 @@ builder.addFunction('main', kSig_v_ii)
     kExprLocalGet, 0, // index
     kExprLocalGet, 1, // value
     kAtomicPrefix, kExprI32AtomicStore8U,
-    0x20, // alignment (bit 5 set to indicate memory order is present)
+    0x10, // alignment (bit 4 set to indicate memory order is present)
     kAtomicAcqRel,
     0x00  // offset
   ]);

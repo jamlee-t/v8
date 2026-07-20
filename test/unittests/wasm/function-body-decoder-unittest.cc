@@ -4790,7 +4790,7 @@ TEST_F(FunctionBodyDecoderTest, AtomicMemoryOrderValid) {
         static_cast<uint8_t>(AtomicMemoryOrder::kAcqRel)}) {
     const uint8_t kAlignment = 2;
     const uint8_t kOffset = 0;
-    const uint8_t kMemAccess = kAlignment | 0x20;
+    const uint8_t kMemAccess = kAlignment | 0x10;
     const uint8_t code[] = {
       WASM_LOCAL_GET(0),
       kAtomicPrefix, U32V_1(kExprI32AtomicLoad), kMemAccess, order, kOffset,
@@ -4828,7 +4828,7 @@ TEST_F(FunctionBodyDecoderTest, AtomicMemoryOrderInvalid) {
   uint8_t order = static_cast<uint8_t>(AtomicMemoryOrder::kAcqRel) + 1;
   const uint8_t kAlignment = 2;
   const uint8_t kOffset = 0;
-  const uint8_t kMemAccess = kAlignment | 0x20;
+  const uint8_t kMemAccess = kAlignment | 0x10;
   const char* error_msg = "invalid memory ordering";
   {
     const uint8_t code[] = {
@@ -4857,7 +4857,7 @@ TEST_F(FunctionBodyDecoderTest, AtomicMemoryOrderInvalidImmediate) {
   uint8_t order = 16;
   const uint8_t kAlignment = 2;
   const uint8_t kOffset = 0;
-  const uint8_t kMemAccess = kAlignment | 0x20;
+  const uint8_t kMemAccess = kAlignment | 0x10;
   const char* error_msg = "invalid memory ordering immediate";
   {
     const uint8_t code[] = {
@@ -4884,7 +4884,7 @@ TEST_F(FunctionBodyDecoderTest, AtomicMemoryOrderAcqRelFeatureGated) {
 
   const uint8_t kAlignment = 2;
   const uint8_t kOffset = 0;
-  const uint8_t kMemAccess = kAlignment | 0x20;
+  const uint8_t kMemAccess = kAlignment | 0x10;
   const uint8_t order = static_cast<uint8_t>(AtomicMemoryOrder::kAcqRel);
   const char* error_msg =
       "invalid memory ordering: acquire-release requires "
@@ -4951,7 +4951,7 @@ TEST_F(FunctionBodyDecoderTest, AtomicMemoryOrderInvalidOnNonAtomic) {
     } else {
       code.push_back(static_cast<uint8_t>(opcode));
     }
-    code.push_back(0x20);  // Alignment + memory order bit
+    code.push_back(0x10);  // Alignment + memory order bit
     code.push_back(0);     // sequential consistency
     code.push_back(0);     // offset
     if (has_lane) code.push_back(0);
@@ -4983,7 +4983,7 @@ TEST_F(FunctionBodyDecoderTest, AtomicRMWMemoryOrderValid) {
 
   const uint8_t kAlignment = 2;
   const uint8_t kOffset = 0;
-  const uint8_t kMemAccess = kAlignment | 0x20;
+  const uint8_t kMemAccess = kAlignment | 0x10;
 
   // seqcst read, seqcst write
   uint8_t order_seqcst =
@@ -5033,7 +5033,7 @@ TEST_F(FunctionBodyDecoderTest, AtomicRMWMemoryOrderInvalid) {
 
   const uint8_t kAlignment = 2;
   const uint8_t kOffset = 0;
-  const uint8_t kMemAccess = kAlignment | 0x20;
+  const uint8_t kMemAccess = kAlignment | 0x10;
   const char* error_msg = "mismatched read and write memory ordering";
 
   // Mismatched orderings.
@@ -5057,7 +5057,7 @@ TEST_F(FunctionBodyDecoderTest, AtomicRMWMemoryOrderInvalidImmediate) {
   uint8_t order = 0x22;
   const uint8_t kAlignment = 2;
   const uint8_t kOffset = 0;
-  const uint8_t kMemAccess = kAlignment | 0x20;
+  const uint8_t kMemAccess = kAlignment | 0x10;
   const char* error_msg = "invalid memory ordering";
   const uint8_t code[] = {
       WASM_LOCAL_GET(0), WASM_LOCAL_GET(1),
@@ -5075,7 +5075,7 @@ TEST_F(FunctionBodyDecoderTest, AtomicRMWMemoryOrderAcqRelFeatureGated) {
 
   const uint8_t kAlignment = 2;
   const uint8_t kOffset = 0;
-  const uint8_t kMemAccess = kAlignment | 0x20;
+  const uint8_t kMemAccess = kAlignment | 0x10;
   const char* error_msg =
       "invalid memory ordering: acquire-release requires "
       "--wasm-acquire-release flag";
@@ -5421,14 +5421,14 @@ TEST_F(WasmOpcodeLengthTest, Atomics) {
   // kExprI32AtomicLoad: prefix + opcode + align + offset.
   ExpectLength(4, kAtomicPrefix, kExprI32AtomicLoad & 0xFF, 0x02, 0x00);
   // kExprI32AtomicLoad with explicit memory order:
-  // prefix + opcode + align|0x20 + order + offset.
-  ExpectLength(5, kAtomicPrefix, kExprI32AtomicLoad & 0xFF, 0x22, 0x01, 0x00);
+  // prefix + opcode + align|0x10 + order + offset.
+  ExpectLength(5, kAtomicPrefix, kExprI32AtomicLoad & 0xFF, 0x12, 0x01, 0x00);
 
   // kExprI32AtomicAdd: prefix + opcode + align + offset.
   ExpectLength(4, kAtomicPrefix, kExprI32AtomicAdd & 0xFF, 0x02, 0x00);
   // kExprI32AtomicAdd with explicit memory order:
-  // prefix + opcode + align|0x20 + order + offset.
-  ExpectLength(5, kAtomicPrefix, kExprI32AtomicAdd & 0xFF, 0x22, 0x11, 0x00);
+  // prefix + opcode + align|0x10 + order + offset.
+  ExpectLength(5, kAtomicPrefix, kExprI32AtomicAdd & 0xFF, 0x12, 0x11, 0x00);
 
   // kExprAtomicNotify: prefix + opcode + align + offset.
   ExpectLength(4, kAtomicPrefix, kExprAtomicNotify & 0xFF, 0x02, 0x00);
