@@ -188,6 +188,8 @@ class RecomputePhiUseHintsProcessor {
           use_repr = UseRepresentation::kTruncatedInt32;
         } else if (node->Is<NumberToString>()) {
           use_repr = UseRepresentation::kTaggedForNumberToString;
+        } else if (node->Is<CheckedNumberOrOddballToUint8Clamped>()) {
+          use_repr = UseRepresentation::kHoleyFloat64;
         }
         phi->RecordUseReprHint(UseRepresentationSet{use_repr},
                                live_loop_phis_.contains(phi));

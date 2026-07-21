@@ -111,6 +111,10 @@ class MaglevPhiRepresentationSelector {
     // Int32Constants as well.
     kHeapNumberConstant,
 
+    // The 'undefined' constant can be turned into the undefined NaN pattern
+    // when untagging to HoleyFloat64.
+    kUndefinedConstant,
+
     // Untagged inputs can be retrieved by taking the input of a conversion
     // nodes.
     kConversion,
@@ -242,6 +246,9 @@ class MaglevPhiRepresentationSelector {
   ProcessResult UpdateNodePhiInput(CheckSmi* node, Phi* phi, int input_index,
                                    const ProcessingState* state);
   ProcessResult UpdateNodePhiInput(CheckNumber* node, Phi* phi, int input_index,
+                                   const ProcessingState* state);
+  ProcessResult UpdateNodePhiInput(CheckedNumberOrOddballToUint8Clamped* node,
+                                   Phi* phi, int input_index,
                                    const ProcessingState* state);
   ProcessResult UpdateNodePhiInput(AssumeType* node, Phi* phi, int input_index,
                                    const ProcessingState* state);
