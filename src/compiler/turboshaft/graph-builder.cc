@@ -353,7 +353,9 @@ std::optional<BailoutReason> GraphBuilder::Run() {
             destination->index() > target_block->index() &&
             dominating_frame_state.valid()) {
           FeedbackSource feedback = GetLoopFeedback(successor_block);
-          __ PrepareForLoop(dominating_frame_state, feedback);
+          if (feedback.IsValid()) {
+            __ PrepareForLoop(dominating_frame_state, feedback);
+          }
         }
         __ Goto(destination);
         if (destination->IsBound()) {

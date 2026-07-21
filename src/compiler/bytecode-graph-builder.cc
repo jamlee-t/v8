@@ -4233,7 +4233,6 @@ void BytecodeGraphBuilder::SwitchToMergeEnvironment(int current_offset) {
 void BytecodeGraphBuilder::BuildLoopHeaderEnvironment(int current_offset) {
   if (bytecode_analysis().IsLoopHeader(current_offset)) {
     mark_as_needing_eager_checkpoint(true);
-    PrepareEagerCheckpoint();
     const LoopInfo& loop_info =
         bytecode_analysis().GetLoopInfoFor(current_offset);
     const BytecodeLivenessState* liveness =
@@ -4243,7 +4242,9 @@ void BytecodeGraphBuilder::BuildLoopHeaderEnvironment(int current_offset) {
     bool generate_suspend_switch = !resume_jump_targets.empty();
 
     FeedbackSource feedback;
-    {
+    if (!generate_suspend_switch) {
+      PrepareEagerCheckpoint();
+
       interpreter::BytecodeArrayIterator iterator(bytecode_array().object(),
                                                   loop_info.jump_loop_offset());
       DCHECK_EQ(iterator.current_bytecode(), interpreter::Bytecode::kJumpLoop);
@@ -4270,8 +4271,9 @@ void BytecodeGraphBuilder::BuildLoopHeaderEnvironment(int current_offset) {
       // Set the generator state to a known constant.
       environment()->BindGeneratorState(
           jsgraph()->SmiConstant(JSGeneratorObject::kGeneratorExecuting));
+    } else {
+      mark_as_needing_eager_checkpoint(true);
     }
-    mark_as_needing_eager_checkpoint(true);
   }
 }
 
