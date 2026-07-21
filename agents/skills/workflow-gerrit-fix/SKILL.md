@@ -1,5 +1,5 @@
 ---
-name: workflow_gerrit_fix
+name: workflow-gerrit-fix
 description: Workflow for automatically fixing errors or addressing comments on a Gerrit CL requested by the user.
 ---
 

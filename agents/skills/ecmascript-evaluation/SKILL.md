@@ -1,5 +1,5 @@
 ---
-name: ecmascript evaluation
+name: ecmascript-evaluation
 description: Evaluates JavaScript using the official ECMAScript specification
 ---
 
