@@ -10,26 +10,35 @@
 
 namespace v8::internal::maglev {
 
+ProcessResult RecomputeKnownNodeAspectsProcessor::OnContradiction() {
+  ReduceResult result = ReduceResult::Done();
+  if (current_node()->properties().can_eager_deopt()) {
+    // TODO(marja): Ideally, we would detect the empty type already when
+    // MaglevGraphOptimizer processes the node and just insert an Abort here.
+    // However, the current MaglevGraphOptimizer is incomplete, and sometimes
+    // this is where empty types pop up the first time, thus we need to deopt
+    // gracefully.
+    result = reducer_.EmitUnconditionalDeopt(DeoptimizeReason::kWrongValue);
+  } else {
+    // We should never produce an empty type here but still execute the
+    // code we generate after. This can be reached from AssumeType and from
+    // re-establishing recorded facts on loads and inlined-call-result
+    // wrappers.
+    CHECK(current_node()->opcode() == Opcode::kAssumeType ||
+          current_node()->opcode() == Opcode::kLoadTaggedField ||
+          current_node()->opcode() == Opcode::kReturnedValue ||
+          current_node()->opcode() == Opcode::kIdentity);
+    result = reducer_.BuildAbort(AbortReason::kUnreachable);
+  }
+  CHECK(result.IsDoneWithAbort());
+  return ProcessResult::kTruncateBlock;
+}
+
 ProcessResult RecomputeKnownNodeAspectsProcessor::RecordType(ValueNode* node,
                                                              NodeType type) {
   if (known_node_aspects().EnsureType(broker(), node, type) ==
       EnsureTypeResult::kContradiction) {
-    ReduceResult result = ReduceResult::Done();
-    if (current_node()->properties().can_eager_deopt()) {
-      // TODO(marja): Ideally, we would detect the empty type already when
-      // MaglevGraphOptimizer processes the node and just insert an Abort here.
-      // However, the current MaglevGraphOptimizer is incomplete, and sometimes
-      // this is where empty types pop up the first time, thus we need to deopt
-      // gracefully.
-      result = reducer_.EmitUnconditionalDeopt(DeoptimizeReason::kWrongValue);
-    } else {
-      // We should never have AssumeType produce an empty type but still
-      // execute the code we generate after.
-      CHECK_EQ(current_node()->opcode(), Opcode::kAssumeType);
-      result = reducer_.BuildAbort(AbortReason::kUnreachable);
-    }
-    CHECK(result.IsDoneWithAbort());
-    return ProcessResult::kTruncateBlock;
+    return OnContradiction();
   }
   return ProcessResult::kContinue;
 }

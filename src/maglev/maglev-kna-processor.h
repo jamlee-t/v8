@@ -265,6 +265,7 @@ class RecomputeKnownNodeAspectsProcessor {
   }
 
   V8_NODISCARD ProcessResult RecordType(ValueNode* node, NodeType type);
+  V8_NODISCARD ProcessResult OnContradiction();
 
   void Merge(BasicBlock* block) {
     while (block->is_edge_split_block()) {
@@ -361,7 +362,31 @@ class RecomputeKnownNodeAspectsProcessor {
   PROCESS_UNSAFE_CONV(HoleyFloat64ToSilencedFloat64, float64, Number)
 #undef PROCESS_UNSAFE_CONV
 
+  ProcessResult ProcessNode(CheckMaps* node) {
+    // Re-establish map knowledge implied by an emitted check, so that later
+    // phases re-running check building (e.g. the graph optimizer) do not
+    // pessimize checks that the graph builder could fold.
+    NodeInfo* info = GetOrCreateInfoFor(node->ReceiverInput().node());
+    NodeType type = NodeType::kNone;
+    bool any_map_is_unstable = false;
+    for (compiler::MapRef map : node->maps()) {
+      type = maglev::UnionType(type, StaticTypeForMap(map, broker()));
+      if (!map.is_stable()) any_map_is_unstable = true;
+    }
+    if (!info->SetPossibleMaps(node->maps(), any_map_is_unstable, type,
+                               broker(), known_node_aspects())) {
+      return OnContradiction();
+    }
+    return ProcessResult::kContinue;
+  }
+
   ProcessResult ProcessNode(LoadTaggedField* node) {
+    // Re-establish the static type recorded at graph building time (field
+    // representation / stable field map derived).
+    if (node->type() != NodeType::kUnknown) {
+      ProcessResult result = RecordType(node, node->type());
+      if (result != ProcessResult::kContinue) return result;
+    }
     if (!node->property_key().is_none()) {
       auto& props_for_key = known_node_aspects().GetLoadedPropertiesForKey(
           zone(), node->is_const(), node->property_key());
