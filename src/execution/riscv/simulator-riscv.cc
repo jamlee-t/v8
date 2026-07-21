@@ -1079,31 +1079,35 @@ struct type_sew_t<128> {
   auto fn = [](type f1, type f2, type a) { return std::fma(f1, f2, a); }; \
   vd = CanonicalizeFPUOpFMA<type>(fn, _f1, _f2, _a);
 
-#define RVV_VI_VFP_FMA_VV_LOOP(BODY32, BODY64)            \
-  RVV_VI_VFP_LOOP_BASE                                    \
-  switch (rvv_vsew()) {                                   \
-    case E16: {                                           \
-      UNIMPLEMENTED();                                    \
-    }                                                     \
-    case E32: {                                           \
-      float& vd = Rvvelt<float>(rvv_vd_reg(), i, true);   \
-      float vs1 = Rvvelt<float>(rvv_vs1_reg(), i);        \
-      float vs2 = Rvvelt<float>(rvv_vs2_reg(), i);        \
-      BODY32;                                             \
-      break;                                              \
-    }                                                     \
-    case E64: {                                           \
-      double& vd = Rvvelt<double>(rvv_vd_reg(), i, true); \
-      double vs1 = Rvvelt<double>(rvv_vs1_reg(), i);      \
-      double vs2 = Rvvelt<double>(rvv_vs2_reg(), i);      \
-      BODY64;                                             \
-      break;                                              \
-    }                                                     \
-    default:                                              \
-      require(0);                                         \
-      break;                                              \
-  }                                                       \
-  RVV_VI_VFP_LOOP_END                                     \
+#define RVV_VI_VFP_FMA_VV_LOOP(BODY16, BODY32, BODY64)                     \
+  RVV_VI_VFP_LOOP_BASE                                                     \
+  switch (rvv_vsew()) {                                                    \
+    case E16: {                                                            \
+      uint16_t& vd = Rvvelt<uint16_t>(rvv_vd_reg(), i, true);              \
+      Float16 vs1 = Float16::FromBits(Rvvelt<uint16_t>(rvv_vs1_reg(), i)); \
+      Float16 vs2 = Float16::FromBits(Rvvelt<uint16_t>(rvv_vs2_reg(), i)); \
+      BODY16;                                                              \
+      break;                                                               \
+    }                                                                      \
+    case E32: {                                                            \
+      float& vd = Rvvelt<float>(rvv_vd_reg(), i, true);                    \
+      float vs1 = Rvvelt<float>(rvv_vs1_reg(), i);                         \
+      float vs2 = Rvvelt<float>(rvv_vs2_reg(), i);                         \
+      BODY32;                                                              \
+      break;                                                               \
+    }                                                                      \
+    case E64: {                                                            \
+      double& vd = Rvvelt<double>(rvv_vd_reg(), i, true);                  \
+      double vs1 = Rvvelt<double>(rvv_vs1_reg(), i);                       \
+      double vs2 = Rvvelt<double>(rvv_vs2_reg(), i);                       \
+      BODY64;                                                              \
+      break;                                                               \
+    }                                                                      \
+    default:                                                               \
+      require(0);                                                          \
+      break;                                                               \
+  }                                                                        \
+  RVV_VI_VFP_LOOP_END                                                      \
   rvv_trace_vd();
 
 #define RVV_VI_VFP_FMA_VF_LOOP(BODY32, BODY64)            \
@@ -8693,36 +8697,114 @@ void Simulator::DecodeRvvFVV() {
       rvv_trace_vd();
       break;
     case RO_V_VFMADD_VV:
-      RVV_VI_VFP_FMA_VV_LOOP({RVV_VI_VFP_FMA(float, vd, vs1, vs2)},
-                             {RVV_VI_VFP_FMA(double, vd, vs1, vs2)})
+      RVV_VI_VFP_FMA_VV_LOOP(
+          {
+            float src1 = vs1.ToFloat32();
+            float src2 = vs2.ToFloat32();
+            float dst = Float16::FromBits(vd).ToFloat32();
+            float alu_out = std::fma(dst, src1, src2);
+
+            if (std::isnan(alu_out) || std::isnan(src1) || std::isnan(src2) ||
+                std::isnan(dst)) {
+              // signaling_nan sets kInvalidOperation bit
+              if (isSnan(alu_out) || isSnan(src1) || isSnan(src2) ||
+                  isSnan(dst)) {
+                set_fflags(kInvalidOperation);
+              }
+              alu_out = std::numeric_limits<float>::quiet_NaN();
+            }
+            vd = Float16::FromFloat32(alu_out).get_bits();
+          },
+          {RVV_VI_VFP_FMA(float, vd, vs1, vs2)},
+          {RVV_VI_VFP_FMA(double, vd, vs1, vs2)})
       break;
     case RO_V_VFNMADD_VV:
-      RVV_VI_VFP_FMA_VV_LOOP({RVV_VI_VFP_FMA(float, -vd, vs1, -vs2)},
-                             {RVV_VI_VFP_FMA(double, -vd, vs1, -vs2)})
+      RVV_VI_VFP_FMA_VV_LOOP(
+          {
+            UNIMPLEMENTED();
+            USE(vd);
+            USE(vs1);
+            USE(vs2);
+          },
+          {RVV_VI_VFP_FMA(float, -vd, vs1, -vs2)},
+          {RVV_VI_VFP_FMA(double, -vd, vs1, -vs2)})
       break;
     case RO_V_VFMSUB_VV:
-      RVV_VI_VFP_FMA_VV_LOOP({RVV_VI_VFP_FMA(float, vd, vs1, -vs2)},
-                             {RVV_VI_VFP_FMA(double, vd, vs1, -vs2)})
+      RVV_VI_VFP_FMA_VV_LOOP(
+          {
+            UNIMPLEMENTED();
+            USE(vd);
+            USE(vs1);
+            USE(vs2);
+          },
+          {RVV_VI_VFP_FMA(float, vd, vs1, -vs2)},
+          {RVV_VI_VFP_FMA(double, vd, vs1, -vs2)})
       break;
     case RO_V_VFNMSUB_VV:
-      RVV_VI_VFP_FMA_VV_LOOP({RVV_VI_VFP_FMA(float, -vd, vs1, +vs2)},
-                             {RVV_VI_VFP_FMA(double, -vd, vs1, +vs2)})
+      RVV_VI_VFP_FMA_VV_LOOP(
+          {
+            UNIMPLEMENTED();
+            USE(vd);
+            USE(vs1);
+            USE(vs2);
+          },
+          {
+            float alu_out = std::fma(-vd, vs1, +vs2);
+
+            if (std::isnan(alu_out) || std::isnan(vs1) || std::isnan(vs2) ||
+                std::isnan(vd)) {
+              if (isSnan(alu_out) || isSnan(vs1) || isSnan(vs2) || isSnan(vd)) {
+                set_fflags(kInvalidOperation);
+              }
+              alu_out = std::numeric_limits<float>::quiet_NaN();
+            }
+            vd = alu_out;
+          },
+          {RVV_VI_VFP_FMA(double, -vd, vs1, +vs2)})
       break;
     case RO_V_VFMACC_VV:
-      RVV_VI_VFP_FMA_VV_LOOP({RVV_VI_VFP_FMA(float, vs2, vs1, vd)},
-                             {RVV_VI_VFP_FMA(double, vs2, vs1, vd)})
+      RVV_VI_VFP_FMA_VV_LOOP(
+          {
+            UNIMPLEMENTED();
+            USE(vd);
+            USE(vs1);
+            USE(vs2);
+          },
+          {RVV_VI_VFP_FMA(float, vs2, vs1, vd)},
+          {RVV_VI_VFP_FMA(double, vs2, vs1, vd)})
       break;
     case RO_V_VFNMACC_VV:
-      RVV_VI_VFP_FMA_VV_LOOP({RVV_VI_VFP_FMA(float, -vs2, vs1, -vd)},
-                             {RVV_VI_VFP_FMA(double, -vs2, vs1, -vd)})
+      RVV_VI_VFP_FMA_VV_LOOP(
+          {
+            UNIMPLEMENTED();
+            USE(vd);
+            USE(vs1);
+            USE(vs2);
+          },
+          {RVV_VI_VFP_FMA(float, -vs2, vs1, -vd)},
+          {RVV_VI_VFP_FMA(double, -vs2, vs1, -vd)})
       break;
     case RO_V_VFMSAC_VV:
-      RVV_VI_VFP_FMA_VV_LOOP({RVV_VI_VFP_FMA(float, vs2, vs1, -vd)},
-                             {RVV_VI_VFP_FMA(double, vs2, vs1, -vd)})
+      RVV_VI_VFP_FMA_VV_LOOP(
+          {
+            UNIMPLEMENTED();
+            USE(vd);
+            USE(vs1);
+            USE(vs2);
+          },
+          {RVV_VI_VFP_FMA(float, vs2, vs1, -vd)},
+          {RVV_VI_VFP_FMA(double, vs2, vs1, -vd)})
       break;
     case RO_V_VFNMSAC_VV:
-      RVV_VI_VFP_FMA_VV_LOOP({RVV_VI_VFP_FMA(float, -vs2, vs1, +vd)},
-                             {RVV_VI_VFP_FMA(double, -vs2, vs1, +vd)})
+      RVV_VI_VFP_FMA_VV_LOOP(
+          {
+            UNIMPLEMENTED();
+            USE(vd);
+            USE(vs1);
+            USE(vs2);
+          },
+          {RVV_VI_VFP_FMA(float, -vs2, vs1, +vd)},
+          {RVV_VI_VFP_FMA(double, -vs2, vs1, +vd)})
       break;
     case RO_V_VFWMACC_VV:
       RVV_VI_CHECK_DSS(true);

@@ -3835,6 +3835,20 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       __ vmv_vv(i.OutputSimd128Register(), i.InputSimd128Register(0));
       break;
     }
+    case kRiscvF16x8Qfma: {
+      __ VU.SetSimd128(E16);
+      __ vfmadd_vv(i.InputSimd128Register(0), i.InputSimd128Register(1),
+                   i.InputSimd128Register(2));
+      __ vmv_vv(i.OutputSimd128Register(), i.InputSimd128Register(0));
+      break;
+    }
+    case kRiscvF16x8Qfms: {
+      __ VU.SetSimd128(E16);
+      __ vfnmsub_vv(i.InputSimd128Register(0), i.InputSimd128Register(1),
+                    i.InputSimd128Register(2));
+      __ vmv_vv(i.OutputSimd128Register(), i.InputSimd128Register(0));
+      break;
+    }
     case kRiscvI32x4SConvertI16x8Low: {
       __ VU.SetSimd128(E32);
       auto src = i.InputSimd128Register(0);

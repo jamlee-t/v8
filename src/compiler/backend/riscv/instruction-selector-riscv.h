@@ -1141,18 +1141,6 @@ void InstructionSelector::VisitF32x4PromoteLowF16x8(OpIndex node) {
   VisitRR(this, kRiscvF32x4PromoteLowF16x8, node);
 }
 
-// Still unimplemented F16x8 ops (no Liftoff support).
-#define UNIMPLEMENTED_SIMD_FP16_OP_LIST(V) \
-  V(F16x8Qfma)                             \
-  V(F16x8Qfms)
-
-#define SIMD_VISIT_UNIMPL_FP16_OP(Name) \
-                                        \
-  void InstructionSelector::Visit##Name(OpIndex node) { UNIMPLEMENTED(); }
-UNIMPLEMENTED_SIMD_FP16_OP_LIST(SIMD_VISIT_UNIMPL_FP16_OP)
-#undef SIMD_VISIT_UNIMPL_FP16_OP
-#undef UNIMPLEMENTED_SIMD_FP16_OP_LIST
-
 // Conversions sharing opcodes between F32x4 and F16x8, differentiated by
 // encoded element width.
 #define SIMD_VISIT_CONVERT(Name, instruction, sew)                      \
@@ -1302,6 +1290,8 @@ VISIT_SIMD_QFMOP(F64x2Qfma, kRiscvF64x2Qfma)
 VISIT_SIMD_QFMOP(F64x2Qfms, kRiscvF64x2Qfms)
 VISIT_SIMD_QFMOP(F32x4Qfma, kRiscvF32x4Qfma)
 VISIT_SIMD_QFMOP(F32x4Qfms, kRiscvF32x4Qfms)
+VISIT_SIMD_QFMOP(F16x8Qfma, kRiscvF16x8Qfma)
+VISIT_SIMD_QFMOP(F16x8Qfms, kRiscvF16x8Qfms)
 #undef VISIT_SIMD_QFMOP
 
 void InstructionSelector::VisitF32x4Min(OpIndex node) {

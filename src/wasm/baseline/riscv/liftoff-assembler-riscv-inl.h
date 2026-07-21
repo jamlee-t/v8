@@ -2837,14 +2837,24 @@ bool LiftoffAssembler::emit_f16x8_qfma(LiftoffRegister dst,
                                        LiftoffRegister src1,
                                        LiftoffRegister src2,
                                        LiftoffRegister src3) {
-  return false;
+  if (!CpuFeatures::IsSupported(ZVFH)) return false;
+  VU.SetSimd128(E16);
+  vmv_vv(kSimd128ScratchReg, src1.simd128());
+  vfmadd_vv(kSimd128ScratchReg, src2.simd128(), src3.simd128());
+  vmv_vv(dst.simd128(), kSimd128ScratchReg);
+  return true;
 }
 
 bool LiftoffAssembler::emit_f16x8_qfms(LiftoffRegister dst,
                                        LiftoffRegister src1,
                                        LiftoffRegister src2,
                                        LiftoffRegister src3) {
-  return false;
+  if (!CpuFeatures::IsSupported(ZVFH)) return false;
+  VU.SetSimd128(E16);
+  vmv_vv(kSimd128ScratchReg, src1.simd128());
+  vfnmsub_vv(kSimd128ScratchReg, src2.simd128(), src3.simd128());
+  vmv_vv(dst.simd128(), kSimd128ScratchReg);
+  return true;
 }
 
 void LiftoffAssembler::DecrementMaxSteps(int32_t* max_steps_ptr,

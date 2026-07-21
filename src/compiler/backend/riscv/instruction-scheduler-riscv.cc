@@ -279,6 +279,8 @@ int InstructionScheduler::GetTargetInstructionFlags(
     case kRiscvF16x8DemoteF32x4Zero:
     case kRiscvF16x8DemoteF64x2Zero:
     case kRiscvF32x4PromoteLowF16x8:
+    case kRiscvF16x8Qfma:
+    case kRiscvF16x8Qfms:
 
     case kRiscvSar32:
     case kRiscvSignExtendByte:
@@ -1634,6 +1636,8 @@ ArchInstResource InstructionScheduler::GetInstructionResource(
     case kRiscvF16x8DemoteF32x4Zero:
     case kRiscvF16x8DemoteF64x2Zero:
     case kRiscvF32x4PromoteLowF16x8:
+    case kRiscvF16x8Qfma:
+    case kRiscvF16x8Qfms:
     case kRiscvVFcvtXF:
     case kRiscvVFcvtXUF:
     case kRiscvI32x4TruncSatF64x2SZero:
