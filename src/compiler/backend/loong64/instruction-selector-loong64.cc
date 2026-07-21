@@ -629,16 +629,18 @@ ArchOpcode GetLoadOpcode(turboshaft::MemoryRepresentation loaded_rep,
       DCHECK_EQ(result_rep, RegisterRepresentation::Float64());
       return kLoong64Fld_d;
 #ifdef V8_COMPRESS_POINTERS
+    // 32-bit compressed values should be sign-extended on loong64, so 'ld.w'
+    // is used here.
     case MemoryRepresentation::AnyTagged():
     case MemoryRepresentation::TaggedPointer():
       if (result_rep == RegisterRepresentation::Compressed()) {
-        return kLoong64Ld_wu;
+        return kLoong64Ld_w;
       }
       DCHECK_EQ(result_rep, RegisterRepresentation::Tagged());
       return kLoong64LoadDecompressTagged;
     case MemoryRepresentation::TaggedSigned():
       if (result_rep == RegisterRepresentation::Compressed()) {
-        return kLoong64Ld_wu;
+        return kLoong64Ld_w;
       }
       DCHECK_EQ(result_rep, RegisterRepresentation::Tagged());
       return kLoong64LoadDecompressTaggedSigned;
@@ -2431,7 +2433,7 @@ void VisitAtomicLoad(InstructionSelector* selector, OpIndex node,
     case MachineRepresentation::kCompressedPointer:  // Fall through.
     case MachineRepresentation::kCompressed:
       DCHECK(COMPRESS_POINTERS_BOOL);
-      code = kLoong64Word64AtomicLoadUint32;
+      code = kAtomicLoadWord32;
       break;
     default:
       UNREACHABLE();
