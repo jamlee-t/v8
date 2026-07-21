@@ -362,7 +362,9 @@ void MaglevReducer<BaseT>::MarkForInt32Truncation(NodeT* node) {
                 NodeT::template opcode_of<NodeT> ==
                     Opcode::kInt32SubtractWithOverflow ||
                 NodeT::template opcode_of<NodeT> ==
-                    Opcode::kInt32MultiplyWithOverflow) {
+                    Opcode::kInt32MultiplyWithOverflow ||
+                NodeT::template opcode_of<NodeT> ==
+                    Opcode::kChangeInt32ToFloat64) {
     node->set_can_truncate_to_int32(true);
   }
 }

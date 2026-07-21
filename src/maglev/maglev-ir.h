@@ -8641,6 +8641,13 @@ class LoadTaggedField : public FixedInputValueNodeT<1, LoadTaggedField> {
                                                   : IsArrayLength::kNo;
   }
 
+  Range range() const {
+    if (type() == NodeType::kSmi) {
+      return Range::Smi();
+    }
+    return Range::All();
+  }
+
   void SetValueLocationConstraints();
   void GenerateCode(MaglevAssembler*, const ProcessingState&);
   void PrintParams(std::ostream&) const;
