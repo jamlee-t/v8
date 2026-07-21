@@ -3461,11 +3461,8 @@ class GraphBuildingNodeProcessor {
   }
   maglev::ProcessResult Process(maglev::LoadTaggedField* node,
                                 const maglev::ProcessingState& state) {
-    MemoryRepresentation mem_repr = MemoryRepresentation::AnyTagged();
-    if (node->type() == maglev::NodeType::kSmi) {
-      mem_repr = MemoryRepresentation::TaggedSigned();
-    }
-    return ProcessAbstractLoadTaggedField(node, mem_repr);
+    return ProcessAbstractLoadTaggedField(
+        node, TaggedMemoryRepresentation(node->type()));
   }
   maglev::ProcessResult Process(maglev::LoadContextSlotNoCells* node,
                                 const maglev::ProcessingState& state) {
@@ -3573,10 +3570,23 @@ class GraphBuildingNodeProcessor {
   }
 #endif  // V8_ENABLE_UNDEFINED_DOUBLE
 
+  // Maps a maglev static type to the memory representation of a tagged
+  // field access.
+  MemoryRepresentation TaggedMemoryRepresentation(maglev::NodeType type) {
+    if (maglev::NodeTypeIs(type, maglev::NodeType::kSmi)) {
+      return MemoryRepresentation::TaggedSigned();
+    }
+    if (maglev::NodeTypeIs(type, maglev::NodeType::kAnyHeapObject)) {
+      return MemoryRepresentation::TaggedPointer();
+    }
+    return MemoryRepresentation::AnyTagged();
+  }
   maglev::ProcessResult Process(maglev::StoreTaggedFieldNoWriteBarrier* node,
                                 const maglev::ProcessingState& state) {
     __ Store(Map(node->ObjectInput()), Map(node->ValueInput()),
-             StoreOp::Kind::TaggedBase(), MemoryRepresentation::AnyTagged(),
+             StoreOp::Kind::TaggedBase(),
+             TaggedMemoryRepresentation(
+                 node->ValueInput().node()->GetStaticType(broker_)),
              WriteBarrierKind::kNoWriteBarrier, node->offset(),
              node->initializing_or_transitioning());
     return maglev::ProcessResult::kContinue;
@@ -3586,10 +3596,14 @@ class GraphBuildingNodeProcessor {
     WriteBarrierKind write_barrier =
         node->value_can_be_smi() ? WriteBarrierKind::kFullWriteBarrier
                                  : WriteBarrierKind::kPointerWriteBarrier;
+    // Note: a barriered store must not use TaggedSigned (the write barrier
+    // implies a heap-object value), so only the pointer refinement applies.
+    MemoryRepresentation mem_repr = node->value_can_be_smi()
+                                        ? MemoryRepresentation::AnyTagged()
+                                        : MemoryRepresentation::TaggedPointer();
     __ Store(Map(node->ObjectInput()), Map(node->ValueInput()),
-             StoreOp::Kind::TaggedBase(), MemoryRepresentation::AnyTagged(),
-             write_barrier, node->offset(),
-             node->initializing_or_transitioning());
+             StoreOp::Kind::TaggedBase(), mem_repr, write_barrier,
+             node->offset(), node->initializing_or_transitioning());
     return maglev::ProcessResult::kContinue;
   }
   maglev::ProcessResult Process(maglev::StoreContextSlotWithWriteBarrier* node,
