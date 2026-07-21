@@ -2817,11 +2817,9 @@ ExternalCallResult WasmInterpreterRuntime::CallExternalWasmFunction(
 }
 
 DirectHandle<Map> WasmInterpreterRuntime::RttCanon(uint32_t type_index) const {
-  const SharedFlag type_is_shared = module_->types[type_index].is_shared;
-  DirectHandle<WasmTrustedInstanceData> data =
-      type_is_shared
-          ? direct_handle(wasm_trusted_instance_data()->shared_part(), isolate_)
-          : wasm_trusted_instance_data();
+  // {managed_object_maps} holds the canonical RTTs for all (shared and
+  // non-shared) types on the single trusted instance data.
+  DirectHandle<WasmTrustedInstanceData> data = wasm_trusted_instance_data();
   DirectHandle<Map> rtt{
       TrustedCast<Map>(data->managed_object_maps()->get(type_index)), isolate_};
   return rtt;
