@@ -38,12 +38,6 @@
 
 namespace v8::internal::compiler::turboshaft {
 
-enum class PhaseResult { kContinue, kAbort };
-
-inline PhaseResult PhaseResultFromBool(bool success) {
-  return success ? PhaseResult::kContinue : PhaseResult::kAbort;
-}
-
 // TODO(victorgomes): Should we create a Turbolev phase kind?
 #define DECL_TURBOLEV_PHASE_CONSTANTS_IMPL(Name, CallStatsName)             \
   DECL_PIPELINE_PHASE_CONSTANTS_HELPER(CallStatsName, PhaseKind::kTurbolev, \
@@ -208,7 +202,7 @@ void TurbolevFrontendPipeline::PrintBytecode() {
 struct MaglevGraphBuilderPhase {
   DECL_TURBOLEV_PHASE_CONSTANTS(MaglevGraphBuilding)
 
-  PhaseResult Run(maglev::Graph* graph) {
+  bool Run(maglev::Graph* graph) {
     // TODO(victorgomes): These could be initialized inside the graph builder
     // constructor.
     JSHeapBroker* broker = graph->broker();
@@ -216,70 +210,69 @@ struct MaglevGraphBuilderPhase {
     maglev::MaglevCompilationInfo* compilation_info = graph->compilation_info();
     maglev::MaglevGraphBuilder graph_builder(
         local_isolate, compilation_info->toplevel_compilation_unit(), graph);
-    return PhaseResultFromBool(graph_builder.Build());
+    return graph_builder.Build();
   }
 };
 
 struct InlinerPhase {
   DECL_TURBOLEV_PHASE_CONSTANTS(Inlining)
 
-  PhaseResult Run(maglev::Graph* graph) {
+  bool Run(maglev::Graph* graph) {
     maglev::MaglevInliner inliner(graph);
-    return PhaseResultFromBool(inliner.Run());
+    return inliner.Run();
   }
 };
 
 struct LoopPeelerPhase {
   DECL_TURBOLEV_PHASE_CONSTANTS(LoopPeeling)
 
-  PhaseResult Run(maglev::Graph* graph, bool* peeled) {
+  bool Run(maglev::Graph* graph) {
     maglev::MaglevLoopPeeler peeler(graph);
-    *peeled = peeler.Run();
-    return PhaseResult::kContinue;
+    return peeler.Run();
   }
 };
 
 struct TruncationPhase {
   DECL_TURBOLEV_PHASE_CONSTANTS(Truncation)
 
-  PhaseResult Run(maglev::Graph* graph) {
+  bool Run(maglev::Graph* graph) {
     maglev::GraphBackwardProcessor<maglev::PropagateTruncationProcessor>
         propagate;
     propagate.ProcessGraph(graph);
     // TODO(victorgomes): Support identities to flow to next passes?
     maglev::GraphProcessor<maglev::TruncationProcessor> truncate(graph);
     truncate.ProcessGraph(graph);
-    return PhaseResult::kContinue;
+    return true;
   }
 };
 
 struct PhiUntaggingPhase {
   DECL_TURBOLEV_PHASE_CONSTANTS(PhiUntagging)
 
-  PhaseResult Run(maglev::Graph* graph) {
+  bool Run(maglev::Graph* graph) {
     maglev::GraphProcessor<maglev::MaglevPhiRepresentationSelector> processor(
         graph);
     processor.ProcessGraph(graph);
-    return PhaseResult::kContinue;
+    return true;
   }
 };
 
 struct EscapeAnalysisPhase {
   DECL_TURBOLEV_PHASE_CONSTANTS(EscapeAnalysis)
 
-  PhaseResult Run(maglev::Graph* graph) {
+  bool Run(maglev::Graph* graph) {
     maglev::MaglevCompilationInfo* compilation_info = graph->compilation_info();
     // TODO(dmercadier): use a proper temporary zone.
     Zone* temp_zone = graph->zone();
     maglev::EscapeAnalysis::Run(graph, compilation_info, temp_zone);
-    return PhaseResult::kContinue;
+    return true;
   }
 };
 
 struct RangeAnalysisPhase {
   DECL_TURBOLEV_PHASE_CONSTANTS(RangeAnalysis)
 
-  PhaseResult Run(maglev::Graph* graph, maglev::NodeRanges& ranges) {
+  bool Run(maglev::Graph* graph, maglev::NodeRanges& ranges) {
     ranges.ProcessGraph();
     if (V8_UNLIKELY(v8_flags.trace_maglev_range_analysis)) {
       ranges.Print();
@@ -290,14 +283,14 @@ struct RangeAnalysisPhase {
           graph, &ranges);
       verifier.ProcessGraph(graph);
     }
-    return PhaseResult::kContinue;
+    return true;
   }
 };
 
 struct PostOptimizerPhase {
   DECL_TURBOLEV_PHASE_CONSTANTS(PostOptimizer)
 
-  PhaseResult Run(maglev::Graph* graph, maglev::NodeRanges* ranges) {
+  bool Run(maglev::Graph* graph, maglev::NodeRanges* ranges) {
     maglev::ReachableExceptionHandlerTracker exception_handler_tracker(graph);
     maglev::RecomputeKnownNodeAspectsProcessor kna_processor(
         graph, exception_handler_tracker);
@@ -319,14 +312,14 @@ struct PostOptimizerPhase {
     if (graph->may_have_unreachable_blocks()) {
       graph->RemoveUnreachableBlocks();
     }
-    return PhaseResult::kContinue;
+    return true;
   }
 };
 
 struct PrePhiUntaggingPhase {
   DECL_TURBOLEV_PHASE_CONSTANTS(PrePhiUntagging)
 
-  PhaseResult Run(maglev::Graph* graph) {
+  bool Run(maglev::Graph* graph) {
     maglev::ReachableExceptionHandlerTracker exception_handler_tracker(graph);
     maglev::RecomputeKnownNodeAspectsProcessor kna_processor(
         graph, exception_handler_tracker);
@@ -346,14 +339,14 @@ struct PrePhiUntaggingPhase {
     if (graph->may_have_unreachable_blocks()) {
       graph->RemoveUnreachableBlocks();
     }
-    return PhaseResult::kContinue;
+    return true;
   }
 };
 
 struct PostHocPhase {
   DECL_TURBOLEV_PHASE_CONSTANTS(AnyUseMarking)
 
-  PhaseResult Run(maglev::Graph* graph) {
+  bool Run(maglev::Graph* graph) {
     if (!v8_flags.turbolev_escape_analysis) {
       // Unwrap deopt frames before escape analysis.
       graph->UnwrapDeoptFrames();
@@ -364,19 +357,19 @@ struct PostHocPhase {
         processor(
             maglev::AnyUseMarkingProcessor{!v8_flags.turbolev_escape_analysis});
     processor.ProcessGraph(graph);
-    return PhaseResult::kContinue;
+    return true;
   }
 };
 
 struct DeadNodeSweepingPhase {
   DECL_TURBOLEV_PHASE_CONSTANTS(DeadNodeSweeping)
 
-  PhaseResult Run(maglev::Graph* graph) {
+  bool Run(maglev::Graph* graph) {
     // Dead nodes elimination (which, amongst other things, cleans up the left
     // overs of escape analysis).
     maglev::GraphProcessor<maglev::DeadNodeSweepingProcessor> processor;
     processor.ProcessGraph(graph);
-    return PhaseResult::kContinue;
+    return true;
   }
 };
 
@@ -392,7 +385,7 @@ auto TurbolevFrontendPipeline::Run(Args&&... args) {
 #endif
   Phase phase;
   SYNCHRONIZATION_POINT(Phase::synchronization_point_name());
-  PhaseResult result = phase.Run(graph_, std::forward<Args>(args)...);
+  bool result = phase.Run(graph_, std::forward<Args>(args)...);
   if (V8_UNLIKELY(ShouldPrintMaglevGraph(Phase::phase))) {
     PrintMaglevGraph(Phase::phase);
   }
@@ -401,62 +394,53 @@ auto TurbolevFrontendPipeline::Run(Args&&... args) {
                                    Phase::phase);
   }
 #ifdef DEBUG
-  if (result == PhaseResult::kContinue) {
-    maglev::GraphProcessor<maglev::MaglevGraphVerifier> verifier(
-        compilation_info_.get(), Phase::phase);
-    verifier.ProcessGraph(graph_);
-  }
+  maglev::GraphProcessor<maglev::MaglevGraphVerifier> verifier(
+      compilation_info_.get(), Phase::phase);
+  verifier.ProcessGraph(graph_);
 #endif
   return result;
 }
-
-#define RUN_MAYBE_ABORT(phase, ...) \
-  if (V8_UNLIKELY(Run<phase>(__VA_ARGS__) == PhaseResult::kAbort)) return {};
 
 std::optional<maglev::Graph*> TurbolevFrontendPipeline::Run() {
   if (V8_UNLIKELY(ShouldPrintMaglevGraph())) {
     PrintBytecode();
   }
   graph_ = maglev::Graph::New(compilation_info_.get());
-  RUN_MAYBE_ABORT(MaglevGraphBuilderPhase);
+  if (!Run<MaglevGraphBuilderPhase>()) return {};
   if (v8_flags.turbolev_non_eager_inlining) {
-    RUN_MAYBE_ABORT(InlinerPhase);
+    if (!Run<InlinerPhase>()) return {};
   }
   if (v8_flags.turbolev_non_eager_loop_peeling) {
-    bool peeled = false;
-    RUN_MAYBE_ABORT(LoopPeelerPhase, &peeled);
-    if (peeled) {
-      RUN_MAYBE_ABORT(PostOptimizerPhase, nullptr);
+    if (Run<LoopPeelerPhase>()) {
+      Run<PostOptimizerPhase>(nullptr);
     }
   }
   if (v8_flags.maglev_truncation && graph_->may_have_truncation()) {
-    RUN_MAYBE_ABORT(TruncationPhase);
+    Run<TruncationPhase>();
   }
   if (v8_flags.turbolev_untagged_phis) {
-    RUN_MAYBE_ABORT(PrePhiUntaggingPhase);
-    RUN_MAYBE_ABORT(PhiUntaggingPhase);
+    Run<PrePhiUntaggingPhase>();
+    Run<PhiUntaggingPhase>();
   }
   if (v8_flags.maglev_range_analysis) {
     maglev::NodeRanges ranges(graph_);
-    RUN_MAYBE_ABORT(RangeAnalysisPhase, ranges);
-    RUN_MAYBE_ABORT(PostOptimizerPhase, &ranges);
+    Run<RangeAnalysisPhase>(ranges);
+    Run<PostOptimizerPhase>(&ranges);
   }
   if (v8_flags.turbolev_escape_analysis) {
     // TODO(dmercadier): it would make sense to run this before Phi untagging so
     // that Phi untagging can untag the Phis created by Escape Analysis.
-    RUN_MAYBE_ABORT(EscapeAnalysisPhase);
+    Run<EscapeAnalysisPhase>();
     // TODO(dmercadier): can we run this PostOptimizerPhase as part of the
     // Elider phase of escape analysis?
-    RUN_MAYBE_ABORT(PostOptimizerPhase, nullptr);
+    Run<PostOptimizerPhase>(nullptr);
   }
-  RUN_MAYBE_ABORT(PostHocPhase);
-  RUN_MAYBE_ABORT(DeadNodeSweepingPhase);
+  Run<PostHocPhase>();
+  Run<DeadNodeSweepingPhase>();
   if (V8_UNLIKELY(v8_flags.print_turbolev_inline_functions)) {
     PrintInliningTreeDebugInfo();
   }
   return graph_;
 }
-
-#undef RUN_MAYBE_ABORT
 
 }  // namespace v8::internal::compiler::turboshaft
