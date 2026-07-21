@@ -879,6 +879,23 @@ struct builtin : CallDescriptorBuilder {
     static constexpr Operator::Properties kProperties = Operator::kNoProperties;
     static constexpr OpEffects kEffects = base_effects.CanCallAnything();
   };
+
+  struct LoadSuperIC : public Descriptor<LoadSuperIC> {
+    static constexpr auto kFunction = Builtin::kLoadSuperIC;
+    struct Arguments : ArgumentsBase {
+      ARG(V<Object>, receiver)
+      ARG(V<Object>, lookup_start_object)
+      ARG(V<Name>, name)
+      ARG(V<Object>, slot)
+      ARG(V<HeapObject>, vector)
+    };
+    using returns_t = std::tuple<V<JSAny>>;
+
+    static constexpr bool kCanTriggerLazyDeopt = true;
+    static constexpr bool kNeedsContext = true;
+    static constexpr Operator::Properties kProperties = Operator::kNoProperties;
+    static constexpr OpEffects kEffects = base_effects.CanCallAnything();
+  };
 };
 
 // TODO(nicohartmann): These call descriptors are deprecated and shall be

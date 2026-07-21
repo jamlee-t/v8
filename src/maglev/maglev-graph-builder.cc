@@ -4749,10 +4749,11 @@ MaybeReduceResult MaglevGraphBuilder::TryBuildPropertyLoad(
         load_source = lookup_start_object;
       }
       ValueNode* result;
-      GET_VALUE_OR_ABORT(result, AddNewNode<LoadDictionaryField>(
-                                     {GetContext(), load_source}, name,
-                                     access_info.dictionary_index().as_int(),
-                                     feedback_source));
+      GET_VALUE_OR_ABORT(
+          result, AddNewNode<LoadDictionaryField>(
+                      {GetContext(), load_source, receiver}, name,
+                      access_info.dictionary_index().as_int(), feedback_source,
+                      receiver != lookup_start_object));
       return result;
     }
     case compiler::PropertyAccessInfo::kDictionaryProtoDataConstant: {

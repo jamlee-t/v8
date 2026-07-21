@@ -5002,16 +5002,26 @@ void LoadNamedFromSuperGeneric::GenerateCode(MaglevAssembler* masm,
 }
 
 int LoadDictionaryField::MaxCallStackArgs() const {
-  return LoadWithVectorDescriptor::GetStackParameterCount();
+  return is_super()
+             ? LoadWithReceiverAndVectorDescriptor::GetStackParameterCount()
+             : LoadWithVectorDescriptor::GetStackParameterCount();
 }
 void LoadDictionaryField::SetValueLocationConstraints() {
   UseFixed(ContextInput(), kContextRegister);
+  if (is_super()) {
+    using D = LoadWithReceiverAndVectorDescriptor;
+    UseFixed(ReceiverInput(), D::GetRegisterParameter(D::kReceiver));
+    UseFixed(ObjectInput(), D::GetRegisterParameter(D::kLookupStartObject));
+  } else {
 #if !defined(V8_TARGET_ARCH_X64) && !defined(V8_TARGET_ARCH_ARM64) && \
     !defined(V8_TARGET_ARCH_LOONG64)
-  UseFixed(ObjectInput(), LoadDescriptor::ReceiverRegister());
+    UseFixed(ObjectInput(), LoadDescriptor::ReceiverRegister());
+    UseAny(ReceiverInput());
 #else
-  UseRegister(ObjectInput());
+    UseRegister(ObjectInput());
+    UseRegister(ReceiverInput());
 #endif
+  }
   DefineAsRegister(this);
 }
 
@@ -5019,9 +5029,15 @@ void LoadDictionaryField::SetValueLocationConstraints() {
     !defined(V8_TARGET_ARCH_LOONG64)
 void LoadDictionaryField::GenerateCode(MaglevAssembler* masm,
                                        const ProcessingState& state) {
-  __ CallBuiltin<Builtin::kLoadIC>(
-      ContextInput(), ObjectInput(), name().object(),
-      TaggedIndex::FromIntptr(feedback().index()), feedback().vector);
+  if (is_super()) {
+    __ CallBuiltin<Builtin::kLoadSuperIC>(
+        ContextInput(), ReceiverInput(), ObjectInput(), name().object(),
+        TaggedIndex::FromIntptr(feedback().index()), feedback().vector);
+  } else {
+    __ CallBuiltin<Builtin::kLoadIC>(
+        ContextInput(), ObjectInput(), name().object(),
+        TaggedIndex::FromIntptr(feedback().index()), feedback().vector);
+  }
   masm->DefineExceptionHandlerAndLazyDeoptPoint(this);
 
   __ Move(ToRegister(result()), kReturnRegister0);

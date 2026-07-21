@@ -4610,13 +4610,14 @@ class AssemblerOpInterface : public Next {
     return ReduceIfReachableLoadFieldByIndex(object, index);
   }
 
-  V<Object> LoadDictionaryField(V<JSReceiver> object, V<Context> context,
-                                V<LazyFrameState> fs, size_t index,
-                                compiler::NameRef name,
-                                const FeedbackSource& feedback,
+  V<Object> LoadDictionaryField(V<JSReceiver> object, V<Object> receiver,
+                                V<Context> context, V<LazyFrameState> fs,
+                                size_t index, compiler::NameRef name,
+                                const FeedbackSource& feedback, bool is_super,
                                 LazyDeoptOnThrow lazy_deopt_on_throw) {
-    return ReduceIfReachableLoadDictionaryField(
-        object, context, fs, index, name, feedback, lazy_deopt_on_throw);
+    return ReduceIfReachableLoadDictionaryField(object, receiver, context, fs,
+                                                index, name, feedback, is_super,
+                                                lazy_deopt_on_throw);
   }
 
   void DebugBreak() { ReduceIfReachableDebugBreak(); }

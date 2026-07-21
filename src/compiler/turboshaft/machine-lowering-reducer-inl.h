@@ -2197,8 +2197,9 @@ class MachineLoweringReducer : public Next {
   }
 
   V<Object> REDUCE(LoadDictionaryField)(
-      V<JSReceiver> object, V<Context> context, V<LazyFrameState> frame_state,
-      size_t raw_index, compiler::NameRef name, const FeedbackSource& feedback,
+      V<JSReceiver> object, V<Object> receiver, V<Context> context,
+      V<LazyFrameState> frame_state, size_t raw_index, compiler::NameRef name,
+      const FeedbackSource& feedback, bool is_super,
       LazyDeoptOnThrow lazy_deopt_on_throw) {
     static_assert(!V8_ENABLE_SWISS_NAME_DICTIONARY_BOOL);
     InternalIndex index(raw_index);
@@ -2238,13 +2239,25 @@ class MachineLoweringReducer : public Next {
       }
     }
 
-    V<JSAny> fallback_result = __ template CallBuiltin<builtin::LoadIC>(
-        frame_state, context,
-        {.object = object,
-         .name = __ HeapConstant(name.object()),
-         .slot = __ TaggedIndexConstant(feedback.index()),
-         .vector = __ HeapConstant(feedback.vector)},
-        lazy_deopt_on_throw);
+    V<JSAny> fallback_result;
+    if (is_super) {
+      fallback_result = __ template CallBuiltin<builtin::LoadSuperIC>(
+          frame_state, context,
+          {.receiver = receiver,
+           .lookup_start_object = object,
+           .name = __ HeapConstant(name.object()),
+           .slot = __ TaggedIndexConstant(feedback.index()),
+           .vector = __ HeapConstant(feedback.vector)},
+          lazy_deopt_on_throw);
+    } else {
+      fallback_result = __ template CallBuiltin<builtin::LoadIC>(
+          frame_state, context,
+          {.object = object,
+           .name = __ HeapConstant(name.object()),
+           .slot = __ TaggedIndexConstant(feedback.index()),
+           .vector = __ HeapConstant(feedback.vector)},
+          lazy_deopt_on_throw);
+    }
     GOTO(done, fallback_result);
 
     BIND(done, result);

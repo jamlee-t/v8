@@ -2293,8 +2293,9 @@ class GraphBuildingNodeProcessor {
 
     ThrowingScope throwing_scope(this, node);
     V<Object> result = __ LoadDictionaryField(
-        object, context, frame_state, dictionary_index.raw_value(),
-        node->name(), feedback, ShouldLazyDeoptOnThrow(node));
+        object, Map(node->ReceiverInput()), context, frame_state,
+        dictionary_index.raw_value(), node->name(), feedback, node->is_super(),
+        ShouldLazyDeoptOnThrow(node));
     SetMap(node, result);
     return maglev::ProcessResult::kContinue;
   }

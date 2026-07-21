@@ -1876,8 +1876,8 @@ OpIndex GraphBuilder::Process(
       auto const& p = LoadDictionaryFieldParametersOf(node->op());
       return __ LoadDictionaryField(
           Map(node->InputAt(0)), Map(node->InputAt(1)), Map(node->InputAt(2)),
-          p.dictionary_index().raw_value(), p.name(), p.feedback(),
-          LazyDeoptOnThrow{false});
+          Map(node->InputAt(3)), p.dictionary_index().raw_value(), p.name(),
+          p.feedback(), p.is_super(), LazyDeoptOnThrow{false});
     }
 
     case IrOpcode::kCheckedAdditiveSafeIntegerAdd: {

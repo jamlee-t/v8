@@ -3326,8 +3326,8 @@ JSNativeContextSpecialization::BuildPropertyLoad(
       value = maybe_value.value();
     } else if (access_info.IsDictionaryDataField()) {
       value = access_builder.BuildLoadDictionaryField(
-          name, access_info, lookup_start_object, &effect, &control, source,
-          context, frame_state);
+          name, access_info, lookup_start_object, receiver, &effect, &control,
+          source, context, frame_state);
       if (if_exceptions != nullptr) {
         Node* const if_exception =
             graph()->NewNode(common()->IfException(), effect, control);

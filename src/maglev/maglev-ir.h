@@ -9760,23 +9760,24 @@ class LoadNamedFromSuperGeneric
 };
 
 class LoadDictionaryField
-    : public FixedInputValueNodeT<2, LoadDictionaryField> {
+    : public FixedInputValueNodeT<3, LoadDictionaryField> {
  public:
   explicit LoadDictionaryField(uint64_t bitfield, compiler::NameRef name,
                                int dictionary_index,
-                               compiler::FeedbackSource feedback)
+                               compiler::FeedbackSource feedback, bool is_super)
       : Base(bitfield),
         name_(name),
         dictionary_index_(dictionary_index),
-        feedback_(feedback) {
+        feedback_(feedback),
+        is_super_(is_super) {
     set_temporaries_needed(3);
   }
 
   static constexpr OpProperties kProperties =
       OpProperties::JSCall() | OpProperties::DeferredCall();
 
-  DECLARE_INPUTS(Context, Object)
-  DECLARE_INPUT_TYPES(Tagged, Tagged)
+  DECLARE_INPUTS(Context, Object, Receiver)
+  DECLARE_INPUT_TYPES(Tagged, Tagged, Tagged)
 
   int MaxCallStackArgs() const;
   void SetValueLocationConstraints();
@@ -9786,15 +9787,17 @@ class LoadDictionaryField
   compiler::NameRef name() const { return name_; }
   int dictionary_index() const { return dictionary_index_; }
   compiler::FeedbackSource feedback() const { return feedback_; }
+  bool is_super() const { return is_super_; }
 
   auto options() const {
-    return std::tuple{name_, dictionary_index_, feedback_};
+    return std::tuple{name_, dictionary_index_, feedback_, is_super_};
   }
 
  private:
   const compiler::NameRef name_;
   const int dictionary_index_;
   const compiler::FeedbackSource feedback_;
+  const bool is_super_;
 };
 
 class SetNamedGeneric : public FixedInputValueNodeT<3, SetNamedGeneric> {
