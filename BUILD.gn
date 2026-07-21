@@ -566,7 +566,7 @@ if (v8_enable_generated_code_validator == "") {
 }
 assert(!v8_enable_generated_code_validator || v8_current_cpu == "x64" ||
            v8_current_cpu == "arm64",
-       "Generated code verifier is only supported on x64 and arm64")
+       "Generated code validator is only supported on x64 and arm64")
 if (v8_enable_disassembler == "") {
   v8_enable_disassembler =
       v8_enable_debugging_features || v8_enable_generated_code_validator
@@ -740,6 +740,9 @@ if (v8_enable_sandbox == "") {
   v8_enable_sandbox = v8_enable_pointer_compression_shared_cage &&
                       v8_enable_external_code_space && target_os != "fuchsia"
 }
+
+assert(!v8_enable_generated_code_validator || v8_enable_sandbox,
+       "Generated code validator is only supported on sandbox builds")
 
 if (v8_enable_static_roots == "") {
   # Static roots are only valid for builds with pointer compression and a

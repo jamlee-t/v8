@@ -100,8 +100,9 @@ void GeneratedCodeValidator::InstructionIteratorSkippingData::SkipCheck() {
 
     int pool_size = disasm_.ConstantPoolSizeAt(const_cast<uint8_t*>(current_));
     if (pool_size > 0) {
+      static constexpr int kConstantSize = 4;
       current_ +=
-          kTaggedSize *
+          kConstantSize *
           (pool_size + 1);  // +1 to account for the marker or fence instruction
       continue;
     }
