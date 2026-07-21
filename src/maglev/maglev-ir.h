@@ -8623,13 +8623,15 @@ class LoadTaggedField : public FixedInputValueNodeT<1, LoadTaggedField> {
  public:
   explicit LoadTaggedField(uint64_t bitfield, const int offset, NodeType type,
                            bool is_const, PropertyKey property_key,
-                           IsArrayLength is_array_length)
+                           IsArrayLength is_array_length,
+                           compiler::OptionalMapRef stable_field_map = {})
       : Base(
             bitfield | IsConstantLoadField::encode(is_const) |
             IsArrayLengthField::encode(is_array_length == IsArrayLength::kYes)),
         offset_(offset),
         type_(type),
-        property_key_(property_key) {}
+        property_key_(property_key),
+        stable_field_map_(stable_field_map) {}
 
   static constexpr OpProperties kProperties = OpProperties::CanRead();
   DECLARE_UNOP(Tagged)
@@ -8638,6 +8640,9 @@ class LoadTaggedField : public FixedInputValueNodeT<1, LoadTaggedField> {
   NodeType type() const { return type_; }
   bool is_const() const { return IsConstantLoadField::decode(bitfield()); }
   PropertyKey property_key() const { return property_key_; }
+  compiler::OptionalMapRef stable_field_map() const {
+    return stable_field_map_;
+  }
   IsArrayLength is_array_length() const {
     return IsArrayLengthField::decode(bitfield()) ? IsArrayLength::kYes
                                                   : IsArrayLength::kNo;
@@ -8648,14 +8653,16 @@ class LoadTaggedField : public FixedInputValueNodeT<1, LoadTaggedField> {
   void PrintParams(std::ostream&) const;
 
   auto options() const {
-    return std::tuple{offset(), type(), is_const(), property_key(),
-                      is_array_length()};
+    return std::tuple{offset(),          type(),
+                      is_const(),        property_key(),
+                      is_array_length(), stable_field_map()};
   }
 
  private:
   const int offset_;
   const NodeType type_;
   PropertyKey property_key_;
+  compiler::OptionalMapRef stable_field_map_;
   using IsConstantLoadField = NextBitField<bool, 1>;
   using IsArrayLengthField = IsConstantLoadField::Next<bool, 1>;
 };

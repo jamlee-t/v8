@@ -142,6 +142,14 @@ NodeType NodeTypeFromAccessInfo(
     return NodeType::kAnyHeapObject;
   }
 
+  // Plain HeapObject-representation fields have Type::NonInternal() as their
+  // field type (only class-tracked fields get a narrower type), which none of
+  // the branches above match; the representation still guarantees a heap
+  // object.
+  if (access_info.field_representation().IsHeapObject()) {
+    return NodeType::kAnyHeapObject;
+  }
+
   return NodeType::kUnknown;
 }
 
@@ -4471,39 +4479,41 @@ ReduceResult MaglevGraphBuilder::BuildLoadField(
   // Do the load.
   if (field_index.is_double()) {
     ValueNode* heap_number;
-    GET_VALUE_OR_ABORT(
-        heap_number,
-        AddNewNode<LoadTaggedField>({load_source}, field_index.offset(),
-                                    NodeType::kHeapNumber, false,
-                                    PropertyKey::None(), IsArrayLength::kNo));
+    GET_VALUE_OR_ABORT(heap_number,
+                       AddNewNode<LoadTaggedField>(
+                           {load_source}, field_index.offset(),
+                           NodeType::kHeapNumber, false, PropertyKey::None(),
+                           IsArrayLength::kNo, compiler::OptionalMapRef{}));
     return AddNewNode<LoadFloat64>(
         {heap_number}, static_cast<int>(offsetof(HeapNumber, value_)));
   }
 
   const auto node_type = NodeTypeFromAccessInfo(this->broker(), access_info);
+  compiler::OptionalMapRef stable_field_map;
+  if (access_info.field_representation().IsHeapObject() &&
+      access_info.field_map().has_value() &&
+      access_info.field_map().value().is_stable()) {
+    stable_field_map = access_info.field_map();
+  }
   ValueNode* value;
-  GET_VALUE_OR_ABORT(value, BuildLoadTaggedField(
-                                load_source, field_index.offset(), node_type,
-                                AccessInfoGuaranteedConst(access_info), name));
+  GET_VALUE_OR_ABORT(
+      value, BuildLoadTaggedField(load_source, field_index.offset(), node_type,
+                                  AccessInfoGuaranteedConst(access_info), name,
+                                  IsArrayLength::kNo, stable_field_map));
 
-  // Insert stable field information if present.
+  // Insert the static field information: the type for every access, and the
+  // map identity when the field has a stable map.
   NodeInfo* known_info = GetOrCreateInfoFor(value);
-  if (access_info.field_representation().IsSmi()) {
-    known_info->IntersectType(NodeType::kSmi);
-  } else if (access_info.field_representation().IsHeapObject()) {
-    if (access_info.field_map().has_value() &&
-        access_info.field_map().value().is_stable()) {
-      DCHECK(access_info.field_map().value().IsJSReceiverMap());
-      auto map = access_info.field_map().value();
-      if (!known_info->SetPossibleMaps(PossibleMaps{map}, false,
-                                       StaticTypeForMap(map, broker()),
-                                       broker(), known_node_aspects())) {
-        return reducer_.EmitUnconditionalDeopt(DeoptimizeReason::kWrongValue);
-      }
-      broker()->dependencies()->DependOnStableMap(map);
-    } else {
-      known_info->IntersectType(NodeType::kAnyHeapObject);
+  if (stable_field_map.has_value()) {
+    DCHECK(stable_field_map.value().IsJSReceiverMap());
+    if (!known_info->SetPossibleMaps(PossibleMaps{stable_field_map.value()},
+                                     false, node_type, broker(),
+                                     known_node_aspects())) {
+      return reducer_.EmitUnconditionalDeopt(DeoptimizeReason::kWrongValue);
     }
+    broker()->dependencies()->DependOnStableMap(stable_field_map.value());
+  } else {
+    known_info->IntersectType(node_type);
   }
   return value;
 }
@@ -4685,11 +4695,11 @@ MaybeReduceResult MaglevGraphBuilder::TryBuildStoreField(
                                     StoreMap::Kind::kTransitioning);
     } else {
       ValueNode* heap_number;
-      GET_VALUE_OR_ABORT(
-          heap_number,
-          AddNewNode<LoadTaggedField>({store_target}, field_index.offset(),
-                                      NodeType::kHeapNumber, false,
-                                      PropertyKey::None(), IsArrayLength::kNo));
+      GET_VALUE_OR_ABORT(heap_number,
+                         AddNewNode<LoadTaggedField>(
+                             {store_target}, field_index.offset(),
+                             NodeType::kHeapNumber, false, PropertyKey::None(),
+                             IsArrayLength::kNo, compiler::OptionalMapRef{}));
       return AddNewNode<StoreFloat64>(
           {heap_number, value}, static_cast<int>(offsetof(HeapNumber, value_)));
     }

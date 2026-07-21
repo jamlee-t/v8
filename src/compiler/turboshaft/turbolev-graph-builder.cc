@@ -3461,8 +3461,15 @@ class GraphBuildingNodeProcessor {
   }
   maglev::ProcessResult Process(maglev::LoadTaggedField* node,
                                 const maglev::ProcessingState& state) {
-    return ProcessAbstractLoadTaggedField(
+    maglev::ProcessResult result = ProcessAbstractLoadTaggedField(
         node, TaggedMemoryRepresentation(node->type()));
+    if (node->stable_field_map().has_value()) {
+      // Propagate the field's stable map so that LateLoadElimination knows
+      // the map of the loaded value.
+      __ AssumeMap(Map(node), compiler::ZoneRefSet<i::Map>(
+                                  node->stable_field_map().value()));
+    }
+    return result;
   }
   maglev::ProcessResult Process(maglev::LoadContextSlotNoCells* node,
                                 const maglev::ProcessingState& state) {

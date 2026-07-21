@@ -1214,9 +1214,10 @@ class MaglevGraphBuilder {
   ReduceResult BuildLoadTaggedField(
       ValueNode* object, uint32_t offset, NodeType type = NodeType::kUnknown,
       bool is_const = false, PropertyKey key = PropertyKey::None(),
-      IsArrayLength is_array_length = IsArrayLength::kNo) {
+      IsArrayLength is_array_length = IsArrayLength::kNo,
+      compiler::OptionalMapRef stable_field_map = {}) {
     return reducer_.BuildLoadTaggedField(object, offset, type, is_const, key,
-                                         is_array_length);
+                                         is_array_length, stable_field_map);
   }
 
   ReduceResult BuildStoreTaggedField(

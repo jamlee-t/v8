@@ -387,6 +387,14 @@ class RecomputeKnownNodeAspectsProcessor {
       ProcessResult result = RecordType(node, node->type());
       if (result != ProcessResult::kContinue) return result;
     }
+    if (node->stable_field_map().has_value()) {
+      compiler::MapRef map = node->stable_field_map().value();
+      if (!GetOrCreateInfoFor(node)->SetPossibleMaps(
+              PossibleMaps{map}, false, StaticTypeForMap(map, broker()),
+              broker(), known_node_aspects())) {
+        return OnContradiction();
+      }
+    }
     if (!node->property_key().is_none()) {
       auto& props_for_key = known_node_aspects().GetLoadedPropertiesForKey(
           zone(), node->is_const(), node->property_key());

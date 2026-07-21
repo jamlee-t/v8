@@ -8977,6 +8977,9 @@ void LoadTaggedField::PrintParams(std::ostream& os) const {
   if (!property_key().is_none()) {
     os << ": " << property_key();
   }
+  if (stable_field_map().has_value()) {
+    os << ", field map: " << Brief(*stable_field_map().value().object());
+  }
   // TODO(victorgomes): Print compression status only after the result is
   // allocated, since that's when we do decompression marking.
   if (decompresses_tagged_result()) {
