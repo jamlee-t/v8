@@ -1519,12 +1519,6 @@ class Elider {
       TRACE("> Inserting new phis");
       DCHECK(block->has_state());
       for (auto& [phi, key] : *data_.new_phis.at(block)) {
-        if (data_.HasEscaped(key.data().base)) {
-          // {new_phis} can contain phis for objects that were marked as
-          // escaping while revisiting a loop; we skip those.
-          continue;
-        }
-
         block->AddPhi(phi);
       }
     }
