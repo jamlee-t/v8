@@ -1351,6 +1351,12 @@ void FlagList::ResolveContradictionsWhenFuzzing() {
   CONTRADICTION(disable_optimizing_compilers, wasm_in_js_inlining_body);
   CONTRADICTION(disable_optimizing_compilers, turbolev_future);
   CONTRADICTION(disable_optimizing_compilers, wasm_in_js_inlining_wrapper);
+  CONTRADICTION(empty_shared_heap, harmony_struct)
+  CONTRADICTION(empty_shared_heap, shared_strings)
+  CONTRADICTION(empty_shared_heap, shared_string_table)
+#if V8_ENABLE_WEBASSEMBLY
+  CONTRADICTION(empty_shared_heap, wasm_shared)
+#endif
   CONTRADICTION(jit_fuzzing, max_lazy);
   CONTRADICTION(jitless, maglev_as_top_tier);
   CONTRADICTION(jitless, maglev_future);
