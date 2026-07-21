@@ -8727,16 +8727,6 @@ MaybeReduceResult MaglevGraphBuilder::TryReduceArrayIteratorPrototypeNext(
 
   if (iterated_object->Is<InlinedAllocation>()) {
     VirtualObject* array = iterated_object->Cast<InlinedAllocation>()->object();
-    // TODO(victorgomes): Remove this once we track changes in the inlined
-    // allocated object.
-    if (IsEscaping(iterated_object->Cast<InlinedAllocation>())) {
-      FAIL("allocation is escaping, map could have been changed");
-    }
-    // TODO(victorgomes): This effectively disable the optimization for `for-of`
-    // loops. We need to figure it out a way to re-enable this.
-    if (IsInsideLoop()) {
-      FAIL("we're inside a loop, iterated object map could change");
-    }
     auto map = *array->map();
     if (!process_map(map)) {
       return {};
