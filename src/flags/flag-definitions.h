@@ -3644,11 +3644,6 @@ DEFINE_BOOL_READONLY(
 #endif  // V8_TARGET_ARCH_X64 || V8_TARGET_ARCH_ARM64 || V8_TARGET_ARCH_RISCV32
         // || V8_TARGET_ARCH_RISCV64
 
-DEFINE_BOOL(regexp_bytecode_analysis, false, "analyze regexp bytecode")
-DEFINE_DEVELOPER_FLAG(trace_regexp_bytecode_analysis,
-                      "trace regexp bytecode analysis")
-DEFINE_IMPLICATION(trace_regexp_bytecode_analysis, regexp_bytecode_analysis)
-
 DEFINE_DEVELOPER_FLAG(trace_read_only_promotion,
                       "trace the read-only promotion pass")
 DEFINE_DEVELOPER_FLAG(trace_read_only_promotion_verbose,
