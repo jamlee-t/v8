@@ -299,7 +299,7 @@ void MainAllocator::ResetLab(Address start, Address end, Address extended_end) {
   }
   if (young_pending_allocations_) {
     DCHECK(!SupportsPendingAllocation());
-    young_pending_allocations_->UpdateLab(start, end);
+    young_pending_allocations_->UpdateLab(start, extended_end);
   }
 }
 
