@@ -16301,38 +16301,7 @@ THREADED_TEST(ScriptContextDependence) {
            101);
 }
 
-#if V8_ENABLE_WEBASSEMBLY
-static int asm_warning_triggered = 0;
 
-static void AsmJsWarningListener(v8::Local<v8::Message> message,
-                                 v8::Local<Value>) {
-  CHECK_EQ(v8::Isolate::kMessageWarning, message->ErrorLevel());
-  asm_warning_triggered = 1;
-}
-
-TEST(AsmJsWarning) {
-  i::v8_flags.validate_asm = true;
-  if (i::v8_flags.suppress_asm_messages) return;
-
-  LocalContext env;
-  v8::Isolate* isolate = env.isolate();
-  v8::HandleScope scope(isolate);
-
-  asm_warning_triggered = 0;
-  isolate->AddMessageListenerWithErrorLevel(AsmJsWarningListener,
-                                            v8::Isolate::kMessageAll);
-  CompileRun(
-      "function module() {\n"
-      "  'use asm';\n"
-      "  var x = 'hi';\n"
-      "  return {};\n"
-      "}\n"
-      "module();");
-  int kExpectedWarnings = 1;
-  CHECK_EQ(kExpectedWarnings, asm_warning_triggered);
-  isolate->RemoveMessageListeners(AsmJsWarningListener);
-}
-#endif  // V8_ENABLE_WEBASSEMBLY
 
 static int error_level_message_count = 0;
 static int expected_error_level = 0;
@@ -16369,7 +16338,7 @@ TEST(ErrorLevelWarning) {
         v8::base::StaticCharVector("test")));
     i::DirectHandle<i::JSMessageObject> message =
         i::MessageHandler::MakeMessageObject(
-            i_isolate, i::MessageTemplate::kAsmJsInvalid, &location, msg);
+            i_isolate, i::MessageTemplate::kDataCloneError, &location, msg);
     message->set_error_level(levels[i]);
     expected_error_level = levels[i];
     i::MessageHandler::ReportMessage(i_isolate, &location, message);

@@ -292,7 +292,6 @@ v8_cluster_source_set("cctest_sources") {
       "wasm/test-liftoff-for-fuzzing.cc",
       "wasm/test-liftoff-inspection.cc",
       "wasm/test-run-wasm-64.cc",
-      "wasm/test-run-wasm-asmjs.cc",
       "wasm/test-run-wasm-atomics.cc",
       "wasm/test-run-wasm-atomics64.cc",
       "wasm/test-run-wasm-bulk-memory.cc",

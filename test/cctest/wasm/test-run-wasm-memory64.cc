@@ -15,8 +15,8 @@ template <typename ReturnType, typename... ParamTypes>
 class Memory64Runner : public WasmRunner<ReturnType, ParamTypes...> {
  public:
   explicit Memory64Runner(TestExecutionTier execution_tier)
-      : WasmRunner<ReturnType, ParamTypes...>(execution_tier, kWasmOrigin,
-                                              nullptr, "main") {}
+      : WasmRunner<ReturnType, ParamTypes...>(execution_tier, nullptr, "main") {
+  }
 
   template <typename T>
   T* AddMemoryElems(uint32_t count) {

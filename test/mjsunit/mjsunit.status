@@ -149,7 +149,6 @@
   'math-floor-of-div-nosudiv': [PASS, SLOW, ['arch not in [arm, arm64]', SKIP]],
 
   # OOM flakes in isolates tests because too many largish heaps are created.
-  'asm/asm-heap': [PASS, NO_VARIANTS, ['isolates', SKIP]],
 
   # This test runs in an isolate with a custom array buffer allocator.
   # We don't want to run it in random isolates.
@@ -158,8 +157,6 @@
   # Slow tests.
   'array-functions-prototype-misc': [PASS, SLOW],
   'array-tostring-stack-overflow': [PASS, SLOW, ['arch != x64', SKIP]],
-  'asm/embenchen/*': [PASS, SLOW, NO_VARIANTS],
-  'asm/poppler/*': [PASS, SLOW, NO_VARIANTS],
   'compiler/deopt-pretenure': [PASS, SLOW],
   'compiler/regress-461531853': [PASS, SLOW],
   'compiler/regress-9017': [PASS, SLOW],
@@ -199,7 +196,6 @@
   'string-replace-gc': [PASS, SLOW],
   'tools/processor': [PASS, SLOW],
   'turboshaft/regress-380487911': [PASS, SLOW, NO_VARIANTS, ['arch != x64', SKIP], ['tsan', SKIP]],
-  'wasm/embenchen/*': [PASS, SLOW],
   'wasm/futex': [PASS, SLOW],
   'wasm/unreachable-validation': [PASS, SLOW],
   'wasm/atomics-stress': [PASS, SLOW, NO_VARIANTS, ['mode != release or dcheck_always_on', SKIP], ['tsan', SKIP]],
@@ -353,10 +349,6 @@
 }],  # mode == debug
 
 ['novfp3', {
-  'asm/embenchen/box2d': [SKIP],
-  'asm/embenchen/zlib': [SKIP],
-  'asm/embenchen/memops': [SKIP],
-  'asm/embenchen/lua_binarytrees': [SKIP],
 }],  # novfp3
 
 ################################################################################
@@ -393,8 +385,6 @@
   # It might also be possible to make them faster by making them target
   # lower limits mode specifically.
   'array-join-invalid-string-length': [SKIP],
-  'asm/embenchen/lua_binarytrees': [SKIP],
-  'asm/poppler/poppler': [SKIP],
   'compiler/conditional-chain': [SKIP],
   'compiler/regress-815392': [SKIP],
   'es6/unicode-regexp-unanchored-advance': [SKIP],
@@ -421,7 +411,6 @@
   'tools/processor-bigint': [SKIP],
   'turboshaft/string-escape-analysis-exponential-state': [SKIP],
   'wasm/stringrefs-regressions': [SKIP],
-  'wasm/embenchen/lua_binarytrees': [SKIP],
 }],
 
 ##############################################################################
@@ -525,7 +514,6 @@
   'regress/regress-crbug-500497': [SKIP],
 
   # Too slow for gc stress.
-  'asm/embenchen/box2d': [SKIP],
   'regress/regress-904275': [PASS, SLOW, NO_VARIANTS],
   'wasm/wasm-interpreter': [PASS, NO_VARIANTS],
 
@@ -540,7 +528,6 @@
   'array-constructor': [PASS, SLOW],
   'array-splice': [PASS, SLOW],
   'json': [PASS, SLOW],
-  'regress/asm/regress-775710': [PASS, SLOW],
   'regress/regress-crbug-820312': [PASS, SLOW],
   'regress/regress-524': [PASS, ['tsan', SLOW]],
 
@@ -636,10 +623,8 @@
 # TODO(v8:7777): Change this once wasm is supported in jitless mode.
 ['not has_webassembly or (variant == jitless and not has_wasm_interpreter)', {
   # Skip tests that require webassembly.
-  'regress/asm/*': [SKIP],
   'regress/wasm/*': [SKIP],
 
-  'asm/*': [SKIP],
   'wasm/*': [SKIP],
   'shared-memory/wasm/*': [SKIP],
 
@@ -1101,9 +1086,6 @@
   # type-mismatch exception before executing the Wasm function.
   'regress/wasm/regress-366635354': [SKIP],
 
-  # asm.js tests
-  'asm/*': [SKIP],
-  'regress/asm/*': [SKIP],
 
   # Interpreter needs more stack space
   'wasm/turboshaft/reduction-shuffle': [SKIP],
@@ -1137,7 +1119,6 @@
 ##############################################################################
 ['lite_mode or variant == jitless', {
   # Timeouts in lite / jitless mode.
-  'asm/embenchen/*': [SKIP],
 
   # Tests that generate code at runtime.
   'code-comments': [SKIP],
@@ -1271,8 +1252,6 @@
 ##############################################################################
 ['byteorder == big', {
   # Emscripten requires little-endian, skip all tests on big endian platforms.
-  'asm/embenchen/*': [SKIP],
-  'asm/poppler/*': [SKIP],
   # TODO(mips-team): Fix Wasm for big-endian.
   'wasm/*': [SKIP],
 }],  # 'byteorder == big'
@@ -1328,8 +1307,6 @@
   # Pass but take too long to run. Skip.
   # Some similar tests (with fewer iterations) may be included in arm64-js
   # tests.
-  'asm/embenchen/box2d': [SKIP],
-  'asm/embenchen/lua_binarytrees': [SKIP],
   'compiler/regress-arguments': [SKIP],
   'compiler/regress-gvn': [SKIP],
   'compiler/regress-4': [SKIP],
@@ -1436,7 +1413,6 @@
   'regress/regress-748069': [SKIP],
 
   # Tests that need to run sequentially (e.g. due to memory consumption).
-  'wasm/asm-wasm': [PASS, HEAVY],
 }],  # 'asan == True'
 
 ##############################################################################
@@ -1450,13 +1426,9 @@
   'string-localecompare': [SKIP],
 
   # Too slow.
-  'asm/embenchen/zlib': [SKIP],
   'harmony/regexp-property-lu-ui': [SKIP],
   'regress/regress-499721612': [SKIP],
   'regress/regress-779407': [SKIP],
-  'wasm/embenchen/box2d': [SKIP],
-  'wasm/embenchen/lua_binarytrees': [SKIP],
-  'wasm/embenchen/zlib': [SKIP],
 
   # https://bugs.chromium.org/p/v8/issues/detail?id=7102
   # Flaky due to huge string allocation.
@@ -2002,7 +1974,6 @@
 
   # BUG(chromium:1394659) Skipped until issue is fixed to reduce noise on alerts.
   'wasm/log-code-after-post-message': [SKIP],
-  'asm/regress-1395401': [SKIP],
   'regress/regress-1394663': [SKIP],
 
   # Skipped because it has contradictory flags.
@@ -2116,7 +2087,6 @@
   'object-literal': [SKIP],
 
   # https://crbug.com/v8/14228
-  'asm/poppler/poppler': [SKIP],
 
   # https://crbug.com/v8/14421
   'wasm/multiple-code-spaces': [SKIP],
@@ -2184,8 +2154,6 @@
   # Slow tests
   'wasm/wasm-interpreter': [PASS, SLOW],
   'regress/regress-499721612': [SKIP],
-  'asm/embenchen/box2d': [SKIP],
-  'asm/embenchen/zlib': [SKIP]
 }],  # 'simulator_run and arch == ppc64'
 
 ##############################################################################
@@ -2323,9 +2291,6 @@
 
 ##############################################################################
 ['variant == nooptimization', {
-  # nooptimization disables asm.js -> wasm translation, so disable these tests.
-  'regress/asm/*': [SKIP],
-  'asm/*': [SKIP],
 
   # Tests that depend on optimization (beyond doing assertOptimized).
   'ensure-growing-store-learns': [SKIP],
@@ -2474,16 +2439,7 @@
   'regress/regress-crbug-454091': [SKIP],
   'regress/regress-crbug-663750': [SKIP],
   'regress/regress-freeze-setter': [SKIP],
-  # TODO(v8:10494): asm Code objects can't be flushed and end up in the isolate
-  # serializer.
-  'asm/*': [SKIP],
   'compiler/regress-439743': [SKIP],
-  'regress/asm/regress-6196': [SKIP],
-  'regress/asm/regress-7893': [SKIP],
-  'regress/asm/regress-8377': [SKIP],
-  'regress/asm/regress-617526': [SKIP],
-  'regress/asm/regress-crbug-898974': [SKIP],
-  'regress/asm/regress-crbug-976934': [SKIP],
   'regress/regress-441099': [SKIP],
   'regress/regress-677685': [SKIP],
   'regress/regress-799690': [SKIP],
@@ -3190,7 +3146,6 @@
   'wasm/table': [PASS, SLOW],
 
   # Too slow tests.
-  'asm/poppler/poppler': [SKIP],
   'regress/regress-7558019': [SKIP],
   'wasm/shared-memory-worker-gc': [SKIP],
 }],  # 'clang_coverage and mode == debug'
@@ -3322,7 +3277,6 @@
   'regress/regress-381390367': [SKIP],
   'regress-332570754': [SKIP],
   'regress/regress-490446682': [SKIP],
-  'asm/regress-1395401': [SKIP],
   'regress/regress-1394663': [SKIP],
   'regress/wasm/regress-crbug-1502180': [SKIP],
   'regress/wasm/regress-392928805': [SKIP],

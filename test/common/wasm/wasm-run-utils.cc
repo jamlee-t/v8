@@ -107,9 +107,9 @@ class FunctionTargetAndImplicitArg {
 };
 
 TestingModuleBuilder::TestingModuleBuilder(
-    Zone* zone, ModuleOrigin origin, ManuallyImportedJSFunction* maybe_import,
+    Zone* zone, ManuallyImportedJSFunction* maybe_import,
     TestExecutionTier tier, Isolate* isolate)
-    : module_(std::make_shared<WasmModule>(origin)),
+    : module_(std::make_shared<WasmModule>()),
       isolate_(isolate),
       enabled_features_(WasmEnabledFeatures::FromIsolate(isolate_)),
       execution_tier_(tier) {
@@ -195,11 +195,6 @@ uint8_t* TestingModuleBuilder::AddMemory(uint32_t size, SharedFlag shared,
       WasmMemoryObject::New(isolate_, initial_pages, maximum_pages, shared,
                             address_type)
           .ToHandleChecked();
-  // For asm.js make sure that always the ArrayBuffer exists (like in
-  // production).
-  if (is_asmjs_module(module_.get())) {
-    WasmMemoryObject::GetArrayBuffer(isolate_, memory_object);
-  }
   DirectHandle<FixedArray> memory_objects =
       isolate_->factory()->NewFixedArray(1);
   memory_objects->set(0, *memory_object);
@@ -481,11 +476,6 @@ DirectHandle<WasmInstanceObject> TestingModuleBuilder::InitInstanceObject() {
   constexpr base::Vector<const char> kNoSourceUrl{"", 0};
   DirectHandle<Script> script =
       GetWasmEngine()->GetOrCreateScript(isolate_, native_module, kNoSourceUrl);
-  // Asm.js modules are expected to have "normal" scripts, not Wasm scripts.
-  if (is_asmjs_module(native_module->module())) {
-    script->set_type(Script::Type::kNormal);
-    script->set_infos(ReadOnlyRoots{isolate_}.empty_weak_fixed_array());
-  }
 
   DirectHandle<ByteArray> globals_buffer =
       isolate_->factory()->NewByteArray(kMaxGlobalsSize);
@@ -546,15 +536,11 @@ void WasmFunctionCompiler::Build(base::Vector<const uint8_t> bytes) {
       native_module->IsInDebugState() ? kForDebugging : kNotForDebugging;
 
   WasmDetectedFeatures unused_detected_features;
-  // Validate Wasm modules; asm.js is assumed to be always valid.
-  if (env.module->origin == kWasmOrigin) {
-    DecodeResult validation_result =
-        ValidateFunctionBody(zone_, env.enabled_features, env.module,
-                             &unused_detected_features, func_body);
-    if (validation_result.failed()) {
-      FATAL("Validation failed: %s",
-            validation_result.error().message().c_str());
-    }
+  DecodeResult validation_result =
+      ValidateFunctionBody(zone_, env.enabled_features, env.module,
+                           &unused_detected_features, func_body);
+  if (validation_result.failed()) {
+    FATAL("Validation failed: %s", validation_result.error().message().c_str());
   }
 
   if (v8_flags.wasm_jitless) return;

@@ -680,8 +680,6 @@ v8_cluster_source_set("v8_unittests_sources") {
     sources += [
       "../../test/common/wasm/wasm-macro-gen.h",
       "api/api-wasm-unittest.cc",
-      "asmjs/asm-scanner-unittest.cc",
-      "asmjs/asm-types-unittest.cc",
       "compiler/int64-lowering-unittest.cc",
       "compiler/turboshaft/wasm-simd-unittest.cc",
       "compiler/wasm-address-reassociation-unittest.cc",

@@ -4214,7 +4214,6 @@ i::Scope* DeserializeFunctionScope(i::Isolate* isolate, i::Zone* zone,
 }  // namespace
 
 TEST_F(ParsingTest, AsmModuleFlag) {
-  i::v8_flags.validate_asm = false;
   i::Isolate* isolate = i_isolate();
 
   const char* src =
