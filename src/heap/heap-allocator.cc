@@ -17,6 +17,7 @@
 #include "src/heap/large-spaces.h"
 #include "src/heap/memory-chunk-layout.h"
 #include "src/heap/normal-page.h"
+#include "src/heap/pending-allocations.h"
 #include "src/logging/counters.h"
 #include "src/objects/heap-object.h"
 #include "src/utils/utils.h"
@@ -40,6 +41,7 @@ void HeapAllocator::Setup() {
       local_heap_->is_main_thread()) {
     LinearAllocationArea* const new_allocation_info =
         &heap_->isolate()->isolate_data()->new_allocation_info();
+    young_pending_allocations_ = heap_->young_pending_allocations();
     new_space_allocator_.emplace(
         local_heap_,
         v8_flags.sticky_mark_bits
@@ -133,11 +135,15 @@ void HeapAllocator::UpdatePendingLargeObject(Tagged<HeapObject> object,
                                              AllocationType allocation) {
   Address addr = object.address();
   pending_large_object_.store(addr, std::memory_order_release);
-  if (allocation == AllocationType::kYoung) {
-    new_space_pending_large_object_.store(addr, std::memory_order_release);
-  } else {
-    new_space_pending_large_object_.store(kNullAddress,
-                                          std::memory_order_release);
+  if (allocation == AllocationType::kYoung && young_pending_allocations_) {
+    young_pending_allocations_->UpdateLargeObject(addr);
+  }
+}
+
+void HeapAllocator::ResetPendingLargeObject() {
+  pending_large_object_.store(kNullAddress, std::memory_order_release);
+  if (young_pending_allocations_) {
+    young_pending_allocations_->RemoveLargeObject();
   }
 }
 

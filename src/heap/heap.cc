@@ -96,11 +96,13 @@
 #include "src/heap/object-stats.h"
 #include "src/heap/paged-spaces-inl.h"
 #include "src/heap/parked-scope.h"
+#include "src/heap/pending-allocations.h"
 #include "src/heap/pretenuring-handler.h"
 #include "src/heap/read-only-heap.h"
 #include "src/heap/remembered-set.h"
 #include "src/heap/safepoint.h"
 #include "src/heap/scavenger.h"
+#include "src/heap/spaces.h"
 #include "src/heap/stress-scavenge-observer.h"
 #include "src/heap/sweeper.h"
 #include "src/heap/trusted-range.h"
@@ -2265,6 +2267,10 @@ void Heap::PerformGarbageCollection(GarbageCollector collector,
   }
 
   FreeLinearAllocationAreas();
+
+  if (!incremental_marking_->IsMarking()) {
+    young_pending_allocations_->ResetVersion();
+  }
 
   tracer()->StartInSafepoint(atomic_pause_start_time);
 
@@ -5767,6 +5773,8 @@ void Heap::SetUp(LocalHeap* main_thread_local_heap) {
   heap_allocator_ = &main_thread_local_heap->heap_allocator_;
   DCHECK_NOT_NULL(heap_allocator_);
 
+  young_pending_allocations_ = std::make_unique<YoungPendingAllocations>(this);
+
   // Set the stack start for the main thread that sets up the heap.
   SetStackStart();
 
@@ -7861,6 +7869,49 @@ ConservativePinningScope::ConservativePinningScope(Heap* heap) : heap_(heap) {
 ConservativePinningScope::~ConservativePinningScope() {
   DCHECK(heap_->selective_stack_scan_start_address_.has_value());
   heap_->selective_stack_scan_start_address_.reset();
+}
+
+bool Heap::IsPendingAllocationSlow(Tagged<HeapObject> object,
+                                   MemoryChunk* chunk) {
+  BaseSpace* base_space = chunk->Metadata(isolate())->owner();
+  Address addr = object.address();
+
+  switch (base_space->identity()) {
+    case NEW_SPACE:
+    case NEW_LO_SPACE:
+      return young_pending_allocations_->ContainsSynchronized(addr);
+
+    case OLD_SPACE: {
+      return allocator()->old_space_allocator()->IsPendingAllocation(addr);
+    }
+
+    case CODE_SPACE: {
+      return allocator()->code_space_allocator()->IsPendingAllocation(addr);
+    }
+
+    case TRUSTED_SPACE: {
+      return allocator()->trusted_space_allocator()->IsPendingAllocation(addr);
+    }
+
+    case LO_SPACE:
+    case CODE_LO_SPACE:
+    case TRUSTED_LO_SPACE: {
+      return addr == allocator()->pending_large_object();
+    }
+
+    case SHARED_SPACE:
+    case SHARED_LO_SPACE:
+    case SHARED_TRUSTED_SPACE:
+    case SHARED_TRUSTED_LO_SPACE:
+      // TODO(v8:13267): Ensure that all shared space objects have a memory
+      // barrier after initialization.
+      return false;
+
+    case RO_SPACE:
+      UNREACHABLE();
+  }
+
+  UNREACHABLE();
 }
 
 #include "src/objects/object-macros-undef.h"

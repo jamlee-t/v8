@@ -39,6 +39,7 @@
 #include "src/heap/minor-mark-sweep.h"
 #include "src/heap/mutable-page.h"
 #include "src/heap/object-lock.h"
+#include "src/heap/pending-allocations.h"
 #include "src/heap/pretenuring-handler.h"
 #include "src/heap/weak-object-worklists.h"
 #include "src/heap/young-generation-marking-visitor.h"
@@ -396,9 +397,9 @@ void ConcurrentMarking::RunMajor(JobDelegate* delegate,
                                 task_id);
   }
   bool another_ephemeron_iteration = false;
-  HeapAllocator* const heap_allocator = heap_->allocator();
-  MainAllocator* const new_space_allocator =
-      heap_->use_new_space() ? heap_allocator->new_space_allocator() : nullptr;
+  YoungPendingAllocations* const young_pending_allocations =
+      heap_->young_pending_allocations();
+  YoungPendingAllocations::Snapshot young_pending_snapshot;
 
   {
     TimedScope scope(&time_ms);
@@ -431,20 +432,12 @@ void ConcurrentMarking::RunMajor(JobDelegate* delegate,
         DCHECK_EQ(HeapUtils::GetOwnerHeap(object), heap_);
         objects_processed++;
 
-        Address new_space_top = kNullAddress;
-        Address new_space_limit = kNullAddress;
-        Address new_large_object = kNullAddress;
-
-        if (new_space_allocator) [[likely]] {
-          std::tie(new_space_top, new_space_limit) =
-              new_space_allocator->GetOriginalTopAndLimit();
-          new_large_object = heap_allocator->new_space_pending_large_object();
-        }
+        young_pending_allocations->UpdateSnapshotIfOutdated(
+            &young_pending_snapshot);
 
         Address addr = object.address();
 
-        if ((new_space_top <= addr && addr < new_space_limit) ||
-            addr == new_large_object) {
+        if (young_pending_snapshot.Contains(addr)) {
           local_marking_worklists.PushOnHold(object);
         } else {
           Tagged<Map> map = object->map(kAcquireLoad);
@@ -503,23 +496,6 @@ void ConcurrentMarking::RunMajor(JobDelegate* delegate,
   DCHECK(task_state->local_pretenuring_feedback.empty());
 }
 
-namespace {
-
-V8_INLINE bool IsYoungObjectInLab(MainAllocator* new_space_allocator,
-                                  HeapAllocator* heap_allocator,
-                                  Tagged<HeapObject> heap_object) {
-  // The order of the two loads is important.
-  auto [new_space_top, new_space_limit] =
-      new_space_allocator->GetOriginalTopAndLimit();
-  Address new_large_object = heap_allocator->new_space_pending_large_object();
-
-  Address addr = heap_object.address();
-
-  return (new_space_top <= addr && addr < new_space_limit) ||
-         addr == new_large_object;
-}
-
-}  // namespace
 
 template <YoungGenerationMarkingVisitationMode marking_mode>
 V8_INLINE size_t ConcurrentMarking::RunMinorImpl(JobDelegate* delegate,
@@ -537,9 +513,9 @@ V8_INLINE size_t ConcurrentMarking::RunMinorImpl(JobDelegate* delegate,
   auto& marking_worklists_local = visitor.marking_worklists_local();
   Isolate* isolate = heap_->isolate();
   minor_marking_state_->MarkerStarted();
-  MainAllocator* const new_space_allocator =
-      heap_->allocator()->new_space_allocator();
-  HeapAllocator* const heap_allocator = heap_->allocator();
+  YoungPendingAllocations* const young_pending_allocations =
+      heap_->young_pending_allocations();
+  YoungPendingAllocations::Snapshot young_pending_snapshot;
 
   do {
     if (delegate->IsJoiningThread()) {
@@ -553,8 +529,9 @@ V8_INLINE size_t ConcurrentMarking::RunMinorImpl(JobDelegate* delegate,
       SYNCHRONIZATION_POINT_TEST_ONLY(
           is_joining_thread ? "ConcurrentMarkerMinorPerItemMainThread"
                             : "ConcurrentMarkerMinorPerItemBgThread");
-      if (IsYoungObjectInLab(new_space_allocator, heap_allocator,
-                             heap_object)) {
+      young_pending_allocations->UpdateSnapshotIfOutdated(
+          &young_pending_snapshot);
+      if (young_pending_snapshot.Contains(heap_object->address())) {
         visitor.marking_worklists_local().PushOnHold(heap_object);
       } else {
         Tagged<Map> map = heap_object->map();

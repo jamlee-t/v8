@@ -1954,6 +1954,8 @@ filegroup(
         "src/heap/parallel-work-item.h",
         "src/heap/parked-scope-inl.h",
         "src/heap/parked-scope.h",
+        "src/heap/pending-allocations.cc",
+        "src/heap/pending-allocations.h",
         "src/heap/pretenuring-handler.cc",
         "src/heap/pretenuring-handler.h",
         "src/heap/pretenuring-handler-inl.h",

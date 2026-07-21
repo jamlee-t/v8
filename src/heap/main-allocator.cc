@@ -21,6 +21,7 @@
 #include "src/heap/new-spaces.h"
 #include "src/heap/normal-page-inl.h"
 #include "src/heap/paged-spaces.h"
+#include "src/heap/pending-allocations.h"
 #include "src/heap/spaces.h"
 
 namespace v8 {
@@ -48,11 +49,17 @@ MainAllocator::MainAllocator(LocalHeap* local_heap, SpaceWithLinearArea* space,
                                                   : &owned_allocation_info_),
       allocator_policy_(space->CreateAllocatorPolicy(this)),
       supports_extending_lab_(allocator_policy_->SupportsExtendingLAB()),
-      black_allocation_(ComputeBlackAllocation(is_new_generation)) {
+      black_allocation_(ComputeBlackAllocation(is_new_generation)),
+      young_pending_allocations_(
+          space->identity() == NEW_SPACE
+              ? isolate_heap_->young_pending_allocations()
+              : nullptr) {
   CHECK_NOT_NULL(local_heap_);
   if (local_heap_->is_main_thread()) {
     allocation_counter_.emplace();
-    linear_area_original_data_.emplace();
+    if (space_->identity() != NEW_SPACE) {
+      linear_area_original_data_.emplace();
+    }
   }
 }
 
@@ -63,7 +70,8 @@ MainAllocator::MainAllocator(Heap* heap, SpaceWithLinearArea* space, InGCTag)
       allocation_info_(&owned_allocation_info_),
       allocator_policy_(space->CreateAllocatorPolicy(this)),
       supports_extending_lab_(false),
-      black_allocation_(BlackAllocation::kAlwaysDisabled) {
+      black_allocation_(BlackAllocation::kAlwaysDisabled),
+      young_pending_allocations_(nullptr) {
   DCHECK(!allocation_counter_.has_value());
   DCHECK(!linear_area_original_data_.has_value());
 }
@@ -260,8 +268,12 @@ void MainAllocator::FreeLinearAllocationAreaAndResetFreeList() {
 }
 
 void MainAllocator::MoveOriginalTopForward() {
-  DCHECK(SupportsPendingAllocation());
-  linear_area_original_data().SetTopAndLimit(top(), extended_limit());
+  if (SupportsPendingAllocation()) {
+    linear_area_original_data().SetTopAndLimit(top(), extended_limit());
+  }
+  if (young_pending_allocations_) {
+    young_pending_allocations_->UpdateLab(top(), extended_limit());
+  }
 }
 
 void MainAllocator::ResetLab(Address start, Address end, Address extended_end) {
@@ -285,11 +297,15 @@ void MainAllocator::ResetLab(Address start, Address end, Address extended_end) {
   if (SupportsPendingAllocation()) {
     linear_area_original_data().SetTopAndLimit(start, extended_end);
   }
+  if (young_pending_allocations_) {
+    DCHECK(!SupportsPendingAllocation());
+    young_pending_allocations_->UpdateLab(start, end);
+  }
 }
 
 bool MainAllocator::IsPendingAllocation(Address object_address) {
   DCHECK(SupportsPendingAllocation());
-  auto [top, limit] = linear_area_original_data().GetTopAndLimitLocked();
+  auto [top, limit] = linear_area_original_data().GetTopAndLimit();
   return top && top <= object_address && object_address < limit;
 }
 
@@ -322,6 +338,9 @@ void MainAllocator::FreeLinearAllocationArea() {
 
   BasePage::UpdateHighWaterMark(top());
   allocator_policy_->FreeLinearAllocationArea();
+  if (young_pending_allocations_) {
+    young_pending_allocations_->RemoveLab();
+  }
 }
 
 void MainAllocator::ExtendLAB(Address limit) {
@@ -949,25 +968,15 @@ void PagedSpaceAllocatorPolicy::FreeLinearAllocationAreaUnsynchronized() {
   space_->Free(current_top, current_max_limit - current_top);
 }
 
-std::pair<Address, Address> LinearAreaOriginalData::GetTopAndLimitLocked()
-    const {
+std::pair<Address, Address> LinearAreaOriginalData::GetTopAndLimit() const {
   base::MutexGuard guard(mutex_);
-  auto [top, limit] = GetTopAndLimit();
-  // This always holds because we load both fields while locking the mutex.
-  DCHECK_LE(top, limit);
-  return std::make_pair(top, limit);
+  return std::make_pair(original_top_, original_limit_);
 }
 
 void LinearAreaOriginalData::SetTopAndLimit(Address top, Address limit) {
   base::MutexGuard guard(mutex_);
-  // The order of the two stores is important. See GetTopAndLimit().
-  // The release-store here guarantees that once we start changing LAB
-  // boundaries, all object initialization stores are observable as well for the
-  // concurrent marker.
-  original_limit_.store(limit, std::memory_order_release);
-  // Use acquire/release semantics here to prevent subsequent stores to move
-  // before this store here.
-  original_top_.exchange(top, std::memory_order_acq_rel);
+  original_top_ = top;
+  original_limit_ = limit;
 }
 
 }  // namespace internal

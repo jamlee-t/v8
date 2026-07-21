@@ -829,15 +829,6 @@ void MarkCompactCollector::Prepare() {
   if (auto* new_space = heap_->new_space()) {
     new_space->GarbageCollectionPrologue();
   }
-  if (heap_->use_new_space()) {
-#ifdef DEBUG
-    Address original_top = heap_->allocator()
-                               ->new_space_allocator()
-                               ->GetOriginalTopAndLimit()
-                               .first;
-    DCHECK_EQ(heap_->allocator()->new_space_allocator()->top(), original_top);
-#endif  // DEBUG
-  }
 }
 
 void MarkCompactCollector::FinishConcurrentMarking() {

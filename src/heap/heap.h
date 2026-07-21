@@ -109,6 +109,8 @@ class JSFinalizationRegistry;
 class JSPromise;
 class LinearAllocationArea;
 class LocalHeap;
+class YoungPendingAllocations;
+class SpaceWithLinearArea;
 class MemoryAllocator;
 class MemoryBalancer;
 class MutablePage;
@@ -880,6 +882,10 @@ class Heap final {
   LocalHeap* main_thread_local_heap() { return main_thread_local_heap_; }
 
   Heap* AsHeap() { return this; }
+
+  YoungPendingAllocations* young_pending_allocations() const {
+    return young_pending_allocations_.get();
+  }
 
   // ===========================================================================
   // Root set access. ==========================================================
@@ -2070,6 +2076,8 @@ class Heap final {
 
   // Helper for IsPendingAllocation.
   inline bool IsPendingAllocationInternal(Tagged<HeapObject> object);
+  V8_EXPORT_PRIVATE bool IsPendingAllocationSlow(Tagged<HeapObject> object,
+                                                 MemoryChunk* chunk);
 
 #ifdef DEBUG
   V8_EXPORT_PRIVATE void IncrementObjectCounters();
@@ -2279,6 +2287,8 @@ class Heap final {
   std::unique_ptr<HeapProfiler> heap_profiler_;
 
   std::shared_ptr<v8::TaskRunner> task_runner_;
+
+  std::unique_ptr<YoungPendingAllocations> young_pending_allocations_;
 
   // This object controls virtual space reserved for code on the V8 heap. This
   // is only valid for 64-bit architectures where kPlatformRequiresCodeRange.

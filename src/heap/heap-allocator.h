@@ -31,6 +31,7 @@ class PagedSpace;
 class ReadOnlySpace;
 class SharedTrustedLargeObjectSpace;
 class Space;
+class YoungPendingAllocations;
 
 // Allocator for the main thread. All exposed functions internally call the
 // right bottleneck.
@@ -165,9 +166,8 @@ class V8_EXPORT_PRIVATE HeapAllocator final {
 
   Address last_young_allocation() { return *last_young_allocation_pointer_; }
 
-  V8_INLINE Address new_space_pending_large_object() const;
   V8_INLINE Address pending_large_object() const;
-  V8_INLINE void ResetPendingLargeObject();
+  void ResetPendingLargeObject();
 
  private:
   V8_INLINE PagedSpace* code_space() const;
@@ -217,11 +217,11 @@ class V8_EXPORT_PRIVATE HeapAllocator final {
   void IncrementObjectCounters();
 #endif  // DEBUG
 
-  std::atomic<Address> new_space_pending_large_object_{kNullAddress};
   std::atomic<Address> pending_large_object_{kNullAddress};
 
   LocalHeap* local_heap_;
   Heap* const heap_;
+  YoungPendingAllocations* young_pending_allocations_ = nullptr;
   int max_regular_code_object_size_ = 0;
   Space* spaces_[LAST_SPACE + 1];
   ReadOnlySpace* read_only_space_;

@@ -25,6 +25,7 @@ class PagedNewSpace;
 class PagedSpaceBase;
 class SemiSpaceNewSpace;
 class SpaceWithLinearArea;
+class YoungPendingAllocations;
 
 class AllocatorPolicy {
  public:
@@ -119,34 +120,15 @@ class PagedNewSpaceAllocatorPolicy final : public AllocatorPolicy {
 
 class LinearAreaOriginalData {
  public:
-  // Loads top and limit fields using the synchronization protocol without
-  // holding the mutex lock. Note that in the returned (top, limit) pair, top
-  // and limit might not actually belong together for brief moments when
-  // changing LABs. It could happen that the LAB is invalid (limit<top) or that
-  // the LAB is longer than needed (when old limit <= new limit). However, this
-  // is fine for concurrent marking which would just push a few more objects to
-  // the "on_hold" queue then necessary.
-  //
-  // If top and limit need to be consistent with respect to each other use
-  // GetTopAndLimitLocked() instead.
-  std::pair<Address, Address> GetTopAndLimit() const {
-    // The order of the two loads is important. See SetTopAndLimit().
-    auto top = original_top_.load(std::memory_order_acquire);
-    // This synchronizes with the release store in SetTopAndLimit().
-    auto limit = original_limit_.load(std::memory_order_acquire);
-    return std::make_pair(top, limit);
-  }
-
-  // Same as GetTopAndLimit() but also locks the mutex.
-  std::pair<Address, Address> GetTopAndLimitLocked() const;
+  std::pair<Address, Address> GetTopAndLimit() const;
 
   void SetTopAndLimit(Address top, Address limit);
 
  private:
   // The top and the limit at the time of setting the linear allocation area.
   // These values can be accessed by background tasks. Protected by mutex_.
-  std::atomic<Address> original_top_ = 0;
-  std::atomic<Address> original_limit_ = 0;
+  Address original_top_ = 0;
+  Address original_limit_ = 0;
 
   // Protects original_top_ and original_limit_.
   mutable base::Mutex mutex_;
@@ -186,10 +168,6 @@ class MainAllocator {
   // The allocation limit address.
   Address* allocation_limit_address() const {
     return allocation_info_->limit_address();
-  }
-
-  std::pair<Address, Address> GetOriginalTopAndLimit() const {
-    return linear_area_original_data().GetTopAndLimit();
   }
 
   void MoveOriginalTopForward();
@@ -369,13 +347,14 @@ class MainAllocator {
   // Some spaces support "extending" of LABs (see supports_extending_lab()).
   // This helps to avoid fragmentation on pages due to LAB allocation. It is
   // also a fast path for allocation that avoids free list allocation.
-  Address extended_limit_;
+  Address extended_limit_ = kNullAddress;
 
   std::optional<LinearAreaOriginalData> linear_area_original_data_;
   std::unique_ptr<AllocatorPolicy> allocator_policy_;
 
   const bool supports_extending_lab_;
   const BlackAllocation black_allocation_;
+  YoungPendingAllocations* const young_pending_allocations_;
 
   friend class AllocatorPolicy;
   friend class PagedSpaceAllocatorPolicy;
