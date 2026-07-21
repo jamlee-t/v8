@@ -7875,7 +7875,7 @@ class DebugBreak : public FixedInputNodeT<0, DebugBreak> {
   void GenerateCode(MaglevAssembler*, const ProcessingState&);
 };
 
-class Dead : public NodeT<Dead> {
+class Dead : public FixedInputNodeT<0, Dead> {
  public:
   static constexpr OpProperties kProperties =
       OpProperties::ForValueRepresentation(ValueRepresentation::kNone);
