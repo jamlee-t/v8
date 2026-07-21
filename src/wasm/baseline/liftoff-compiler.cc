@@ -11120,6 +11120,15 @@ class LiftoffCompiler {
     if (for_debugging_) {
       DefineSafepoint(trapping_instruction_pc);
     }
+    if (V8_UNLIKELY(debug_sidetable_builder_)) {
+      // The trap handler fakes a call from fault_address + 1, so the debugger
+      // will look up the stack frame and scope at trapping_instruction_pc + 1.
+      debug_sidetable_builder_->NewEntry(
+          trapping_instruction_pc + 1,
+          GetCurrentDebugSideTableEntries(
+              decoder, DebugSideTableBuilder::kAllowRegisters)
+              .as_vector());
+    }
   }
 
   int NextFeedbackVectorSlot(FullDecoder* decoder) {
