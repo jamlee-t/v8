@@ -6308,8 +6308,7 @@ class GraphBuildingNodeProcessor {
     DCHECK(!node->Is<maglev::VirtualObject>());
     if (const maglev::InlinedAllocation* alloc =
             node->TryCast<maglev::InlinedAllocation>()) {
-      DCHECK(alloc->HasBeenAnalysed());
-      if (alloc->HasBeenElided()) {
+      if (alloc->HasBeenAnalysed() && alloc->HasBeenElided()) {
         AddVirtualObjectInput(builder, virtual_objects,
                               virtual_objects.FindAllocatedWith(alloc));
         return;
