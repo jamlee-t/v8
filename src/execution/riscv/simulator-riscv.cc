@@ -8191,7 +8191,12 @@ void Simulator::DecodeRvvFVV() {
           break;
         case VFNCVT_F_F_W:
           RVV_VI_VFP_CVT_SCALE(
-              { UNREACHABLE(); }, { UNREACHABLE(); },
+              { UNREACHABLE(); },
+              {
+                auto vs2 = Rvvelt<float>(rvv_vs2_reg(), i);
+                Float16 result = Float16::FromFloat32(vs2);
+                Rvvelt<uint16_t>(rvv_vd_reg(), i, true) = result.get_bits();
+              },
               {
                 auto vs2 = Rvvelt<double>(rvv_vs2_reg(), i);
                 Rvvelt<float>(rvv_vd_reg(), i, true) =
@@ -8273,7 +8278,12 @@ void Simulator::DecodeRvvFVV() {
           break;
         case VFWCVT_F_F_V:
           RVV_VI_VFP_CVT_SCALE(
-              { UNREACHABLE(); }, { UNREACHABLE(); },
+              { UNREACHABLE(); },
+              {
+                auto vs2 = Rvvelt<uint16_t>(rvv_vs2_reg(), i);
+                Rvvelt<float>(rvv_vd_reg(), i, true) =
+                    Float16::FromBits(vs2).ToFloat32();
+              },
               {
                 auto vs2 = Rvvelt<float32_t>(rvv_vs2_reg(), i);
                 Rvvelt<double>(rvv_vd_reg(), i, true) =

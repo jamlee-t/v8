@@ -3687,6 +3687,52 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       __ vfabs_vv(i.OutputSimd128Register(), i.InputSimd128Register(0));
       break;
     }
+    case kRiscvF16x8DemoteF32x4Zero: {
+      __ VU.SetSimd128Half(E16);
+      __ vfncvt_f_f_w(i.OutputSimd128Register(), i.InputSimd128Register(0));
+      __ VU.SetSimd128(E16);
+      __ li(kScratchReg, 0b11110000);
+      __ vmv_sx(v0, kScratchReg);
+      __ vmerge_vx(i.OutputSimd128Register(), zero_reg,
+                   i.OutputSimd128Register());
+      break;
+    }
+    case kRiscvF16x8DemoteF64x2Zero: {
+      __ VU.SetSimd128(E16);
+      __ vmv_vx(i.OutputSimd128Register(), zero_reg);
+      // convert the first two lanes of f64 to f16
+      // and store them in the first two lanes of
+      // the output vector
+      __ VU.SetSimd128(E64);
+      __ vfmv_fs(kScratchDoubleReg, i.InputSimd128Register(0));
+      __ fcvt_h_d(kScratchDoubleReg, kScratchDoubleReg);
+      __ fmv_x_h(kScratchReg, kScratchDoubleReg);
+      __ VU.SetSimd128(E16);
+      __ vmv_sx(i.OutputSimd128Register(), kScratchReg);
+      // convert the second two lanes of f64 to f16
+      __ VU.SetSimd128(E64);
+      __ vslidedown_vi(kSimd128ScratchReg, i.InputSimd128Register(0), 1);
+      __ vfmv_fs(kScratchDoubleReg, kSimd128ScratchReg);
+      __ fcvt_h_d(kScratchDoubleReg, kScratchDoubleReg);
+      __ fmv_x_h(kScratchReg2, kScratchDoubleReg);
+      __ VU.SetSimd128(E16);
+      __ li(kScratchReg, 0b10);
+      __ vmv_sx(v0, kScratchReg);
+      __ vmerge_vx(i.OutputSimd128Register(), kScratchReg2,
+                   i.OutputSimd128Register());
+      break;
+    }
+    case kRiscvF32x4PromoteLowF16x8: {
+      __ VU.SetSimd128Half(E16);
+      if (i.OutputSimd128Register() != i.InputSimd128Register(0)) {
+        __ vfwcvt_f_f_v(i.OutputSimd128Register(), i.InputSimd128Register(0));
+      } else {
+        __ vfwcvt_f_f_v(kSimd128ScratchReg3, i.InputSimd128Register(0));
+        __ VU.SetSimd128(E16);
+        __ vmv_vv(i.OutputSimd128Register(), kSimd128ScratchReg3);
+      }
+      break;
+    }
     case kRiscvVFcvtFXU: {
       __ VU.SetSimd128(DecodeElementWidth(instr->opcode()));
       __ vfcvt_f_xu_v(i.OutputSimd128Register(), i.InputSimd128Register(0));

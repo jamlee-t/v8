@@ -2786,15 +2786,51 @@ bool LiftoffAssembler::emit_f16x8_uconvert_i16x8(LiftoffRegister dst,
 }
 bool LiftoffAssembler::emit_f16x8_demote_f32x4_zero(LiftoffRegister dst,
                                                     LiftoffRegister src) {
-  return false;
+  if (!CpuFeatures::IsSupported(ZVFH)) return false;
+  VU.SetSimd128Half(E16);
+  vfncvt_f_f_w(dst.simd128(), src.simd128());
+  VU.SetSimd128(E16);
+  li(kScratchReg, 0b11110000);
+  vmv_sx(v0, kScratchReg);
+  vmerge_vx(dst.simd128(), zero_reg, dst.simd128());
+  return true;
 }
 bool LiftoffAssembler::emit_f16x8_demote_f64x2_zero(LiftoffRegister dst,
                                                     LiftoffRegister src) {
-  return false;
+  if (!CpuFeatures::IsSupported(ZVFH) || !CpuFeatures::IsSupported(ZFH)) {
+    return false;
+  }
+  VU.SetSimd128(E16);
+  vmv_vx(dst.simd128(), zero_reg);
+  VU.SetSimd128(E64);
+  vfmv_fs(kScratchDoubleReg, src.simd128());
+  fcvt_h_d(kScratchDoubleReg, kScratchDoubleReg);
+  fmv_x_h(kScratchReg, kScratchDoubleReg);
+  VU.SetSimd128(E16);
+  vmv_sx(dst.simd128(), kScratchReg);
+  VU.SetSimd128(E64);
+  vslidedown_vi(kSimd128ScratchReg, src.simd128(), 1);
+  vfmv_fs(kScratchDoubleReg, kSimd128ScratchReg);
+  fcvt_h_d(kScratchDoubleReg, kScratchDoubleReg);
+  fmv_x_h(kScratchReg2, kScratchDoubleReg);
+  VU.SetSimd128(E16);
+  li(kScratchReg, 0b10);
+  vmv_sx(v0, kScratchReg);
+  vmerge_vx(dst.simd128(), kScratchReg2, dst.simd128());
+  return true;
 }
 bool LiftoffAssembler::emit_f32x4_promote_low_f16x8(LiftoffRegister dst,
                                                     LiftoffRegister src) {
-  return false;
+  if (!CpuFeatures::IsSupported(ZVFH)) return false;
+  VU.SetSimd128Half(E16);
+  if (dst.simd128() != src.simd128()) {
+    vfwcvt_f_f_v(dst.simd128(), src.simd128());
+  } else {
+    vfwcvt_f_f_v(kSimd128ScratchReg3, src.simd128());
+    VU.SetSimd128(E16);
+    vmv_vv(dst.simd128(), kSimd128ScratchReg3);
+  }
+  return true;
 }
 
 bool LiftoffAssembler::emit_f16x8_qfma(LiftoffRegister dst,

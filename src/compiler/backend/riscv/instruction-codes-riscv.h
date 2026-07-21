@@ -282,6 +282,9 @@ namespace compiler {
   V(RiscvF16x8Sqrt)                       \
   V(RiscvF16x8Pmin)                       \
   V(RiscvF16x8Pmax)                       \
+  V(RiscvF16x8DemoteF32x4Zero)            \
+  V(RiscvF16x8DemoteF64x2Zero)            \
+  V(RiscvF32x4PromoteLowF16x8)            \
   V(RiscvF32x4Pmin)                       \
   V(RiscvF32x4Pmax)                       \
   V(RiscvF32x4DemoteF64x2Zero)            \

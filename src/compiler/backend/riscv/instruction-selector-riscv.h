@@ -1131,11 +1131,18 @@ void InstructionSelector::VisitF16x8Le(OpIndex node) {
        g.UseRegister(op.input(1)));
 }
 
+void InstructionSelector::VisitF16x8DemoteF32x4Zero(OpIndex node) {
+  VisitRR(this, kRiscvF16x8DemoteF32x4Zero, node);
+}
+void InstructionSelector::VisitF16x8DemoteF64x2Zero(OpIndex node) {
+  VisitRR(this, kRiscvF16x8DemoteF64x2Zero, node);
+}
+void InstructionSelector::VisitF32x4PromoteLowF16x8(OpIndex node) {
+  VisitRR(this, kRiscvF32x4PromoteLowF16x8, node);
+}
+
 // Still unimplemented F16x8 ops (no Liftoff support).
 #define UNIMPLEMENTED_SIMD_FP16_OP_LIST(V) \
-  V(F16x8DemoteF32x4Zero)                  \
-  V(F16x8DemoteF64x2Zero)                  \
-  V(F32x4PromoteLowF16x8)                  \
   V(F16x8Qfma)                             \
   V(F16x8Qfms)
 
