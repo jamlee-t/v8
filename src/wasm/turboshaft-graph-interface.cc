@@ -5094,12 +5094,6 @@ class TurboshaftGraphBuildingInterface
   }
 
   void DataDrop(FullDecoder* decoder, const IndexImmediate& imm) {
-    // TODO(14616): Fix sharedness.
-    // TODO(14616): Data segments aren't available during streaming compilation,
-    // hence the `has_shared()` check below. Discussion:
-    // github.com/WebAssembly/shared-everything-threads/issues/83
-    CHECK(!decoder->enabled_.has_shared() ||
-          !decoder->module_->data_segments[imm.index].shared);
     auto sig = FixedSizeSignature<MachineType>::Params(MachineType::Pointer(),
                                                        MachineType::Uint32());
     CallC(
