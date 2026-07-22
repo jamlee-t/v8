@@ -846,16 +846,22 @@ class FieldValuesTracker : public CandidateAnalyzer {
       : CandidateAnalyzer(data),
         data_(data),
         block_snapshots_(data.zone),
+        old_phis_(data.zone),
         tracer_(data.compilation_info) {}
 
   BlockProcessResult PreProcessBasicBlock(BasicBlock* block) {
     TRACE("PreProcessBasicBlock " << BLOCK_ID(block));
+    old_phis_.clear();
 
     auto new_phis_it = new_phis().find(block);
     if (new_phis_it != new_phis().end()) {
       // We are revisiting this block because of a loop.
       TRACE("> clearing previous new Phis");
-      new_phis_it->second->clear();
+      if (block->is_loop()) {
+        old_phis_.swap(*new_phis_it->second);
+      } else {
+        new_phis_it->second->clear();
+      }
     }
 
     if (block->is_exception_handler_block()) {
@@ -955,6 +961,31 @@ class FieldValuesTracker : public CandidateAnalyzer {
         return nullptr;
       }
 
+      // Trying to find an already-created Phi for this field. If we find it, we
+      // reuse it, for 2 reasons:
+      //
+      //   - termination: if there is already a Phi for this field, then it's
+      //     guaranteed to already have the right values (cf comment below), and
+      //     thus we don't need to trigger a revisit of the loop. Creating a
+      //     branch new phi would trigger loop revisits for ever (since it
+      //     always set {need_revisit} to true).
+      //
+      //   - performance: we avoid reallocating a new phi.
+      for (auto [phi, other_key] : old_phis_) {
+        if (other_key != key) continue;
+#ifdef DEBUG
+        // Forward edges shouldn't have changed, and PatchLoopPhisBackedges
+        // should have already patched the backedge. So, if we find a phi, its
+        // inputs should already have the correct values.
+        DCHECK_EQ(phi->input_count(), predecessors.size());
+        for (int i = 0; i < phi->input_count(); i++) {
+          DCHECK_EQ(phi->input_node(i), predecessors[i]);
+        }
+#endif
+        RegisterNewPhi(phi, block, key);
+        return phi;
+      }
+
       DCHECK(state.has_value());
       // The "owner" field of Phis is just used for exception phis late in the
       // Maglev backend (register allocator / code generator), which new Phis
@@ -963,12 +994,19 @@ class FieldValuesTracker : public CandidateAnalyzer {
       // `Register::invalid_value`.
       constexpr interpreter::Register kFakeOwner =
           interpreter::Register::invalid_value();
+
+      // When visiting a loop with multiple forward edge for the 1st time, we
+      // may need to insert a phi to merge the forward values but we won't have
+      // a backedge value yet. Still, we'll create a valid loop phi with enough
+      // inputs and we'll set itself as backedge input.
+      int phi_input_count =
+          block->is_loop() ? block->predecessor_count() : predecessor_count;
       // TODO(dmercadier): instead of creating a proper Phi (which are 64 bytes
       // long + inputs!), we could have a custom "PseudoPhi" (name tbd)
       // structure that contains the bare minimum and would basically just be a
       // vector of Union(ValueNodes, PseudoPhi)., and only create real Phis in
       // the elider once we're sure that we're going to need them.
-      Phi* phi = NodeBase::New<Phi>(zone(), predecessor_count, state.value(),
+      Phi* phi = NodeBase::New<Phi>(zone(), phi_input_count, state.value(),
                                     kFakeOwner);
 #ifdef V8_ENABLE_MAGLEV_GRAPH_PRINTER
       // TODO(dmercadier): should we register Phis only once we're sure that
@@ -978,6 +1016,10 @@ class FieldValuesTracker : public CandidateAnalyzer {
 #endif
       for (int i = 0; i < predecessor_count; i++) {
         phi->set_input(i, predecessors[i]);
+      }
+      if (block->is_loop() && predecessor_count < phi_input_count) {
+        DCHECK_EQ(predecessor_count, phi_input_count - 1);
+        phi->set_input(phi_input_count - 1, predecessors[0]);
       }
       phi->change_representation(predecessors[0]->value_representation());
       TRACE(">> Created new phi: " << PRINT_NODE(phi));
@@ -999,23 +1041,36 @@ class FieldValuesTracker : public CandidateAnalyzer {
 
   BlockProcessResult PostProcessBasicBlock(BasicBlock* block) {
     DCHECK(!field_values().IsSealed());
-    bool already_had_snapshot = block_snapshots_[block].has_value();
-
     Snapshot snapshot = field_values().Seal();
     block_snapshots_[block] = MaybeSnapshot{snapshot};
 
     if (JumpLoop* jump_loop = block->control_node()->TryCast<JumpLoop>()) {
       BasicBlock* loop_header = jump_loop->target();
 
-      if (already_had_snapshot) {
-        // We only consider revisiting the loop once, ie, if the backedge didn't
-        // already have a snapshot.
+      // Loop phis backedges need to be patched in 2 situations:
+      //
+      //   - this is a loop with multiple forward edges that was requiring Phis
+      //     to merge forward values. In that case, during the first visit of
+      //     the loop, this Phi was created with itself as backedge (because it
+      //     needs a backedge value to be a valid loop phi); and we're now
+      //     patching this with the correct value of the backedge.
+      //
+      //   - we have just revisited the loop, and when creating the loop phis
+      //     initially we were using the old backedge value (since it's the only
+      //     one that we had); and we're now patching it with the correct value.
+      //
+      // Note that the fact that a loop phi needs to be patched isn't a reason
+      // to revisit the loop: while visiting the loop, phis are treated as
+      // opaque and we don't make any decisions that depend on the values of
+      // the inputs of a Phi. So, changing the backedge input of loop phis
+      // will not lead to making any different decision when revisiting the
+      // loop.
+      PatchLoopPhisBackedges(loop_header, snapshot);
 
-        // Note however that the loop header might already have loop phis from
-        // the previous visit, in which case we might need to update them.
-        PatchLoopPhisBackedges(loop_header, snapshot);
-
-        return BlockProcessResult::kContinue;
+      auto prev_header_phis = new_phis().find(loop_header);
+      if (prev_header_phis != new_phis().end()) {
+        old_phis_.swap(*prev_header_phis->second);
+        DCHECK(prev_header_phis->second->empty());
       }
 
       // TODO(dmercadier): we could try to reuse the snapshot created by
@@ -1159,6 +1214,22 @@ class FieldValuesTracker : public CandidateAnalyzer {
  private:
   EscapeAnalysisData& data_;
   ZoneAbslFlatHashMap<BasicBlock*, MaybeSnapshot> block_snapshots_;
+
+  // Stores the Phi nodes created at the loop header during the previous
+  // iteration of the loop analysis.
+  //
+  // When merging the loop entry and backedge values on a revisit, we look up
+  // the keys in this vector to reuse the existing Phis (updating their backedge
+  // inputs in-place if they changed) rather than allocating new ones.
+  // This is required to:
+  //   1) Prevent duplicating Phi nodes in the Zone on every revisit.
+  //   2) Ensure the loop analysis converges (otherwise, creating new Phis on
+  //   every merge would trigger infinite loop revisits).
+  //
+  // This must be cleared before analyzing non-loop merges to prevent loop Phis
+  // from being incorrectly reused inside the loop body.
+  ZoneVector<std::pair<Phi*, Key>> old_phis_;
+
   Tracer tracer_;
 };
 
