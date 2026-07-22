@@ -8,6 +8,7 @@
 
 #include "absl/container/flat_hash_set.h"
 #include "src/base/container-utils.h"
+#include "src/base/iterator.h"
 #include "src/compiler/js-heap-broker.h"
 #include "src/diagnostics/code-tracer.h"
 #include "src/interpreter/bytecode-register.h"
@@ -186,9 +187,19 @@ void EscapeAnalysisData::MarkAsEscapedIfCandidate(ValueNode* node,
 }
 
 void EscapeAnalysisData::MarkAsEscaped(InlinedAllocation* alloc) {
+  if (HasEscaped(alloc)) return;
   TRACE("Marking candidate:" << NODE_ID(alloc) << " as escaping");
   if (!(alloc->HasBeenAnalysed() && alloc->HasEscaped())) alloc->SetEscaped();
   candidates.at(alloc) = CandidateStatus::kCannotElide;
+
+  // Trigger revisits
+  DCHECK(alloc_definition_loop.contains(alloc));
+  BasicBlock* defining_loop = alloc_definition_loop.at(alloc);
+  for (auto& loop : base::Reversed(loop_stack)) {
+    if (loop.header == defining_loop) break;
+    loop.has_escaped_candidate = true;
+  }
+
   if (alloc_dependencies.contains(alloc)) {
     for (InlinedAllocation* other : *alloc_dependencies.at(alloc)) {
       if (candidates.contains(other) &&
@@ -851,6 +862,9 @@ class FieldValuesTracker : public CandidateAnalyzer {
 
   BlockProcessResult PreProcessBasicBlock(BasicBlock* block) {
     TRACE("PreProcessBasicBlock " << BLOCK_ID(block));
+    if (block->is_loop()) {
+      data_.loop_stack.push_back({block, false});
+    }
     old_phis_.clear();
 
     auto new_phis_it = new_phis().find(block);
@@ -1047,6 +1061,12 @@ class FieldValuesTracker : public CandidateAnalyzer {
     if (JumpLoop* jump_loop = block->control_node()->TryCast<JumpLoop>()) {
       BasicBlock* loop_header = jump_loop->target();
 
+      DCHECK_GT(data_.loop_stack.size(), 1);
+      DCHECK_EQ(data_.loop_stack.back().header, loop_header);
+      bool has_escaped_candidate =
+          data_.loop_stack.back().has_escaped_candidate;
+      data_.loop_stack.pop_back();
+
       // Loop phis backedges need to be patched in 2 situations:
       //
       //   - this is a loop with multiple forward edges that was requiring Phis
@@ -1076,8 +1096,10 @@ class FieldValuesTracker : public CandidateAnalyzer {
       // TODO(dmercadier): we could try to reuse the snapshot created by
       // CreateSnapshotFor when revisiting the loop, instead of discarding it
       // and recomputing it afterwards.
-      if (CheckLoopPhiInvalidation(loop_header) ||
-          CreateSnapshotFor(loop_header)) {
+      bool needs_revisit = has_escaped_candidate ||
+                           CheckLoopPhiInvalidation(loop_header) ||
+                           CreateSnapshotFor(loop_header);
+      if (needs_revisit) {
         TRACE("> Will revisit loop");
         // Discarding temporary snapshot.
         if (!field_values().IsSealed()) field_values().Seal();
@@ -1149,6 +1171,11 @@ class FieldValuesTracker : public CandidateAnalyzer {
       }
     }
     return invalidated;
+  }
+  ProcessResult Process(InlinedAllocation* node, const ProcessingState& state) {
+    BasicBlock* current_loop = data_.loop_stack.back().header;
+    data_.alloc_definition_loop[node] = current_loop;
+    return CandidateAnalyzer::Process(node, state);
   }
 
   ProcessResult Process(AssertEscapeAnalysisElided* node,
@@ -1237,6 +1264,12 @@ void EscapeAnalysis::AnalyzeCandidates() {
   TRACE("EscapeAnalysis::AnalyzeCandidates");
   GraphProcessor<FieldValuesTracker> processor(data_);
   processor.ProcessGraph(data_.graph);
+
+  // Sanity check: {loop_stack} should be empty (except for its dummy initial
+  // input), since for each loop we should have pushed once at the beginning and
+  // popped once at the end.
+  DCHECK_EQ(data_.loop_stack.size(), 1);
+  DCHECK_EQ(data_.loop_stack.back().header, nullptr);
 
 #ifdef DEBUG
   if (v8_flags.trace_turbolev_escape_analysis) {
