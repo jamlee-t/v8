@@ -1436,11 +1436,19 @@ class LiftoffCompiler {
     if (ool->builtin == Builtin::kWasmGrowableStackGuard) {
       WasmGrowableStackGuardDescriptor descriptor;
       DCHECK_EQ(0, descriptor.GetStackParameterCount());
-      DCHECK_EQ(1, descriptor.GetRegisterParameterCount());
-      Register param_reg = descriptor.GetRegisterParameter(0);
-      __ LoadConstant(LiftoffRegister(param_reg),
+      DCHECK_EQ(2, descriptor.GetRegisterParameterCount());
+      Register param_reg0 = descriptor.GetRegisterParameter(0);
+      Register param_reg1 = descriptor.GetRegisterParameter(1);
+      __ LoadConstant(LiftoffRegister(param_reg0),
                       WasmValue::ForUintPtr(descriptor_->ParameterSlotCount() *
                                             kSystemPointerSize));
+      __ LoadConstant(LiftoffRegister(param_reg1), WasmValue::ForUintPtr(0));
+    } else if (ool->builtin == Builtin::kWasmStackGuard) {
+      WasmStackGuardDescriptor descriptor;
+      DCHECK_EQ(0, descriptor.GetStackParameterCount());
+      DCHECK_EQ(1, descriptor.GetRegisterParameterCount());
+      Register param_reg = descriptor.GetRegisterParameter(0);
+      __ LoadConstant(LiftoffRegister(param_reg), WasmValue::ForUintPtr(0));
     }
 
     Builtin builtin = ool->builtin;

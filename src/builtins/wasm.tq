@@ -474,13 +474,14 @@ extern builtin WasmHandleStackOverflow(RawPtr, uint32): JSAny;
 // {paramSlotsSize} is the size of the incoming stack parameters of the
 // currently-executing function, which have to be copied along with its
 // stack frame if the stack needs to be grown.
-builtin WasmGrowableStackGuard(paramSlotsSize: intptr): JSAny {
+builtin WasmGrowableStackGuard(paramSlotsSize: intptr, gap: intptr): JSAny {
   tail WasmHandleStackOverflow(
-      LoadParentFramePointer() + paramSlotsSize + kFixedFrameSizeAboveFp, 0);
+      LoadParentFramePointer() + paramSlotsSize + kFixedFrameSizeAboveFp,
+      Unsigned(Convert<int32>(gap)));
 }
 
-builtin WasmStackGuard(): JSAny {
-  tail runtime::WasmStackGuard(LoadContextFromFrame(), SmiConstant(0));
+builtin WasmStackGuard(gap: intptr): JSAny {
+  tail runtime::WasmStackGuard(LoadContextFromFrame(), Convert<Smi>(gap));
 }
 
 builtin WasmStackGuardLoop(): JSAny {

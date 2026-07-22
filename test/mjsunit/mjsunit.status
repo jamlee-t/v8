@@ -2606,6 +2606,7 @@
   'wasm/half-dup-shuffles': [SKIP],
   'wasm/redundant-shuffle-lanes': [SKIP],
   'wasm/simd-*': [SKIP],
+  'wasm/deopt/deopt-large-frames-jspi': [SKIP],
   'wasm/turboshaft/array-new-unreachable': [SKIP],
   'wasm/turboshaft/reduction-shuffle': [SKIP],
   'regress/wasm/regress-9447': [SKIP],

@@ -8250,8 +8250,11 @@ void CodeGenerator::AssembleConstructFrame() {
         DoubleRegList fp_regs_to_save;
         for (auto reg : wasm::kFpParamRegisters) fp_regs_to_save.set(reg);
         __ PushAll(fp_regs_to_save);
+        uint32_t gap =
+            std::max(static_cast<uint32_t>(required_slots * kSystemPointerSize),
+                     GetStackCheckOffset());
         __ movq(WasmHandleStackOverflowDescriptor::GapRegister(),
-                Immediate(required_slots * kSystemPointerSize));
+                Immediate(gap));
         __ movq(WasmHandleStackOverflowDescriptor::FrameBaseRegister(), rbp);
         __ addq(WasmHandleStackOverflowDescriptor::FrameBaseRegister(),
                 Immediate(static_cast<int32_t>(

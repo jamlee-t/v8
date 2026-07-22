@@ -1413,6 +1413,10 @@ void Deoptimizer::DoComputeOutputFramesWasmImpl() {
   caller_frame_top_ = stack_fp_ + CommonFrameConstants::kFixedFrameSizeAboveFp +
                       input_->parameter_count() * kSystemPointerSize;
 
+  StackGuard* const stack_guard = isolate()->stack_guard();
+  CHECK_GT(static_cast<uintptr_t>(caller_frame_top_),
+           stack_guard->real_jslimit());
+
   FILE* trace_file =
       verbose_tracing_enabled() ? trace_scope()->file() : nullptr;
   translated_state_.Init(isolate_, input_->GetFramePointerAddress(), stack_fp_,
@@ -1443,10 +1447,12 @@ void Deoptimizer::DoComputeOutputFramesWasmImpl() {
           WasmLiftoffFrameConstants::kInstanceDataOffset))));
 
   std::stack<intptr_t> shadow_stack;
+  size_t total_output_frame_size = 0;
   for (int i = 0; i < output_count_; ++i) {
     TranslatedFrame& frame = translated_state_.frames()[i];
     output_[i] = DoComputeWasmLiftoffFrame(
         frame, native_module, wasm_trusted_instance, i, shadow_stack);
+    total_output_frame_size += output_[i]->GetFrameSize();
   }
 
 #ifdef V8_ENABLE_CET_SHADOW_STACK
@@ -1505,6 +1511,18 @@ void Deoptimizer::DoComputeOutputFramesWasmImpl() {
   if (verbose_tracing_enabled()) {
     TraceDeoptEnd(timer.Elapsed().InMillisecondsF());
   }
+
+  // The following invariant is fairly tricky to guarantee, since the size of
+  // an optimized frame and its deoptimized counterparts usually differs. We
+  // thus need to consider the case in which deoptimized frames are larger than
+  // the optimized frame in stack checks in optimized code. We do this by
+  // applying an offset to stack checks (see kArchStackPointerGreaterThan in the
+  // code generator).
+  // Note that we explicitly allow deopts to exceed the limit by a certain
+  // number of slack bytes.
+  CHECK_GT(
+      static_cast<uintptr_t>(caller_frame_top_) - total_output_frame_size,
+      stack_guard->real_jslimit() - kStackLimitSlackForDeoptimizationInBytes);
 }
 
 void Deoptimizer::GetWasmStackSlotsCounts(const wasm::FunctionSig* sig,
