@@ -720,12 +720,12 @@ void InitInstructionTableOnce(Isolate* isolate) {
 WasmInterpreter::WasmInterpreter(
     Isolate* isolate, const WasmModule* module,
     const ModuleWireBytes& wire_bytes,
-    DirectHandle<WasmInstanceObject> instance_object)
+    DirectHandle<WasmTrustedInstanceData> trusted_data)
     : zone_(isolate->allocator(), ZONE_NAME),
       module_bytes_(wire_bytes.start(), wire_bytes.end(), &zone_),
       codemap_(isolate, module, module_bytes_.data(), &zone_) {
   wasm_runtime_ = std::make_shared<WasmInterpreterRuntime>(
-      module, isolate, instance_object, &codemap_);
+      module, isolate, trusted_data, &codemap_);
   module->SetWasmInterpreter(wasm_runtime_);
 
 #if !defined(V8_DRUMBRAKE_BOUNDS_CHECKS)

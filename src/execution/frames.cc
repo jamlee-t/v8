@@ -3908,8 +3908,7 @@ FrameSummaries WasmInterpreterEntryFrame::Summarize(
   FrameSummaries summaries;
   Handle<WasmInstanceObject> instance(wasm_instance(), isolate());
   std::vector<WasmInterpreterStackEntry> interpreted_stack =
-      WasmInterpreterObject::GetInterpretedStack(
-          trusted_instance_data()->interpreter_object(), fp());
+      WasmInterpreterObject::GetInterpretedStack(trusted_instance_data(), fp());
 
   for (auto& e : interpreted_stack) {
     FrameSummary::WasmInterpretedFrameSummary summary(
@@ -3934,19 +3933,14 @@ WasmInterpreterEntryFrame::trusted_instance_data() const {
   return wasm_instance()->trusted_data(isolate());
 }
 
-Tagged<Tuple2> WasmInterpreterEntryFrame::interpreter_object() const {
-  return trusted_instance_data()->interpreter_object();
-}
-
 Tagged<WasmModuleObject> WasmInterpreterEntryFrame::module_object() const {
   return trusted_instance_data()->module_object();
 }
 
 int WasmInterpreterEntryFrame::function_index(
     int inlined_function_index) const {
-  return WasmInterpreterObject::GetFunctionIndex(
-      trusted_instance_data()->interpreter_object(), fp(),
-      inlined_function_index);
+  return WasmInterpreterObject::GetFunctionIndex(trusted_instance_data(), fp(),
+                                                 inlined_function_index);
 }
 
 int WasmInterpreterEntryFrame::position() const {

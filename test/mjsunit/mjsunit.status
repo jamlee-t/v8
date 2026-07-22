@@ -739,6 +739,7 @@
   'wasm/gc-casts-invalid': [SKIP],
   'wasm/js-wrapper-typechecks': [SKIP],
   'wasm/mixed-eh-invalid': [SKIP],
+  'wasm/turboshaft/regress-crbug-533179188': [SKIP],
   'wasm/wasm-inlining-catch-unreachable': [SKIP],
 
   #--wasm-ref-cast-nop
@@ -877,6 +878,7 @@
   'regress/wasm/regress-518872404': [SKIP],
   'regress/wasm/regress-521064735': [SKIP],
   'regress/wasm/regress-524830496': [SKIP],
+  'regress/wasm/regress-536581698': [SKIP],
   'wasm/shared-everything/*': [SKIP],
   'wasm/subtyping-invalid': [SKIP],
 

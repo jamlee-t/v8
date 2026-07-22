@@ -3290,7 +3290,6 @@ filegroup(
             "src/wasm/interpreter/wasm-interpreter.h",
             "src/wasm/interpreter/wasm-interpreter-inl.h",
             "src/wasm/interpreter/wasm-interpreter-objects.cc",
-            "src/wasm/interpreter/wasm-interpreter-objects-inl.h",
             "src/wasm/interpreter/wasm-interpreter-objects.h",
             "src/wasm/interpreter/wasm-interpreter-runtime.cc",
             "src/wasm/interpreter/wasm-interpreter-runtime-inl.h",

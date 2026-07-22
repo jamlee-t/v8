@@ -5005,7 +5005,6 @@ v8_header_set("v8_internal_headers") {
       sources += [
         "src/wasm/interpreter/instruction-handlers.h",
         "src/wasm/interpreter/wasm-interpreter-inl.h",
-        "src/wasm/interpreter/wasm-interpreter-objects-inl.h",
         "src/wasm/interpreter/wasm-interpreter-objects.h",
         "src/wasm/interpreter/wasm-interpreter-runtime-inl.h",
         "src/wasm/interpreter/wasm-interpreter-runtime.h",

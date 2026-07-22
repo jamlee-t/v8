@@ -369,10 +369,6 @@ WTI_TAGGED_ACCESSORS(untagged_globals_buffer, Tagged<ByteArray>,
 WTI_TAGGED_ACCESSORS(tagged_globals_buffer, Tagged<FixedArray>,
                      kTaggedGlobalsBufferOffset)
 WTI_TAGGED_ACCESSORS(tables, Tagged<FixedArray>, kTablesOffset)
-#if V8_ENABLE_DRUMBRAKE
-WTI_OPTIONAL_TAGGED_ACCESSORS(interpreter_object, Tagged<Tuple2>,
-                              kInterpreterObjectOffset)
-#endif  // V8_ENABLE_DRUMBRAKE
 WTI_PROTECTED_POINTER_ACCESSORS(dispatch_table0, WasmDispatchTable,
                                 kProtectedDispatchTable0Offset)
 WTI_PROTECTED_POINTER_ACCESSORS(dispatch_tables, ProtectedFixedArray,
@@ -382,6 +378,11 @@ WTI_PROTECTED_POINTER_ACCESSORS(dispatch_table_for_imports,
                                 kProtectedDispatchTableForImportsOffset)
 WTI_PROTECTED_POINTER_ACCESSORS(tags_table, TrustedFixedArray,
                                 kProtectedTagsTableOffset)
+#if V8_ENABLE_DRUMBRAKE
+WTI_PROTECTED_POINTER_ACCESSORS(interpreter_handle,
+                                TrustedManaged<wasm::InterpreterHandle>,
+                                kProtectedInterpreterHandleOffset)
+#endif  // V8_ENABLE_DRUMBRAKE
 #undef WTI_PROTECTED_POINTER_ACCESSORS
 WTI_TAGGED_ACCESSORS(func_refs, Tagged<FixedArray>, kFuncRefsOffset)
 WTI_TAGGED_ACCESSORS(managed_object_maps, Tagged<FixedArray>,

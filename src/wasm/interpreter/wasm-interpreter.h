@@ -56,6 +56,7 @@ namespace internal {
 class Cell;
 class FixedArray;
 class WasmInstanceObject;
+class WasmTrustedInstanceData;
 
 namespace wasm {
 
@@ -841,7 +842,7 @@ class V8_EXPORT_PRIVATE WasmInterpreter {
 
   WasmInterpreter(Isolate* isolate, const WasmModule* module,
                   const ModuleWireBytes& wire_bytes,
-                  DirectHandle<WasmInstanceObject> instance);
+                  DirectHandle<WasmTrustedInstanceData> trusted_data);
 
   static void InitializeOncePerProcess();
   static void GlobalTearDown();

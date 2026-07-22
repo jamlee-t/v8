@@ -1486,7 +1486,6 @@ class WasmInterpreterEntryFrame final : public WasmFrame {
   Tagged<HeapObject> unchecked_code() const override;
 
   // Accessors.
-  Tagged<Tuple2> interpreter_object() const;
   V8_EXPORT_PRIVATE Tagged<WasmInstanceObject> wasm_instance() const override;
   Tagged<WasmTrustedInstanceData> trusted_instance_data() const override;
 

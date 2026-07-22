@@ -39,6 +39,7 @@
 namespace v8 {
 namespace internal {
 namespace wasm {
+class InterpreterHandle;
 class NativeModule;
 class WasmCode;
 struct WasmFunction;
@@ -579,7 +580,8 @@ V8_OBJECT class V8_EXPORT_PRIVATE WasmTrustedInstanceData
   DECL_OPTIONAL_ACCESSORS(native_context, Tagged<NativeContext>)
   DECL_ACCESSORS(memory_objects, Tagged<FixedArray>)
 #if V8_ENABLE_DRUMBRAKE
-  DECL_OPTIONAL_ACCESSORS(interpreter_object, Tagged<Tuple2>)
+  DECL_PROTECTED_POINTER_ACCESSORS(interpreter_handle,
+                                   TrustedManaged<wasm::InterpreterHandle>)
 #endif  // V8_ENABLE_DRUMBRAKE
   // `untagged_globals_buffer`: Storage for non-ref globals.
   DECL_ACCESSORS(untagged_globals_buffer, Tagged<ByteArray>)
@@ -673,7 +675,7 @@ V8_OBJECT class V8_EXPORT_PRIVATE WasmTrustedInstanceData
   V(kMemoryObjectsOffset, kTaggedSize)                                    \
   V(kUntaggedGlobalsBufferOffset, kTaggedSize)                            \
   V(kTaggedGlobalsBufferOffset, kTaggedSize)                              \
-  IF_WASM_DRUMBRAKE(V, kInterpreterObjectOffset, kTaggedSize)             \
+  IF_WASM_DRUMBRAKE(V, kProtectedInterpreterHandleOffset, kTaggedSize)    \
   V(kTablesOffset, kTaggedSize)                                           \
   V(kProtectedDispatchTablesOffset, kTaggedSize)                          \
   V(kProtectedTagsTableOffset, kTaggedSize)                               \
@@ -712,7 +714,6 @@ V8_OBJECT class V8_EXPORT_PRIVATE WasmTrustedInstanceData
   V(kTaggedGlobalsBufferOffset, "tagged_globals_buffer")                      \
   V(kImportedMutableGlobalsBuffersOffset, "imported_mutable_globals_buffers") \
   V(kImportedMutableGlobalsOffsetsOffset, "imported_mutable_globals_offsets") \
-  IF_WASM_DRUMBRAKE(V, kInterpreterObjectOffset, "interpreter_object")        \
   V(kTablesOffset, "tables")                                                  \
   V(kFuncRefsOffset, "func_refs")                                             \
   V(kManagedObjectMapsOffset, "managed_object_maps")                          \
@@ -728,6 +729,8 @@ V8_OBJECT class V8_EXPORT_PRIVATE WasmTrustedInstanceData
   V(kProtectedDispatchTablesOffset, "dispatch_tables")                     \
   V(kProtectedDispatchTableForImportsOffset, "dispatch_table_for_imports") \
   V(kProtectedTagsTableOffset, "tags_table")                               \
+  IF_WASM_DRUMBRAKE(V, kProtectedInterpreterHandleOffset,                  \
+                    "interpreter_handle")                                  \
   V(kProtectedManagedNativeModuleOffset, "managed_native_module")
 
 #define WASM_INSTANCE_FIELD_OFFSET(offset, _) offset,
@@ -765,14 +768,6 @@ V8_OBJECT class V8_EXPORT_PRIVATE WasmTrustedInstanceData
 
   void SetRawMemory(uint32_t memory_index, uint8_t* mem_start, size_t mem_size);
 
-#if V8_ENABLE_DRUMBRAKE
-  // Get the interpreter object associated with the given wasm object.
-  // If no interpreter object exists yet, it is created automatically.
-  static DirectHandle<Tuple2> GetOrCreateInterpreterObject(
-      DirectHandle<WasmInstanceObject>);
-  static DirectHandle<Tuple2> GetInterpreterObject(
-      DirectHandle<WasmInstanceObject>);
-#endif  // V8_ENABLE_DRUMBRAKE
 
   static DirectHandle<WasmTrustedInstanceData> New(
       Isolate*, DirectHandle<WasmModuleObject>,

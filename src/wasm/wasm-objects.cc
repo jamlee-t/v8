@@ -312,11 +312,10 @@ int WasmTableObject::Grow(Isolate* isolate, DirectHandle<WasmTableObject> table,
       for (int i = kReservedSlotOffset; i < used_length; i += 2) {
         if (uses->get(i).IsCleared()) continue;
         Tagged<WasmTrustedInstanceData> instance = GetInstance(*uses, i);
-        if (instance->has_interpreter_object()) {
+        if (instance->has_interpreter_handle()) {
           int table_index = GetTableIndex(*uses, i);
           wasm::WasmInterpreterRuntime::UpdateIndirectCallTable(
-              isolate, direct_handle(instance->instance_object(), isolate),
-              table_index);
+              isolate, direct_handle(instance, isolate), table_index);
         }
       }
     }
@@ -571,11 +570,10 @@ void InvalidateInterpreterIndirectCallCaches(
   for (int i = kReservedSlotOffset; i < used_length; i += 2) {
     if (uses->get(i).IsCleared()) continue;
     Tagged<WasmTrustedInstanceData> instance = GetInstance(*uses, i);
-    if (instance->has_interpreter_object()) {
+    if (instance->has_interpreter_handle()) {
       int table_index = GetTableIndex(*uses, i);
       wasm::WasmInterpreterRuntime::UpdateIndirectCallTable(
-          isolate, direct_handle(instance->instance_object(), isolate),
-          table_index);
+          isolate, direct_handle(instance, isolate), table_index);
     }
   }
 }
@@ -775,14 +773,12 @@ void SetInstanceMemory(Tagged<WasmTrustedInstanceData> trusted_instance_data,
 
 #if V8_ENABLE_DRUMBRAKE
   if (v8_flags.wasm_jitless &&
-      trusted_instance_data->has_interpreter_object()) {
+      trusted_instance_data->has_interpreter_handle()) {
     AllowHeapAllocation allow_heap;
     Isolate* isolate = Isolate::Current();
     HandleScope scope(isolate);
     wasm::WasmInterpreterRuntime::UpdateMemoryAddress(
-        isolate,
-        direct_handle(trusted_instance_data->instance_object(), isolate),
-        memory_index);
+        isolate, direct_handle(trusted_instance_data, isolate), memory_index);
   }
 #endif  // V8_ENABLE_DRUMBRAKE
 }
@@ -1421,47 +1417,6 @@ void WasmTrustedInstanceData::SetRawMemory(uint32_t memory_index,
 }
 
 #if V8_ENABLE_DRUMBRAKE
-DirectHandle<Tuple2> WasmTrustedInstanceData::GetOrCreateInterpreterObject(
-    DirectHandle<WasmInstanceObject> instance) {
-  DCHECK(v8_flags.wasm_jitless);
-  Isolate* isolate = Isolate::Current();
-  DirectHandle<WasmTrustedInstanceData> trusted_data(
-      instance->trusted_data(isolate), isolate);
-  // SANDBOX SAFETY: `instance->trusted_data()` is an in-cage trusted-pointer
-  // handle that a sandbox attacker can same-tag swap to point at another
-  // instance's trusted data. Every path that selects the interpreter object
-  // (and thus the InterpreterHandle, runtime, module and signatures) for an
-  // instance must re-establish that the trusted data actually belongs to
-  // {instance} before trusting it. This mirrors the check performed on the
-  // direct JS-to-interpreter entry (see Runtime_WasmRunInterpreter). Without
-  // it, a swap redirects callers to a different instance's runtime on the
-  // nested Wasm-to-Wasm call path, and out-of-cage OOB writes to the runtime's
-  // indirect-call cache vectors on the dispatch-table maintenance paths.
-  SBXCHECK(trusted_data->has_instance_object() &&
-           trusted_data->instance_object() == *instance);
-  if (trusted_data->has_interpreter_object()) {
-    return direct_handle(trusted_data->interpreter_object(), isolate);
-  }
-  DirectHandle<Tuple2> new_interpreter = WasmInterpreterObject::New(instance);
-  DCHECK(trusted_data->has_interpreter_object());
-  return new_interpreter;
-}
-
-DirectHandle<Tuple2> WasmTrustedInstanceData::GetInterpreterObject(
-    DirectHandle<WasmInstanceObject> instance) {
-  DCHECK(v8_flags.wasm_jitless);
-  Isolate* isolate = Isolate::Current();
-  DirectHandle<WasmTrustedInstanceData> trusted_data(
-      instance->trusted_data(isolate), isolate);
-  // SANDBOX SAFETY: see the comment in GetOrCreateInterpreterObject. The
-  // in-cage `instance->trusted_data()` handle is attacker-swappable, so we must
-  // re-validate that it still belongs to {instance} before selecting its
-  // interpreter object.
-  SBXCHECK(trusted_data->has_instance_object() &&
-           trusted_data->instance_object() == *instance);
-  CHECK(trusted_data->has_interpreter_object());
-  return direct_handle(trusted_data->interpreter_object(), isolate);
-}
 #endif  // V8_ENABLE_DRUMBRAKE
 
 DirectHandle<WasmTrustedInstanceData> WasmTrustedInstanceData::New(
@@ -1559,6 +1514,8 @@ DirectHandle<WasmTrustedInstanceData> WasmTrustedInstanceData::New(
     trusted_data->set_managed_native_module(*trusted_managed_native_module);
 #if V8_ENABLE_DRUMBRAKE
     trusted_data->set_imported_function_indices(*imported_function_indices);
+    // The interpreter handle is created lazily on first interpretation.
+    trusted_data->clear_interpreter_handle();
 #endif  // V8_ENABLE_DRUMBRAKE
     trusted_data->set_native_context(*isolate->native_context());
     trusted_data->set_jump_table_start(native_module->jump_table_start());
@@ -2345,14 +2302,13 @@ void WasmDispatchTable::Clear(
     int used_length = GetUsedLength(*uses);
     for (int i = kReservedSlotOffset; i < used_length; i += 2) {
       if (uses->get(i).IsCleared()) continue;
-      Tagged<WasmTrustedInstanceData> non_shared_instance_data =
+      Tagged<WasmTrustedInstanceData> trusted_instance_data =
           GetInstance(*uses, i);
-      if (non_shared_instance_data->has_interpreter_object()) {
+      if (trusted_instance_data->has_interpreter_handle()) {
         int table_index = GetTableIndex(*uses, i);
-        DirectHandle<WasmInstanceObject> instance_handle(
-            non_shared_instance_data->instance_object(), isolate);
         wasm::WasmInterpreterRuntime::ClearIndirectCallCacheEntry(
-            isolate, instance_handle, table_index, index);
+            isolate, direct_handle(trusted_instance_data, isolate), table_index,
+            index);
       }
     }
   }

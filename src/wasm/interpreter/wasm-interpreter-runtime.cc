@@ -14,7 +14,6 @@
 #include "src/objects/managed-inl.h"
 #include "src/runtime/runtime-utils.h"
 #include "src/wasm/canonical-types.h"
-#include "src/wasm/interpreter/wasm-interpreter-objects-inl.h"
 #include "src/wasm/interpreter/wasm-interpreter-runtime-inl.h"
 #include "src/wasm/wasm-arguments.h"
 #include "src/wasm/wasm-objects-inl.h"
@@ -126,15 +125,12 @@ RUNTIME_FUNCTION(Runtime_WasmRunInterpreter) {
   // Set the current isolate's context.
   isolate->set_context(trusted_data->native_context());
 
-  // Make sure the WasmInterpreterObject and InterpreterHandle for this instance
-  // exist.
-  DirectHandle<Tuple2> interpreter_object =
-      WasmTrustedInstanceData::GetOrCreateInterpreterObject(instance);
-  DirectHandle<Managed<wasm::InterpreterHandle>> interpreter_handle =
-      wasm::GetOrCreateInterpreterHandle(isolate, interpreter_object);
+  // Make sure the InterpreterHandle for this instance exists.
+  DirectHandle<TrustedManaged<wasm::InterpreterHandle>> interpreter_handle =
+      wasm::GetOrCreateInterpreterHandle(isolate, trusted_data);
 
   if (wasm::WasmBytecode::ContainsSimd(sig)) {
-    interpreter_handle->ptr()->SetTrapFunctionIndex(func_index);
+    interpreter_handle->raw()->SetTrapFunctionIndex(func_index);
     isolate->Throw(*isolate->factory()->NewTypeError(
         MessageTemplate::kWasmTrapJSTypeError));
     return ReadOnlyRoots(isolate).exception();
@@ -187,7 +183,7 @@ RUNTIME_FUNCTION(Runtime_WasmRunInterpreter) {
     }
 
       if (isolate->has_exception()) {
-        interpreter_handle->ptr()->SetTrapFunctionIndex(func_index);
+        interpreter_handle->raw()->SetTrapFunctionIndex(func_index);
         return ReadOnlyRoots(isolate).exception();
       }
 
@@ -212,14 +208,15 @@ RUNTIME_FUNCTION(Runtime_WasmRunInterpreter) {
     // {WasmInterpreterObject} nor the {InterpreterHandle} have to exist,
     // because interpretation might have been triggered by another Isolate
     // sharing the same WasmEngine.
-    bool success = WasmInterpreterObject::RunInterpreter(
-        isolate, frame_pointer, instance, func_index, wasm_args, wasm_rets);
+      bool success = WasmInterpreterObject::RunInterpreter(
+          isolate, frame_pointer, trusted_data, func_index, wasm_args,
+          wasm_rets);
 
-    // Early return on failure.
-    if (!success) {
-      DCHECK(isolate->has_exception());
-      return ReadOnlyRoots(isolate).exception();
-    }
+      // Early return on failure.
+      if (!success) {
+        DCHECK(isolate->has_exception());
+        return ReadOnlyRoots(isolate).exception();
+      }
 
     // Copy return values from the vector of {WasmValue} into {arg_buffer}. This
     // also un-boxes reference types from handles into raw pointers.
@@ -263,35 +260,31 @@ RUNTIME_FUNCTION(Runtime_WasmRunInterpreter) {
 
 namespace wasm {
 
-V8_EXPORT_PRIVATE DirectHandle<Managed<InterpreterHandle>> GetInterpreterHandle(
-    Isolate* isolate, DirectHandle<Tuple2> interpreter_object) {
-  DirectHandle<Object> handle(
-      WasmInterpreterObject::get_interpreter_handle(*interpreter_object),
-      isolate);
-  CHECK(!IsUndefined(*handle));
-  return TrustedCast<Managed<InterpreterHandle>>(handle);
+V8_EXPORT_PRIVATE DirectHandle<TrustedManaged<InterpreterHandle>>
+GetInterpreterHandle(Isolate* isolate,
+                     DirectHandle<WasmTrustedInstanceData> trusted_data) {
+  CHECK(trusted_data->has_interpreter_handle());
+  return direct_handle(trusted_data->interpreter_handle(), isolate);
 }
 
-V8_EXPORT_PRIVATE DirectHandle<Managed<InterpreterHandle>>
-GetOrCreateInterpreterHandle(Isolate* isolate,
-                             DirectHandle<Tuple2> interpreter_object) {
-  DirectHandle<Object> handle(
-      WasmInterpreterObject::get_interpreter_handle(*interpreter_object),
-      isolate);
-  if (IsUndefined(*handle)) {
+V8_EXPORT_PRIVATE DirectHandle<TrustedManaged<InterpreterHandle>>
+GetOrCreateInterpreterHandle(
+    Isolate* isolate, DirectHandle<WasmTrustedInstanceData> trusted_data) {
+  if (!trusted_data->has_interpreter_handle()) {
     // Use the maximum stack size to estimate the maximum size of the
     // interpreter. The interpreter keeps its own stack internally, and the size
     // of the stack should dominate the overall size of the interpreter. We
     // multiply by '2' to account for the growing strategy for the backing store
     // of the stack.
     size_t interpreter_size = v8_flags.stack_size * KB * 2;
-    handle = Managed<InterpreterHandle>::From(
-        isolate, interpreter_size,
-        std::make_shared<InterpreterHandle>(isolate, interpreter_object));
-    WasmInterpreterObject::set_interpreter_handle(*interpreter_object, *handle);
+    DirectHandle<TrustedManaged<InterpreterHandle>> handle =
+        TrustedManaged<InterpreterHandle>::From(
+            isolate, interpreter_size,
+            std::make_shared<InterpreterHandle>(isolate, trusted_data));
+    trusted_data->set_interpreter_handle(*handle);
+    return handle;
   }
-
-  return TrustedCast<Managed<InterpreterHandle>>(handle);
+  return direct_handle(trusted_data->interpreter_handle(), isolate);
 }
 
 // A helper for an entry in an indirect function table (IFT).
@@ -362,48 +355,32 @@ IndirectFunctionTableEntry::IndirectFunctionTableEntry(
 }
 
 WasmInterpreterRuntime::InstanceScope::InstanceScope(
-    WasmInterpreterRuntime* runtime, DirectHandle<WasmInstanceObject> instance)
+    WasmInterpreterRuntime* runtime,
+    DirectHandle<WasmTrustedInstanceData> trusted_data)
     : runtime_(runtime),
-      previous_(runtime->current_instance_),
       previous_trusted_data_(runtime->current_trusted_data_) {
-  DCHECK(!instance.is_null());
+  DCHECK(!trusted_data.is_null());
   Isolate* isolate = runtime->isolate_;
-  // Re-handlify into the current HandleScope so that GC keeps the instance
-  // alive for the lifetime of this scope, independent of how the caller
-  // obtained `instance`.
-  runtime->current_instance_ =
-      IndirectHandle<WasmInstanceObject>(*instance, isolate);
-
-  // Read the trusted data exactly once, here at scope entry, and serve every
-  // wasm_trusted_instance_data() access from this off-cage value instead of
-  // re-loading the in-cage WasmInstanceObject::trusted_data_ handle on each
-  // call. The trusted data is rooted in the caller's HandleScope, so it stays
-  // valid and consistent for the lifetime of this scope.
-  Tagged<WasmTrustedInstanceData> trusted_data =
-      instance->trusted_data(isolate);
-  // {runtime} is reached through the in-sandbox {interpreter_object} Tuple2,
-  // whose value2 slot (a Managed<InterpreterHandle>) can be swapped by an
-  // attacker with in-cage writes for another instance's handle -- it carries
-  // the same external-pointer tag, so the cast succeeds. Such a handle owns a
-  // different module, which would let the trusted-data accesses guarded by this
-  // scope run under a mismatched module (signature/type confusion, OOB). This
-  // is the single choke point that publishes an instance before any
-  // wasm_trusted_instance_data() access, so bind the two here: require the
-  // trusted_data's module to match this runtime's module, failing closed on any
-  // handle/instance desync.
-  SBXCHECK_EQ(trusted_data->module(), runtime->module_);
+  // {runtime} is reached from {trusted_data} through the protected (trusted ->
+  // trusted) `interpreter_handle` link, which a sandbox attacker with in-cage
+  // writes cannot redirect. The runtime's {module_} was fixed at construction
+  // from this same trusted data's module, so the two always agree; the DCHECK
+  // documents that invariant (no SBXCHECK needed now that the link is trusted).
+  // The passed {trusted_data} is itself trusted and rooted in the caller's
+  // HandleScope, so it stays valid and consistent for the lifetime of this
+  // scope.
+  DCHECK_EQ(trusted_data->module(), runtime->module_);
   runtime->current_trusted_data_ =
-      IndirectHandle<WasmTrustedInstanceData>(trusted_data, isolate);
+      IndirectHandle<WasmTrustedInstanceData>(*trusted_data, isolate);
 }
 
 WasmInterpreterRuntime::InstanceScope::~InstanceScope() {
-  runtime_->current_instance_ = previous_;
   runtime_->current_trusted_data_ = previous_trusted_data_;
 }
 
 WasmInterpreterRuntime::WasmInterpreterRuntime(
     const WasmModule* module, Isolate* isolate,
-    DirectHandle<WasmInstanceObject> instance_object,
+    DirectHandle<WasmTrustedInstanceData> trusted_data,
     WasmInterpreter::CodeMap* codemap)
     : isolate_(isolate),
       module_(module),
@@ -423,10 +400,10 @@ WasmInterpreterRuntime::WasmInterpreterRuntime(
 {
   DCHECK(v8_flags.wasm_jitless);
 
-  // Initialization touches wasm_trusted_instance_data(); publish the instance
-  // for the duration of these calls. The handle is rooted in the caller's
+  // Initialization touches wasm_trusted_instance_data(); publish the trusted
+  // data for the duration of these calls. The handle is rooted in the caller's
   // (WasmInterpreter) HandleScope.
-  InstanceScope instance_scope(this, instance_object);
+  InstanceScope instance_scope(this, trusted_data);
 
   InitMemoryAddresses();
   InitIndirectFunctionTables();
@@ -444,18 +421,16 @@ WasmInterpreterRuntime::WasmInterpreterRuntime(
 
 // static
 void WasmInterpreterRuntime::UpdateMemoryAddress(
-    Isolate* isolate, DirectHandle<WasmInstanceObject> instance,
+    Isolate* isolate, DirectHandle<WasmTrustedInstanceData> trusted_data,
     uint32_t memory_index) {
-  DirectHandle<Tuple2> interpreter_object =
-      WasmTrustedInstanceData::GetOrCreateInterpreterObject(instance);
-  DirectHandle<Managed<InterpreterHandle>> handle =
-      GetOrCreateInterpreterHandle(isolate, interpreter_object);
+  DirectHandle<TrustedManaged<InterpreterHandle>> handle =
+      GetOrCreateInterpreterHandle(isolate, trusted_data);
   WasmInterpreterRuntime* wasm_runtime =
-      handle->ptr()->interpreter()->GetWasmRuntime();
+      handle->raw()->interpreter()->GetWasmRuntime();
   DCHECK_LT(memory_index, wasm_runtime->module_->memories.size());
 
-  // Publish the instance for the duration of this call.
-  InstanceScope instance_scope(wasm_runtime, instance);
+  // Publish the trusted data for the duration of this call.
+  InstanceScope instance_scope(wasm_runtime, trusted_data);
   wasm_runtime->InitMemoryAddresses();
 }
 
@@ -1886,14 +1861,12 @@ void WasmInterpreterRuntime::PurgeIndirectCallCache(uint32_t table_index) {
 
 // static
 void WasmInterpreterRuntime::ClearIndirectCallCacheEntry(
-    Isolate* isolate, DirectHandle<WasmInstanceObject> instance,
+    Isolate* isolate, DirectHandle<WasmTrustedInstanceData> trusted_data,
     uint32_t table_index, uint32_t entry_index) {
-  DirectHandle<Tuple2> interpreter_object =
-      WasmTrustedInstanceData::GetOrCreateInterpreterObject(instance);
-  DirectHandle<Managed<InterpreterHandle>> handle =
-      GetOrCreateInterpreterHandle(isolate, interpreter_object);
+  DirectHandle<TrustedManaged<InterpreterHandle>> handle =
+      GetOrCreateInterpreterHandle(isolate, trusted_data);
   WasmInterpreterRuntime* wasm_runtime =
-      handle->ptr()->interpreter()->GetWasmRuntime();
+      handle->raw()->interpreter()->GetWasmRuntime();
   // SANDBOX SAFETY: `indirect_call_tables_` is an out-of-cage std::vector.
   // Bounds-check unconditionally (see PurgeIndirectCallCache) so a mismatched
   // {table_index}/{entry_index} can never drive an out-of-cage OOB write.
@@ -1905,17 +1878,15 @@ void WasmInterpreterRuntime::ClearIndirectCallCacheEntry(
 
 // static
 void WasmInterpreterRuntime::UpdateIndirectCallTable(
-    Isolate* isolate, DirectHandle<WasmInstanceObject> instance,
+    Isolate* isolate, DirectHandle<WasmTrustedInstanceData> trusted_data,
     uint32_t table_index) {
-  DirectHandle<Tuple2> interpreter_object =
-      WasmTrustedInstanceData::GetOrCreateInterpreterObject(instance);
-  DirectHandle<Managed<InterpreterHandle>> handle =
-      GetOrCreateInterpreterHandle(isolate, interpreter_object);
+  DirectHandle<TrustedManaged<InterpreterHandle>> handle =
+      GetOrCreateInterpreterHandle(isolate, trusted_data);
   WasmInterpreterRuntime* wasm_runtime =
-      handle->ptr()->interpreter()->GetWasmRuntime();
+      handle->raw()->interpreter()->GetWasmRuntime();
 
-  // Publish the instance for the duration of this call.
-  InstanceScope instance_scope(wasm_runtime, instance);
+  // Publish the trusted data for the duration of this call.
+  InstanceScope instance_scope(wasm_runtime, trusted_data);
   wasm_runtime->PurgeIndirectCallCache(table_index);
 }
 
@@ -2001,11 +1972,7 @@ void WasmInterpreterRuntime::ExecuteIndirectCall(
     if (Is<WasmTrustedInstanceData>(*object_implicit_arg)) {
       Tagged<WasmTrustedInstanceData> trusted_instance_object =
           TrustedCast<WasmTrustedInstanceData>(*object_implicit_arg);
-      DirectHandle<WasmInstanceObject> instance_object(
-          TrustedCast<WasmInstanceObject>(
-              trusted_instance_object->instance_object()),
-          isolate_);
-      if (current_instance_.is_identical_to(instance_object)) {
+      if (trusted_instance_object == *current_trusted_data_) {
         // Same-instance Wasm call.
         uint32_t func_index = entry.function_index();
         DCHECK(func_index != IndirectCallValue::kInvalidFunctionIndex);
@@ -2184,8 +2151,8 @@ void WasmInterpreterRuntime::ExecuteCallRef(
   }
   bool hasWasmInstance = IsWasmTrustedInstanceData(*object_implicit_arg);
   if (hasWasmInstance) {
-    if (TrustedCast<WasmTrustedInstanceData>(object_implicit_arg)
-            ->instance_object() == *current_instance_) {
+    if (TrustedCast<WasmTrustedInstanceData>(*object_implicit_arg) ==
+        *current_trusted_data_) {
       // InternalCall
       uint32_t function_index = internal->function_index();
       if (is_tail_call) {
@@ -2757,16 +2724,15 @@ ExternalCallResult WasmInterpreterRuntime::CallExternalWasmFunction(
 #endif  // V8_ENABLE_DRUMBRAKE_TRACING
 
   DCHECK(IsWasmTrustedInstanceData(*object_ref));
-  DirectHandle<WasmInstanceObject> target_instance(
-      TrustedCast<WasmInstanceObject>(
-          TrustedCast<WasmTrustedInstanceData>(object_ref)->instance_object()),
-      isolate_);
+  // {object_ref} already IS the target's (trusted, out-of-cage)
+  // WasmTrustedInstanceData, obtained from the trusted import/dispatch
+  // metadata.
+  DirectHandle<WasmTrustedInstanceData> target_trusted_data(
+      TrustedCast<WasmTrustedInstanceData>(*object_ref), isolate_);
 
   // Make sure the WasmInterpreterObject and InterpreterHandle for this
-  // instance exist.
-  DirectHandle<Tuple2> interpreter_object =
-      WasmTrustedInstanceData::GetOrCreateInterpreterObject(target_instance);
-  GetOrCreateInterpreterHandle(isolate_, interpreter_object);
+  // Make sure the InterpreterHandle for this instance exists.
+  GetOrCreateInterpreterHandle(isolate_, target_trusted_data);
 
   Address frame_pointer = FindInterpreterEntryFramePointer(isolate_);
 
@@ -2783,9 +2749,10 @@ ExternalCallResult WasmInterpreterRuntime::CallExternalWasmFunction(
     // cross-instance calls in the interpreter without recursively adding C++
     // stack frames.
 
-    DCHECK(*target_instance != *current_instance_);
+    DCHECK(*target_trusted_data != *current_trusted_data_);
     bool success = WasmInterpreterObject::RunInterpreter(
-        isolate_, frame_pointer, target_instance, target_function_index, fp);
+        isolate_, frame_pointer, target_trusted_data, target_function_index,
+        fp);
     if (success) {
       StoreRefResultsIntoRefStack(fp, ref_stack_fp_offset, sig);
 
@@ -3307,28 +3274,16 @@ void WasmInterpreterRuntime::Trace(const char* format, ...) {
 #endif  // V8_ENABLE_DRUMBRAKE_TRACING
 
 // static
-ModuleWireBytes InterpreterHandle::GetBytes(Isolate* isolate,
-                                            Tagged<Tuple2> interpreter_object) {
-  Tagged<WasmInstanceObject> wasm_instance =
-      WasmInterpreterObject::get_wasm_instance(interpreter_object);
-  Tagged<WasmTrustedInstanceData> trusted_data =
-      wasm_instance->trusted_data(isolate);
-  SBXCHECK(trusted_data->has_instance_object() &&
-           trusted_data->instance_object() == wasm_instance);
-  wasm::NativeModule* native_module = trusted_data->native_module();
-  return ModuleWireBytes{native_module->wire_bytes()};
+ModuleWireBytes InterpreterHandle::GetBytes(
+    Tagged<WasmTrustedInstanceData> trusted_data) {
+  return ModuleWireBytes{trusted_data->native_module()->wire_bytes()};
 }
 
-InterpreterHandle::InterpreterHandle(Isolate* isolate,
-                                     DirectHandle<Tuple2> interpreter_object)
+InterpreterHandle::InterpreterHandle(
+    Isolate* isolate, DirectHandle<WasmTrustedInstanceData> trusted_data)
     : isolate_(isolate),
-      module_(WasmInterpreterObject::get_wasm_instance(*interpreter_object)
-                  ->trusted_data(isolate)
-                  ->module()),
-      interpreter_(isolate, module_, GetBytes(isolate, *interpreter_object),
-                   direct_handle(WasmInterpreterObject::get_wasm_instance(
-                                     *interpreter_object),
-                                 isolate)) {}
+      module_(trusted_data->module()),
+      interpreter_(isolate, module_, GetBytes(*trusted_data), trusted_data) {}
 
 inline WasmInterpreterThread::State InterpreterHandle::RunExecutionLoop(
     WasmInterpreterThread* thread, bool called_from_js) {
@@ -3433,11 +3388,7 @@ DirectHandle<WasmInstanceObject> InterpreterHandle::GetInstanceObject() {
   // Check that this is indeed the instance which is connected to this
   // interpreter.
   DCHECK_EQ(this,
-            TrustedCast<Managed<InterpreterHandle>>(
-                WasmInterpreterObject::get_interpreter_handle(
-                    instance_obj->trusted_data(isolate_)->interpreter_object()))
-                ->ptr()
-                .raw());
+            instance_obj->trusted_data(isolate_)->interpreter_handle()->raw());
   return instance_obj;
 }
 

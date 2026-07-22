@@ -249,12 +249,11 @@ inline bool WasmInterpreterRuntime::WasmStackCheck(
 inline DirectHandle<WasmTrustedInstanceData>
 WasmInterpreterRuntime::wasm_trusted_instance_data() const {
   // Must be called from within a WasmInterpreterRuntime::InstanceScope, which
-  // publishes {current_instance_} and reads and validates its trusted data once
-  // into {current_trusted_data_}. We deliberately return that stored value
-  // rather than re-loading current_instance_->trusted_data(): re-reading the
-  // in-cage trusted_data_ handle on every call is a sandbox hole (a Wasm-to-JS
-  // callback can same-tag swap it mid-execution).
-  DCHECK(!current_instance_.is_null());
+  // publishes the (already trusted) {current_trusted_data_} at scope entry. We
+  // deliberately return that stored, off-cage value rather than re-loading an
+  // in-cage WasmInstanceObject::trusted_data_ handle on every call: re-reading
+  // that handle is a sandbox hole (a Wasm-to-JS callback can same-tag swap it
+  // mid-execution).
   DCHECK(!current_trusted_data_.is_null());
   return current_trusted_data_;
 }

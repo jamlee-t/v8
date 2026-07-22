@@ -3436,7 +3436,7 @@ void WasmTrustedInstanceData::WasmTrustedInstanceDataPrint(std::ostream& os) {
   PRINT_WASM_INSTANCE_FIELD(imported_mutable_globals_buffers, Brief);
   PRINT_WASM_INSTANCE_FIELD(imported_mutable_globals_offsets, Brief);
 #if V8_ENABLE_DRUMBRAKE
-  PRINT_OPTIONAL_WASM_INSTANCE_FIELD(interpreter_object, Brief);
+  PRINT_OPTIONAL_WASM_INSTANCE_FIELD(interpreter_handle, Brief);
 #endif  // V8_ENABLE_DRUMBRAKE
   PRINT_WASM_INSTANCE_FIELD(tables, Brief);
   PRINT_WASM_INSTANCE_FIELD(dispatch_table0, Brief);
