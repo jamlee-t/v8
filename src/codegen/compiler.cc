@@ -1653,11 +1653,13 @@ BackgroundCompileTask::BackgroundCompileTask(
     DCHECK_NULL(compile_hint_callback_data);
   }
   flags_.set_compile_hints_magic_enabled(
-      options &
-      ScriptCompiler::CompileOptions::kFollowCompileHintsMagicComment);
+      v8_flags.compile_hints_magic ||
+      (options &
+       ScriptCompiler::CompileOptions::kFollowCompileHintsMagicComment));
   flags_.set_compile_hints_per_function_magic_enabled(
-      options & ScriptCompiler::CompileOptions::
-                    kFollowCompileHintsPerFunctionMagicComment);
+      v8_flags.compile_hints_magic ||
+      (options & ScriptCompiler::CompileOptions::
+                     kFollowCompileHintsPerFunctionMagicComment));
 }
 
 BackgroundCompileTask::BackgroundCompileTask(
@@ -4055,10 +4057,12 @@ MaybeDirectHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
 
       flags.set_is_eager(compile_options & ScriptCompiler::kEagerCompile);
       flags.set_compile_hints_magic_enabled(
-          compile_options & ScriptCompiler::kFollowCompileHintsMagicComment);
+          v8_flags.compile_hints_magic ||
+          (compile_options & ScriptCompiler::kFollowCompileHintsMagicComment));
       flags.set_compile_hints_per_function_magic_enabled(
-          compile_options &
-          ScriptCompiler::kFollowCompileHintsPerFunctionMagicComment);
+          v8_flags.compile_hints_magic ||
+          (compile_options &
+           ScriptCompiler::kFollowCompileHintsPerFunctionMagicComment));
 
       if (DirectHandle<Script> script; maybe_script.ToHandle(&script)) {
         flags.set_script_id(script->id());
