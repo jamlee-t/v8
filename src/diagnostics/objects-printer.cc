@@ -1991,7 +1991,7 @@ void ClosureFeedbackCellArray::ClosureFeedbackCellArrayPrint(std::ostream& os) {
 void FeedbackVector::FeedbackVectorPrint(std::ostream& os) {
   PrintHeader(os, "FeedbackVector");
   os << "\n - length: " << length();
-  if (length() == 0) {
+  if (length().value() == 0) {
     os << " (empty)\n";
     return;
   }

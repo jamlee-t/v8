@@ -109,7 +109,7 @@ int FeedbackMetadata::GetSlotSize(FeedbackSlotKind kind) {
   UNREACHABLE();
 }
 
-bool FeedbackVector::is_empty() const { return length() == 0; }
+bool FeedbackVector::is_empty() const { return length().value() == 0; }
 
 DEF_GETTER(FeedbackVector, has_metadata, bool) {
   return shared_function_info()->HasFeedbackMetadata();
@@ -123,7 +123,9 @@ DEF_ACQUIRE_GETTER(FeedbackVector, metadata, Tagged<FeedbackMetadata>) {
   return shared_function_info()->feedback_metadata(kAcquireLoad);
 }
 
-int FeedbackVector::length() const { return length_; }
+SafeHeapObjectSize FeedbackVector::length() const {
+  return SafeHeapObjectSize(length_);
+}
 void FeedbackVector::set_length(int32_t value) { length_ = value; }
 
 int32_t FeedbackVector::invocation_count() const {

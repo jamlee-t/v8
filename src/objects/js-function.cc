@@ -693,7 +693,7 @@ void JSFunction::CreateAndAttachFeedbackVector(
 
   if (v8_flags.profile_guided_optimization &&
       v8_flags.profile_guided_optimization_for_empty_feedback_vector &&
-      function->feedback_vector()->length() == 0) {
+      function->feedback_vector()->length().value() == 0) {
     if (function->shared()->cached_tiering_decision() ==
         CachedTieringDecision::kEarlyMaglev) {
       function->RequestOptimization(isolate, CodeKind::MAGLEV,
@@ -712,7 +712,7 @@ void JSFunction::InitializeFeedbackCell(
     IsCompiledScope* is_compiled_scope,
     bool reset_budget_for_feedback_allocation) {
   if (function->has_feedback_vector()) {
-    CHECK_EQ(function->feedback_vector()->length(),
+    CHECK_EQ(function->feedback_vector()->length().value(),
              function->feedback_vector()->metadata()->slot_count());
     return;
   }

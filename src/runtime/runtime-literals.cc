@@ -696,7 +696,7 @@ MaybeDirectHandle<JSObject> CreateLiteral(Isolate* isolate,
   }
   auto vector = Cast<FeedbackVector>(maybe_vector);
   FeedbackSlot literals_slot(FeedbackVector::ToSlot(literals_index));
-  CHECK(literals_slot.ToInt() < vector->length());
+  CHECK_LT(literals_slot.ToInt(), vector->length().value());
   Handle<Object> literal_site(Cast<Object>(vector->Get(literals_slot)),
                               isolate);
   Handle<AllocationSite> site;

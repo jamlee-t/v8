@@ -660,7 +660,7 @@ class FeedbackVector::BodyDescriptor final : public BodyDescriptorBase {
 
   static inline int SizeOf(Tagged<Map> map, Tagged<HeapObject> obj) {
     return FeedbackVector::SizeFor(
-        UncheckedCast<FeedbackVector>(obj)->length());
+        UncheckedCast<FeedbackVector>(obj)->length().value());
   }
 };
 

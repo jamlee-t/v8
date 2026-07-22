@@ -2120,7 +2120,7 @@ int HeapObject::SizeFromMap(Tagged<Map> map) const {
   }
   if (instance_type == FEEDBACK_VECTOR_TYPE) {
     return FeedbackVector::SizeFor(
-        UncheckedCast<FeedbackVector>(this)->length());
+        UncheckedCast<FeedbackVector>(this)->length().value());
   }
   if (instance_type == BIGINT_TYPE) {
     return BigInt::SizeFor(UncheckedCast<BigInt>(this)->length());

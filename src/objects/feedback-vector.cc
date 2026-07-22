@@ -267,7 +267,7 @@ Handle<FeedbackVector> FeedbackVector::New(
   Handle<FeedbackVector> vector = factory->NewFeedbackVector(
       shared, closure_feedback_cell_array, parent_feedback_cell);
 
-  DCHECK_EQ(vector->length(), slot_count);
+  DCHECK_EQ(vector->length().value(), slot_count);
 
   DCHECK_EQ(vector->shared_function_info(), *shared);
   DCHECK_EQ(vector->invocation_count(), 0);
@@ -486,7 +486,7 @@ void NexusConfig::SetFeedbackPair(Tagged<FeedbackVector> vector,
                                   Tagged<MaybeObject> feedback_extra,
                                   WriteBarrierMode mode_extra) const {
   CHECK(can_write());
-  CHECK_GT(vector->length(), start_slot.WithOffset(1).ToInt());
+  CHECK_GT(vector->length().value(), start_slot.WithOffset(1).ToInt());
   base::MutexGuard mutex_guard(isolate()->feedback_vector_access());
   vector->Set(start_slot, feedback, mode);
   vector->Set(start_slot.WithOffset(1), feedback_extra, mode_extra);

@@ -1008,8 +1008,8 @@ void FeedbackVector::FeedbackVectorVerify(Isolate* isolate) {
   Object::VerifyPointer(isolate, parent_feedback_cell());
   CHECK(IsFeedbackCell(parent_feedback_cell()));
   // Variable-length maybe-weak tail.
-  const int len = length();
-  for (int i = 0; i < len; ++i) {
+  const uint32_t len = length().value();
+  for (uint32_t i = 0; i < len; ++i) {
     Tagged<MaybeObject> value = raw_feedback_slots()[i].Relaxed_Load();
     Object::VerifyMaybeObjectPointer(isolate, value);
   }
