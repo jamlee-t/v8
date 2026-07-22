@@ -133,11 +133,21 @@ ValueNode* EscapeAnalysisData::ResolveLoadBase(ValueNode* base, int offset,
       return fallback;
     }
     DCHECK(key.valid());
-    if (predecessor_index == -1) {
-      return field_values.Get(key);
-    } else {
-      return field_values.GetPredecessorValue(key, predecessor_index);
+    ValueNode* val = predecessor_index == -1 ? field_values.Get(key)
+                                             : field_values.GetPredecessorValue(
+                                                   key, predecessor_index);
+    if (val == nullptr) {
+      // The key is valid, but the value is nullptr (e.g. because it is
+      // uninitialized on this path, or merged to nullptr due to predecessor
+      // mismatch). For now, we also just mark {alloc} as escaping when this
+      // happens.
+      // TODO(dmercadier): We should also avoid marking {alloc} as escaping
+      // here. We could insert a special marker in the graph and in the Elider
+      // mark this branch as Unreachable.
+      MarkAsEscaped(alloc);
+      return fallback;
     }
+    return val;
   }
   return fallback;
 }
