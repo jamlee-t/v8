@@ -90,11 +90,12 @@ Handle<Code> FactoryBase<Impl>::NewCode(const NewCodeOptions& options) {
   Tagged<Code> code = TrustedCast<Code>(
       AllocateRawWithImmortalMap(size, AllocationType::kTrusted, map));
   DisallowGarbageCollection no_gc;
-  // Allocates the Code object's self-indirect pointer directly inside the
-  // Code Pointer Table (CPT). This does not actually publish the JIT entrypoint
-  // yet as the CPT entry is natively initialized with
-  // kUninitializedEntrypointTag.
-  code->InitAndPublish(isolate());
+  // Allocates the Code object's self-indirect pointer in the Trusted Pointer
+  // Table (TPT) in an unpublished state. Due to the split initialization of
+  // Code and InstructionStream, publication is deferred to
+  // InstructionStream::Finalize() (if a stream exists) once cross-object
+  // invariants (such as instruction_start) are established.
+  code->InitDontPublish(isolate());
   code->initialize_flags(options.kind, options.is_context_specialized,
                          options.is_turbofanned);
   code->set_builtin_id(options.builtin);
@@ -156,13 +157,15 @@ Handle<Code> FactoryBase<Impl>::NewCode(const NewCodeOptions& options) {
     // object. See `InstructionStream::Finalize()` for the actual finalization
     // sequence.
     code->set_raw_instruction_stream(*istream);
+    code->set_instruction_start(isolate(), kNullAddress);
   } else {
     DCHECK_NE(options.instruction_start, kNullAddress);
     code->set_raw_instruction_stream(Smi::zero(), SKIP_WRITE_BARRIER);
     code->SetInstructionStartForOffHeapBuiltin(isolate(),
                                                options.instruction_start);
+    code->Publish(isolate());
+    wrapper->set_code(code);
   }
-  wrapper->set_code(code);
   code->set_wrapper(*wrapper);
   code->clear_padding();
   return handle(code, isolate());

@@ -27,6 +27,7 @@ namespace internal {
 void JSDispatchEntry::MakeJSDispatchEntry(Address object, Address entrypoint,
                                           uint16_t parameter_count,
                                           bool mark_as_alive) {
+  DCHECK_NE(entrypoint, kNullAddress);
   DCHECK_EQ(object & kHeapObjectTag, 0);
   DCHECK_EQ((((object - kObjectPointerOffset) << kObjectPointerShift) >>
              kObjectPointerShift) +
@@ -125,6 +126,7 @@ void JSDispatchTable::SetCodeKeepTieringRequest(JSDispatchHandle handle,
 void JSDispatchTable::SetCodeAndEntrypointNoWriteBarrier(
     JSDispatchHandle handle, Tagged<Code> new_code, Address new_entrypoint,
     Isolate* isolate) {
+  DCHECK_NE(new_entrypoint, kNullAddress);
   SBXCHECK(IsCompatibleCode(new_code, GetParameterCount(handle)));
 
   // The object should be in old space to avoid creating old-to-new references.
@@ -196,6 +198,7 @@ std::optional<JSDispatchHandle> JSDispatchTable::TryAllocateAndInitializeEntry(
   // This DCHECK is just for convenience, next SBXCHECK(IsCompatibleCode())
   // will catch disabled builtins anyway.
   DCHECK(!new_code->is_disabled_builtin());
+  DCHECK_NE(new_code->instruction_start(), kNullAddress);
   SBXCHECK(IsCompatibleCode(new_code, parameter_count));
 
 #ifdef V8_ENABLE_GENERATED_CODE_VALIDATOR
@@ -218,6 +221,7 @@ std::optional<JSDispatchHandle> JSDispatchTable::TryAllocateAndInitializeEntry(
 void JSDispatchEntry::SetCodeAndEntrypointPointer(Address new_object,
                                                   Address new_entrypoint,
                                                   Isolate* isolate) {
+  DCHECK_NE(new_entrypoint, kNullAddress);
   Address old_payload = encoded_word_.load(std::memory_order_relaxed);
   Address marking_bit = old_payload & kMarkingBit;
   Address parameter_count = old_payload & kParameterCountMask;
@@ -246,6 +250,7 @@ void JSDispatchEntry::SetCodeAndEntrypointPointer(Address new_object,
 }
 
 void JSDispatchEntry::SetEntrypointPointer(Address new_entrypoint) {
+  DCHECK_NE(new_entrypoint, kNullAddress);
   entrypoint_.store(new_entrypoint, std::memory_order_relaxed);
 }
 

@@ -176,6 +176,8 @@ void InstructionStream::Finalize(Tagged<Code> code,
   // instruction start.
   code->SetInstructionStreamAndInstructionStart(
       heap->isolate(), Tagged<InstructionStream>(this));
+  code->Publish(heap->isolate());
+  code->wrapper()->set_code(code);
   code->FlushICache();
 }
 
