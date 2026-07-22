@@ -130,18 +130,6 @@ V8_WARN_UNUSED_RESULT Tagged<Object> ReturnFuzzSafe(Tagged<Object> value,
   CHECK_UNLESS_FUZZING(IsBoolean(args[index]));    \
   bool name = IsTrue(args[index]);
 
-bool IsAsmWasmFunction(Isolate* isolate, Tagged<JSFunction> function) {
-  DisallowGarbageCollection no_gc;
-#if V8_ENABLE_WEBASSEMBLY
-  // For simplicity we include invalid asm.js functions whose code hasn't yet
-  // been updated to CompileLazy but is still the InstantiateAsmJs builtin.
-  return function->shared()->HasAsmWasmData() ||
-         function->code(isolate)->builtin_id() == Builtin::kInstantiateAsmJs;
-#else
-  return false;
-#endif  // V8_ENABLE_WEBASSEMBLY
-}
-
 }  // namespace
 
 RUNTIME_FUNCTION(Runtime_ClearMegamorphicStubCache) {
@@ -360,8 +348,6 @@ bool CanOptimizeFunction(CodeKind target_kind,
   if (function->shared()->optimization_disabled(target_kind)) {
     return false;
   }
-
-  CHECK_UNLESS_FUZZING_RETURN_FALSE(!IsAsmWasmFunction(isolate, *function));
 
   // If we're fuzzing, allow having not marked the function for manual
   // optimization (if the steps below succeed).
@@ -658,8 +644,6 @@ RUNTIME_FUNCTION(Runtime_PrepareFunctionForOptimization) {
   if (function->shared()->all_optimization_disabled()) {
     return ReadOnlyRoots(isolate).undefined_value();
   }
-
-  CHECK_UNLESS_FUZZING(!IsAsmWasmFunction(isolate, *function));
 
   // Hold onto the bytecode array between marking and optimization to ensure
   // it's not flushed.

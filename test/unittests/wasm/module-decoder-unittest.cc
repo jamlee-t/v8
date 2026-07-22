@@ -225,13 +225,13 @@ class WasmModuleVerifyTest : public TestWithPlatform {
     WasmDetectedFeatures unused_detected_features;
     ModuleResult result =
         DecodeWasmModule(enabled_features_, base::VectorOf(temp, total), false,
-                         kWasmOrigin, &unused_detected_features);
+                         &unused_detected_features);
     delete[] temp;
     return result;
   }
   ModuleResult DecodeModuleNoHeader(base::Vector<const uint8_t> bytes) {
     WasmDetectedFeatures unused_detected_features;
-    return DecodeWasmModule(enabled_features_, bytes, false, kWasmOrigin,
+    return DecodeWasmModule(enabled_features_, bytes, false,
                             &unused_detected_features);
   }
 };

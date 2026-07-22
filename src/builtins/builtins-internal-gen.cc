@@ -1690,49 +1690,6 @@ TF_BUILTIN(CreateDataProperty, CodeStubAssembler) {
                                                  key, value);
 }
 
-TF_BUILTIN(InstantiateAsmJs, JSTrampolineAssembler) {
-  Label tailcall_to_function(this);
-  auto function = Parameter<JSFunction>(Descriptor::kTarget);
-  auto context = Parameter<Context>(Descriptor::kContext);
-  auto arg_count =
-      UncheckedParameter<Int32T>(Descriptor::kActualArgumentsCount);
-#ifdef V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE
-  auto dispatch_handle =
-      UncheckedParameter<JSDispatchHandleT>(Descriptor::kDispatchHandle);
-#else
-  TNode<JSDispatchHandleT> dispatch_handle = ReinterpretCast<JSDispatchHandleT>(
-      LoadJSFunctionDispatchHandle(function));
-#endif
-
-  // This builtin is used on functions with different parameter counts.
-  SetSupportsDynamicParameterCount(function, dispatch_handle);
-
-  // Retrieve arguments from caller (stdlib, foreign, heap).
-  CodeStubArguments args(this, arg_count);
-
-  TNode<Object> stdlib = args.GetOptionalArgumentValue(0);
-  TNode<Object> foreign = args.GetOptionalArgumentValue(1);
-  TNode<Object> heap = args.GetOptionalArgumentValue(2);
-
-  // Call runtime, on success just pass the result to the caller and pop all
-  // arguments. A smi 0 is returned on failure, an object on success.
-  TNode<JSAny> maybe_result_or_smi_zero = CallRuntime<JSAny>(
-      Runtime::kInstantiateAsmJs, context, function, stdlib, foreign, heap);
-  GotoIf(TaggedIsSmi(maybe_result_or_smi_zero), &tailcall_to_function);
-  args.PopAndReturn(maybe_result_or_smi_zero);
-
-  BIND(&tailcall_to_function);
-  // On failure, tail call back to regular JavaScript by re-calling the given
-  // function which has been reset to the compile lazy builtin.
-  // Make sure that the dispatch table entry is still intact; calling out to JS
-  // might have free'd and re-allocated it (https://crbug.com/462217236).
-  CSA_SBXCHECK(
-      this,
-      Word32Equal(DynamicJSParameterCount(),
-                  LoadParameterCountFromJSDispatchTable(dispatch_handle)));
-  TailCallJSFunction(function);
-}
-
 TF_BUILTIN(FindNonDefaultConstructorOrConstruct, CodeStubAssembler) {
   auto this_function = Parameter<JSFunction>(Descriptor::kThisFunction);
   auto new_target = Parameter<Object>(Descriptor::kNewTarget);

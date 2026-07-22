@@ -16301,8 +16301,6 @@ THREADED_TEST(ScriptContextDependence) {
            101);
 }
 
-
-
 static int error_level_message_count = 0;
 static int expected_error_level = 0;
 

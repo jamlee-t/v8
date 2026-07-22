@@ -1140,10 +1140,8 @@ struct StaticReadOnlyRoot {
       kstrict_function_transition_symbol + 16;
   static constexpr Tagged_t ktemplate_literal_slot_id_symbol =
       ktemplate_literal_function_literal_id_symbol + 16;
-  static constexpr Tagged_t kwasm_asm_single_function_symbol =
-      ktemplate_literal_slot_id_symbol + 16;
   static constexpr Tagged_t kwasm_cross_instance_call_symbol =
-      kwasm_asm_single_function_symbol + 16;
+      ktemplate_literal_slot_id_symbol + 16;
   static constexpr Tagged_t kwasm_exception_tag_symbol =
       kwasm_cross_instance_call_symbol + 16;
   static constexpr Tagged_t kwasm_exception_values_symbol =
@@ -1225,7 +1223,7 @@ struct StaticReadOnlyRoot {
   static constexpr Tagged_t kLastAllocatedRoot = 0x180171;
 };
 
-static constexpr std::array<Tagged_t, 1022> StaticReadOnlyRootsPointerTable = {
+static constexpr std::array<Tagged_t, 1021> StaticReadOnlyRootsPointerTable = {
     StaticReadOnlyRoot::kUndefinedValue,
     StaticReadOnlyRoot::kTheHoleValue,
     StaticReadOnlyRoot::kNullValue,
@@ -2169,7 +2167,6 @@ static constexpr std::array<Tagged_t, 1022> StaticReadOnlyRootsPointerTable = {
     StaticReadOnlyRoot::kstrict_function_transition_symbol,
     StaticReadOnlyRoot::ktemplate_literal_function_literal_id_symbol,
     StaticReadOnlyRoot::ktemplate_literal_slot_id_symbol,
-    StaticReadOnlyRoot::kwasm_asm_single_function_symbol,
     StaticReadOnlyRoot::kwasm_cross_instance_call_symbol,
     StaticReadOnlyRoot::kwasm_exception_tag_symbol,
     StaticReadOnlyRoot::kwasm_exception_values_symbol,

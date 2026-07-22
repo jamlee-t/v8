@@ -4877,11 +4877,6 @@ v8_header_set("v8_internal_headers") {
 
   if (v8_enable_webassembly) {
     sources += [
-      "src/asmjs/asm-js.h",
-      "src/asmjs/asm-names.h",
-      "src/asmjs/asm-parser.h",
-      "src/asmjs/asm-scanner.h",
-      "src/asmjs/asm-types.h",
       "src/compiler/int64-lowering.h",
       "src/compiler/turboshaft/growable-stacks-reducer.h",
       "src/compiler/turboshaft/int64-lowering-phase.h",
@@ -6521,10 +6516,6 @@ v8_cluster_source_set("v8_base_without_compiler") {
   if (v8_enable_webassembly) {
     sources += [
       ### gcmole(all) ###
-      "src/asmjs/asm-js.cc",
-      "src/asmjs/asm-parser.cc",
-      "src/asmjs/asm-scanner.cc",
-      "src/asmjs/asm-types.cc",
       "src/compiler/wasm-compiler-definitions.cc",
       "src/debug/debug-wasm-objects.cc",
       "src/runtime/runtime-test-wasm.cc",

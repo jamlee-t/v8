@@ -691,7 +691,6 @@ Builtins::JSBuiltinStateFlags Builtins::GetJSBuiltinState(Builtin builtin) {
     case Builtin::kCompileLazy:
     case Builtin::kDebugBreakTrampoline:
     case Builtin::kHandleApiCallOrConstruct:
-    case Builtin::kInstantiateAsmJs:
     case Builtin::kInterpreterEntryTrampoline:
       return JSBuiltinStateFlag::kJSTrampoline;
 

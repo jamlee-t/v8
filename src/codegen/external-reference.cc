@@ -734,29 +734,6 @@ void* allocate_buffer_impl(Isolate* isolate, size_t size) {
 
 FUNCTION_REFERENCE(allocate_buffer, allocate_buffer_impl)
 
-static void f64_acos_wrapper(Address data) {
-  double input = ReadUnalignedValue<double>(data);
-  WriteUnalignedValue(data, base::ieee754::acos(input));
-}
-
-FUNCTION_REFERENCE(f64_acos_wrapper_function, f64_acos_wrapper)
-
-static void f64_asin_wrapper(Address data) {
-  double input = ReadUnalignedValue<double>(data);
-  WriteUnalignedValue<double>(data, base::ieee754::asin(input));
-}
-
-FUNCTION_REFERENCE(f64_asin_wrapper_function, f64_asin_wrapper)
-
-
-static void f64_mod_wrapper(Address data) {
-  double dividend = ReadUnalignedValue<double>(data);
-  double divisor = ReadUnalignedValue<double>(data + sizeof(dividend));
-  WriteUnalignedValue<double>(data, Modulo(dividend, divisor));
-}
-
-FUNCTION_REFERENCE(f64_mod_wrapper_function, f64_mod_wrapper)
-
 ExternalReference ExternalReference::isolate_root(Isolate* isolate) {
   return ExternalReference(isolate->isolate_root());
 }

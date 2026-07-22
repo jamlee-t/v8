@@ -1751,7 +1751,7 @@ void SharedFunctionInfo::SharedFunctionInfoVerify(LocalIsolate* isolate) {
   }
 
 #if V8_ENABLE_WEBASSEMBLY
-  bool is_wasm = HasWasmExportedFunctionData(isolate) || HasAsmWasmData() ||
+  bool is_wasm = HasWasmExportedFunctionData(isolate) ||
                  HasWasmCapiFunctionData(isolate) || HasWasmResumeData();
 #else
   bool is_wasm = false;
@@ -3370,14 +3370,6 @@ void WasmExceptionTag::WasmExceptionTagVerify(Isolate* isolate) {
   CHECK(IsSmi(Tagged<Object>(index_.load())));
 }
 
-void AsmWasmData::AsmWasmDataVerify(Isolate* isolate) {
-  CHECK(Is<AsmWasmData>(this));
-  ExposedTrustedObjectVerify(isolate);
-  if (has_managed_native_module()) {
-    Object::VerifyPointer(isolate, managed_native_module());
-  }
-}
-
 void WasmFuncRef::WasmFuncRefVerify(Isolate* isolate) {
   CHECK(Is<WasmFuncRef>(this));
 }
@@ -3884,7 +3876,6 @@ void CallSiteInfo::CallSiteInfoVerify(Isolate* isolate) {
   CHECK(IsCode(code) || IsBytecodeArray(code) || code == Smi::zero());
 
 #if V8_ENABLE_WEBASSEMBLY
-  CHECK_IMPLIES(IsAsmJsWasm(), IsWasm());
   CHECK_IMPLIES(IsWasm(), IsWasmInstanceObject(receiver_or_instance()));
   CHECK_IMPLIES(IsWasm() || IsBuiltin(), IsSmi(function()));
   CHECK_IMPLIES(!IsWasm() && !IsBuiltin(), IsJSFunction(function()));

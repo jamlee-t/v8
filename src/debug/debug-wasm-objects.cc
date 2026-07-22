@@ -1116,9 +1116,7 @@ DirectHandle<String> GetWasmFunctionDebugName(
   wasm::NamesProvider* names = native_module->GetNamesProvider();
   StringBuilder sb;
   wasm::NamesProvider::FunctionNamesBehavior behavior =
-      is_asmjs_module(native_module->module())
-          ? wasm::NamesProvider::kWasmInternal
-          : wasm::NamesProvider::kDevTools;
+      wasm::NamesProvider::kDevTools;
   names->PrintFunctionName(sb, func_index, behavior);
   return ToInternalString(sb, isolate);
 }

@@ -383,7 +383,6 @@ constexpr int kGearboxGenericBuiltinIdOffset = -2;
                                                                                \
   /* Code life-cycle */                                                        \
   TFC(CompileLazy, JSTrampoline)                                               \
-  TFC(InstantiateAsmJs, JSTrampoline)                                          \
   ASM(NotifyDeoptimized, Void)                                                 \
                                                                                \
   BUILTIN_LIST_BASE_TIERING(TFC)                                               \

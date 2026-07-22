@@ -148,9 +148,7 @@ WasmCompilationResult WasmCompilationUnit::ExecuteCompilation(
     base::TimeDelta compile_time = compile_timer.Elapsed();
     if (func_body.end - func_body.start >= 100 * KB) {
       DelayedCounterUpdates::GetHistogramFn huge_size_histogram =
-          is_asmjs_module(env->module)
-              ? &Counters::wasm_asm_huge_function_size_bytes
-              : &Counters::wasm_wasm_huge_function_size_bytes;
+          &Counters::wasm_wasm_huge_function_size_bytes;
       counter_updates->AddSample(
           huge_size_histogram,
           static_cast<int>(func_body.end - func_body.start));
@@ -158,9 +156,7 @@ WasmCompilationResult WasmCompilationUnit::ExecuteCompilation(
           &Counters::wasm_compile_huge_function_time, compile_time);
     }
     DelayedCounterUpdates::GetTimedHistogramFn compile_time_histogram =
-        is_asmjs_module(env->module)
-            ? &Counters::wasm_compile_asm_function_time
-            : &Counters::wasm_compile_wasm_function_time;
+        &Counters::wasm_compile_wasm_function_time;
     counter_updates->AddTimedSample(compile_time_histogram, compile_time);
   }
   return result;

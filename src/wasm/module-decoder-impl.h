@@ -310,13 +310,13 @@ inline void DumpModule(const base::Vector<const uint8_t> module_bytes,
 class ModuleDecoderImpl : public Decoder {
  public:
   ModuleDecoderImpl(WasmEnabledFeatures enabled_features,
-                    base::Vector<const uint8_t> wire_bytes, ModuleOrigin origin,
+                    base::Vector<const uint8_t> wire_bytes,
                     WasmDetectedFeatures* detected_features,
                     ITracer* tracer = ITracer::NoTrace)
       : Decoder(wire_bytes),
         enabled_features_(enabled_features),
         detected_features_(detected_features),
-        module_(std::make_shared<WasmModule>(origin)),
+        module_(std::make_shared<WasmModule>()),
         module_start_(wire_bytes.begin()),
         module_end_(wire_bytes.end()),
         tracer_(tracer) {}
@@ -1341,7 +1341,7 @@ class ModuleDecoderImpl : public Decoder {
 
   void UpdateComputedMemoryInformation() {
     for (WasmMemory& memory : module_->memories) {
-      UpdateComputedInformation(&memory, module_->origin);
+      UpdateComputedInformation(&memory);
     }
   }
 
@@ -1460,9 +1460,8 @@ class ModuleDecoderImpl : public Decoder {
       }
       if (tracer_) tracer_->NextLine();
     }
-    // Check for duplicate exports (except for asm.js).
-    if (ok() && module_->origin == kWasmOrigin &&
-        module_->export_table.size() > 1) {
+    // Check for duplicate exports.
+    if (ok() && module_->export_table.size() > 1) {
       std::vector<WasmExport> sorted_exports(module_->export_table);
 
       auto cmp_less = [this](const WasmExport& a, const WasmExport& b) {
@@ -2776,10 +2775,7 @@ class ModuleDecoderImpl : public Decoder {
   ValueType consume_value_type(const WasmModule* module = nullptr) {
     auto [result, length] =
         value_type_reader::read_value_type<FullValidationTag>(
-            this, pc_,
-            module_->origin == kWasmOrigin ? enabled_features_
-                                           : WasmEnabledFeatures::None(),
-            detected_features_);
+            this, pc_, enabled_features_, detected_features_);
     value_type_reader::ValidateValueType<FullValidationTag>(
         this, pc_, module_.get(), result);
     if (ok() && module) value_type_reader::Populate(&result, module);
@@ -2794,10 +2790,7 @@ class ModuleDecoderImpl : public Decoder {
   HeapType consume_heap_type() {
     auto [heap_type, length] =
         value_type_reader::read_heap_type<FullValidationTag>(
-            this, pc_,
-            module_->origin == kWasmOrigin ? enabled_features_
-                                           : WasmEnabledFeatures::None(),
-            detected_features_);
+            this, pc_, enabled_features_, detected_features_);
 
     value_type_reader::ValidateHeapType<FullValidationTag>(
         this, pc_, module_.get(), heap_type);

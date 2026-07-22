@@ -439,9 +439,8 @@ MaybeDirectHandle<WasmModuleObject> CompileReferenceModule(
   constexpr bool kNoVerifyFunctions = false;
   auto enabled_features = WasmEnabledFeatures::FromIsolate(isolate);
   WasmDetectedFeatures detected_features;
-  ModuleResult module_res =
-      DecodeWasmModule(enabled_features, wire_bytes, kNoVerifyFunctions,
-                       ModuleOrigin::kWasmOrigin, &detected_features);
+  ModuleResult module_res = DecodeWasmModule(
+      enabled_features, wire_bytes, kNoVerifyFunctions, &detected_features);
   CHECK(module_res.ok());
   std::shared_ptr<WasmModule> module = std::move(module_res).value();
   CHECK_NOT_NULL(module);
@@ -964,9 +963,9 @@ int ExecuteAgainstReference(Isolate* isolate,
     // instance. So, we run the validation here before running drumbrake.
     auto enabled_features = WasmEnabledFeatures::FromIsolate(isolate);
     WasmDetectedFeatures unused_detected_features;
-    ModuleDecoderImpl decoder(
-        enabled_features, module_object->native_module()->wire_bytes(),
-        ModuleOrigin::kWasmOrigin, &unused_detected_features);
+    ModuleDecoderImpl decoder(enabled_features,
+                              module_object->native_module()->wire_bytes(),
+                              &unused_detected_features);
     if (decoder.DecodeModule(/*validate_functions=*/true).failed()) return -1;
   }
 #endif  // V8_ENABLE_DRUMBRAKE
@@ -1141,9 +1140,9 @@ void GenerateTestCase(StdoutStream& os, Isolate* isolate,
   constexpr bool kVerifyFunctions = false;
   auto enabled_features = WasmEnabledFeatures::FromIsolate(isolate);
   WasmDetectedFeatures unused_detected_features;
-  ModuleResult module_res = DecodeWasmModule(
-      enabled_features, wire_bytes.module_bytes(), kVerifyFunctions,
-      ModuleOrigin::kWasmOrigin, &unused_detected_features);
+  ModuleResult module_res =
+      DecodeWasmModule(enabled_features, wire_bytes.module_bytes(),
+                       kVerifyFunctions, &unused_detected_features);
   CHECK_WITH_MSG(module_res.ok(), module_res.error().message().c_str());
   WasmModule* module = module_res.value().get();
   CHECK_NOT_NULL(module);

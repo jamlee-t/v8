@@ -56,7 +56,6 @@ enum IndirectPointerTag : uint16_t {
   kWasmTrustedInstanceDataIndirectPointerTag = 4,
   kWasmDispatchTableIndirectPointerTag,
   kWasmSuspenderIndirectPointerTag,
-  kAsmWasmDataIndirectPointerTag,
   kWasmExportedFunctionDataIndirectPointerTag,
   kWasmCapiFunctionDataIndirectPointerTag,
   kRegExpDataIndirectPointerTag,
@@ -274,8 +273,6 @@ V8_INLINE IndirectPointerTag IndirectPointerTagFromInstanceType(
                     : kWasmTrustedInstanceDataIndirectPointerTag;
     case WASM_INTERNAL_FUNCTION_TYPE:
       return kWasmInternalFunctionIndirectPointerTag;
-    case ASM_WASM_DATA_TYPE:
-      return kAsmWasmDataIndirectPointerTag;
     case WASM_SUSPENDER_OBJECT_TYPE:
       return kWasmSuspenderIndirectPointerTag;
     case WASM_FUNCTION_DATA_TYPE:

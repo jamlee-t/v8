@@ -52,7 +52,6 @@ class Zone;
   V(is_lazy_compile, bool, 1, _)                                \
   V(coverage_enabled, bool, 1, _)                               \
   V(block_coverage_enabled, bool, 1, _)                         \
-  V(is_asm_wasm_broken, bool, 1, _)                             \
   V(class_scope_has_private_brand, bool, 1, _)                  \
   V(private_name_lookup_skips_outer_class, bool, 1, _)          \
   V(requires_instance_members_initializer, bool, 1, _)          \

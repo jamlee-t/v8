@@ -1434,7 +1434,6 @@ filegroup(
         "src/api/api-inl.h",
         "src/api/api-natives.cc",
         "src/api/api-natives.h",
-        "src/asmjs/asm-js.h",
         "src/ast/ast.cc",
         "src/ast/ast.h",
         "src/ast/ast-function-literal-id-reindexer.cc",
@@ -3132,14 +3131,6 @@ filegroup(
         "//conditions:default": [],
     }) + select({
         ":is_v8_enable_webassembly": [
-            "src/asmjs/asm-js.cc",
-            "src/asmjs/asm-names.h",
-            "src/asmjs/asm-parser.cc",
-            "src/asmjs/asm-parser.h",
-            "src/asmjs/asm-scanner.cc",
-            "src/asmjs/asm-scanner.h",
-            "src/asmjs/asm-types.cc",
-            "src/asmjs/asm-types.h",
             "src/compiler/turboshaft/wasm-dead-code-elimination-phase.cc",
             "src/compiler/turboshaft/wasm-dead-code-elimination-phase.h",
             "src/debug/debug-wasm-objects.cc",

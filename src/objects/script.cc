@@ -231,18 +231,6 @@ bool Script::IsUserJavaScript() const {
   return type() == Script::Type::kNormal;
 }
 
-#if V8_ENABLE_WEBASSEMBLY
-bool Script::ContainsAsmModule() {
-  DisallowGarbageCollection no_gc;
-  SharedFunctionInfo::ScriptIterator iter(Isolate::Current(), this);
-  for (Tagged<SharedFunctionInfo> sfi = iter.Next(); !sfi.is_null();
-       sfi = iter.Next()) {
-    if (sfi->HasAsmWasmData()) return true;
-  }
-  return false;
-}
-#endif  // V8_ENABLE_WEBASSEMBLY
-
 void Script::TraceScriptRundown() {
   DisallowGarbageCollection no_gc;
   Isolate* isolate = Isolate::Current();

@@ -416,9 +416,8 @@ STREAM_TEST(TestAllBytesArriveAOTCompilerFinishesFirst) {
 size_t GetFunctionOffset(i::Isolate* isolate, base::Vector<const uint8_t> bytes,
                          size_t index) {
   WasmDetectedFeatures unused_detected_features;
-  ModuleResult result =
-      DecodeWasmModule(WasmEnabledFeatures::All(), bytes, false,
-                       ModuleOrigin::kWasmOrigin, &unused_detected_features);
+  ModuleResult result = DecodeWasmModule(WasmEnabledFeatures::All(), bytes,
+                                         false, &unused_detected_features);
   CHECK(result.ok());
   const WasmFunction* func = &result.value()->functions[index];
   return func->code.offset();

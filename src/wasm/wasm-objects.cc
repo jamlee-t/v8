@@ -737,13 +737,10 @@ void SetInstanceMemory(Tagged<WasmTrustedInstanceData> trusted_instance_data,
   const WasmModule* module = trusted_instance_data->module();
   const wasm::WasmMemory& memory = module->memories[memory_index];
 
-  bool is_wasm_module = module->origin == wasm::kWasmOrigin;
   bool use_trap_handler = memory.bounds_checks == wasm::kTrapHandler;
-  // Asm.js does not use trap handling.
-  CHECK_IMPLIES(use_trap_handler, is_wasm_module);
   // ArrayBuffers allocated for Wasm do always have a BackingStore.
-  CHECK_IMPLIES(is_wasm_module, backing_store);
-  CHECK_IMPLIES(is_wasm_module, backing_store->is_wasm_memory());
+  CHECK_NOT_NULL(backing_store);
+  CHECK(backing_store->is_wasm_memory());
   // Wasm modules compiled to use the trap handler don't have bounds checks,
   // so they must have a memory that has guard regions.
   // Note: This CHECK can fail when in-sandbox corruption modified a
@@ -751,20 +748,12 @@ void SetInstanceMemory(Tagged<WasmTrustedInstanceData> trusted_instance_data,
   // corrupt the contents of other Wasm memories or ArrayBuffers, but having
   // this CHECK in release mode is nice as an additional layer of defense.
   CHECK_IMPLIES(use_trap_handler, backing_store->has_guard_regions());
-  size_t byte_length;
-  uint8_t* base_address;
-  if (is_wasm_module) {
-    // For Wasm memories, use the actual BackingStore's start and length.
-    // This allows us to use this method even when {buffer} hasn't been
-    // updated yet after a {memory.grow} instruction on another thread.
-    byte_length = backing_store->byte_length();
-    base_address = reinterpret_cast<uint8_t*>(backing_store->buffer_start());
-  } else {
-    // For asm.js memories, rely on the ArrayBuffer instead.
-    Tagged<JSArrayBuffer> buffer = Cast<JSArrayBuffer>(maybe_buffer);
-    byte_length = buffer->GetByteLength();
-    base_address = reinterpret_cast<uint8_t*>(buffer->backing_store());
-  }
+  // For Wasm memories, use the actual BackingStore's start and length.
+  // This allows us to use this method even when {buffer} hasn't been
+  // updated yet after a {memory.grow} instruction on another thread.
+  size_t byte_length = backing_store->byte_length();
+  uint8_t* base_address =
+      reinterpret_cast<uint8_t*>(backing_store->buffer_start());
   // We checked this before, but a malicious worker thread with an in-sandbox
   // corruption primitive could have modified it since then.
   SBXCHECK_GE(byte_length, memory.min_memory_size);
@@ -1696,19 +1685,18 @@ bool WasmTrustedInstanceData::try_get_func_ref(int index,
 namespace {
 
 V8_INLINE DirectHandle<WasmExportedFunction> CreateExportedFunction(
-    Isolate* isolate, wasm::ModuleOrigin origin, int function_index,
-    DirectHandle<WasmFuncRef> func_ref,
+    Isolate* isolate, int function_index, DirectHandle<WasmFuncRef> func_ref,
     DirectHandle<WasmInternalFunction> internal_function,
     DirectHandle<WasmTrustedInstanceData> trusted_instance_data) {
   DCHECK_EQ(func_ref->internal(isolate), *internal_function);
 
   const wasm::CanonicalSig* sig = internal_function->sig();
   DirectHandle<Code> wrapper_code =
-      WasmExportedFunction::GetWrapper(isolate, sig, origin);
+      WasmExportedFunction::GetWrapper(isolate, sig);
   int arity = static_cast<int>(sig->parameter_count());
   DirectHandle<WasmExportedFunction> external = WasmExportedFunction::New(
       isolate, trusted_instance_data, func_ref, internal_function, arity,
-      wrapper_code, origin, function_index, wasm::kNoPromise);
+      wrapper_code, function_index, wasm::kNoPromise);
   internal_function->set_external(*external);
   return external;
 }
@@ -1771,8 +1759,8 @@ DirectHandle<WasmFuncRef> WasmTrustedInstanceData::GetOrCreateFuncRef(
   trusted_instance_data->func_refs()->set(function_index, *func_ref);
 
   if (precreate_external == wasm::kPrecreateExternal) {
-    CreateExportedFunction(isolate, module->origin, function_index, func_ref,
-                           internal_function, trusted_instance_data);
+    CreateExportedFunction(isolate, function_index, func_ref, internal_function,
+                           trusted_instance_data);
   }
 
   return func_ref;
@@ -1802,21 +1790,19 @@ DirectHandle<JSFunction> WasmInternalFunction::GetOrCreateExternal(
   // creation.
   DirectHandle<WasmTrustedInstanceData> instance_data{internal->instance_data(),
                                                       isolate};
-  wasm::ModuleOrigin export_origin = instance_data->module()->origin;
   int function_index = internal->function_index();
 
   DirectHandle<WasmFuncRef> func_ref{
       Cast<WasmFuncRef>(instance_data->func_refs()->get(function_index)),
       isolate};
 
-  return CreateExportedFunction(isolate, export_origin, function_index,
-                                func_ref, internal, instance_data);
+  return CreateExportedFunction(isolate, function_index, func_ref, internal,
+                                instance_data);
 }
 
 // static
 DirectHandle<Code> WasmExportedFunction::GetWrapper(
-    Isolate* isolate, const wasm::CanonicalSig* sig,
-    wasm::ModuleOrigin origin) {
+    Isolate* isolate, const wasm::CanonicalSig* sig) {
 #if V8_ENABLE_DRUMBRAKE
   if (v8_flags.wasm_jitless) {
     return isolate->builtins()->code_handle(
@@ -1828,7 +1814,7 @@ DirectHandle<Code> WasmExportedFunction::GetWrapper(
   if (!entry.is_null()) {
     return direct_handle(entry->code(isolate), isolate);
   }
-  if (wasm::CanUseGenericJsToWasmWrapper(origin, sig)) {
+  if (wasm::CanUseGenericJsToWasmWrapper(sig)) {
     if (v8_flags.stress_wasm_stack_switching) {
       return isolate->builtins()->code_handle(Builtin::kWasmStressSwitch);
     }
@@ -2776,16 +2762,14 @@ DirectHandle<WasmExportedFunction> WasmExportedFunction::New(
           ? wasm::kPromise
           : wasm::kNoPromise;
   return New(isolate, instance_data, func_ref, internal_function, arity,
-             export_wrapper, instance_data->module()->origin, func_index,
-             promise);
+             export_wrapper, func_index, promise);
 }
 
 DirectHandle<WasmExportedFunction> WasmExportedFunction::New(
     Isolate* isolate, DirectHandle<WasmTrustedInstanceData> instance_data,
     DirectHandle<WasmFuncRef> func_ref,
     DirectHandle<WasmInternalFunction> internal_function, int arity,
-    DirectHandle<Code> export_wrapper, wasm::ModuleOrigin origin,
-    int func_index, wasm::Promise promise) {
+    DirectHandle<Code> export_wrapper, int func_index, wasm::Promise promise) {
   Factory* factory = isolate->factory();
   DirectHandle<WasmExportedFunctionData> function_data =
       factory->NewWasmExportedFunctionData(
@@ -2808,32 +2792,11 @@ DirectHandle<WasmExportedFunction> WasmExportedFunction::New(
   }
 #endif  // V8_ENABLE_DRUMBRAKE
 
-  DirectHandle<SharedFunctionInfo> shared;
-  DirectHandle<Map> function_map;
-  if (origin != wasm::kWasmOrigin) {
-    // We can use the function name only for asm.js. For WebAssembly, the
-    // function name is specified as the function_index.toString().
-    DirectHandle<String> name;
-    if (!WasmModuleObject::GetFunctionNameOrNull(
-             isolate, direct_handle(instance_data->module_object(), isolate),
-             func_index)
-             .ToHandle(&name)) {
-      name = factory->SizeToString(func_index);
-    }
-    shared = factory->NewSharedFunctionInfoForWasmExportedFunction(
-        name, function_data, arity, kAdapt);
-    if (origin == wasm::kAsmJsSloppyOrigin) {
-      function_map = isolate->sloppy_function_map();
-    } else {
-      function_map = isolate->strict_function_map();
-      shared->set_language_mode(LanguageMode::kStrict);
-    }
-  } else {
-    DirectHandle<String> name = factory->SizeToString(func_index);
-    shared = factory->NewSharedFunctionInfoForWasmExportedFunction(
-        name, function_data, arity, kAdapt);
-    function_map = isolate->wasm_exported_function_map();
-  }
+  DirectHandle<String> name = factory->SizeToString(func_index);
+  DirectHandle<SharedFunctionInfo> shared =
+      factory->NewSharedFunctionInfoForWasmExportedFunction(name, function_data,
+                                                            arity, kAdapt);
+  DirectHandle<Map> function_map = isolate->wasm_exported_function_map();
 
   DirectHandle<NativeContext> context(isolate->native_context());
   DirectHandle<JSFunction> js_function =
@@ -2842,8 +2805,8 @@ DirectHandle<WasmExportedFunction> WasmExportedFunction::New(
           .Build();
 
   // According to the spec, exported functions should not have a [[Construct]]
-  // method. This does not apply to functions exported from asm.js however.
-  DCHECK_EQ(origin != wasm::kWasmOrigin, IsConstructor(*js_function));
+  // method.
+  DCHECK(!IsConstructor(*js_function));
   if (instance_data->has_instance_object()) {
     shared->set_script(instance_data->module_object()->script(), kReleaseStore);
   } else {
@@ -2997,19 +2960,6 @@ DirectHandle<WasmExceptionTag> WasmExceptionTag::New(Isolate* isolate,
       WASM_EXCEPTION_TAG_TYPE, AllocationType::kOld));
   result->set_index(index);
   return result;
-}
-
-Handle<AsmWasmData> AsmWasmData::New(
-    Isolate* isolate, std::shared_ptr<wasm::NativeModule> native_module,
-    uint64_t uses_bitset) {
-  const WasmModule* module = native_module->module();
-  size_t memory_estimate =
-      wasm::WasmCodeManager::EstimateNativeModuleCodeSize(module) +
-      wasm::WasmCodeManager::EstimateNativeModuleMetaDataSize(module);
-  DirectHandle<TrustedManaged<wasm::NativeModule>> managed_native_module =
-      TrustedManaged<wasm::NativeModule>::From(isolate, memory_estimate,
-                                               std::move(native_module));
-  return isolate->factory()->NewAsmWasmData(managed_native_module, uses_bitset);
 }
 
 namespace {

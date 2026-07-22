@@ -204,8 +204,7 @@ WasmFunctionBuilder::WasmFunctionBuilder(WasmModuleBuilder* builder)
       i64_temps_(builder->zone()),
       f32_temps_(builder->zone()),
       f64_temps_(builder->zone()),
-      direct_calls_(builder->zone()),
-      asm_offsets_(builder->zone(), 8) {}
+      direct_calls_(builder->zone()) {}
 
 void WasmFunctionBuilder::EmitByte(uint8_t val) { body_.write_u8(val); }
 
@@ -354,37 +353,6 @@ void WasmFunctionBuilder::SetName(base::Vector<const char> name) {
   name_ = name;
 }
 
-void WasmFunctionBuilder::AddAsmWasmOffset(size_t call_position,
-                                           size_t to_number_position) {
-  // We only want to emit one mapping per byte offset.
-  DCHECK(asm_offsets_.size() == 0 || body_.size() > last_asm_byte_offset_);
-
-  DCHECK_LE(body_.size(), kMaxUInt32);
-  uint32_t byte_offset = static_cast<uint32_t>(body_.size());
-  asm_offsets_.write_u32v(byte_offset - last_asm_byte_offset_);
-  last_asm_byte_offset_ = byte_offset;
-
-  DCHECK_GE(std::numeric_limits<uint32_t>::max(), call_position);
-  uint32_t call_position_u32 = static_cast<uint32_t>(call_position);
-  asm_offsets_.write_i32v(call_position_u32 - last_asm_source_position_);
-
-  DCHECK_GE(std::numeric_limits<uint32_t>::max(), to_number_position);
-  uint32_t to_number_position_u32 = static_cast<uint32_t>(to_number_position);
-  asm_offsets_.write_i32v(to_number_position_u32 - call_position_u32);
-  last_asm_source_position_ = to_number_position_u32;
-}
-
-void WasmFunctionBuilder::SetAsmFunctionStartPosition(
-    size_t function_position) {
-  DCHECK_EQ(0, asm_func_start_source_position_);
-  DCHECK_GE(std::numeric_limits<uint32_t>::max(), function_position);
-  uint32_t function_position_u32 = static_cast<uint32_t>(function_position);
-  // Must be called before emitting any asm.js source position.
-  DCHECK_EQ(0, asm_offsets_.size());
-  asm_func_start_source_position_ = function_position_u32;
-  last_asm_source_position_ = function_position_u32;
-}
-
 void WasmFunctionBuilder::DeleteCodeAfter(size_t position) {
   DCHECK_LE(position, body_.size());
   body_.Truncate(position);
@@ -411,23 +379,6 @@ void WasmFunctionBuilder::WriteBody(ZoneBuffer* buffer) const {
               static_cast<uint32_t>(builder_->function_imports_.size()));
     }
   }
-}
-
-void WasmFunctionBuilder::WriteAsmWasmOffsetTable(ZoneBuffer* buffer) const {
-  if (asm_func_start_source_position_ == 0 && asm_offsets_.size() == 0) {
-    buffer->write_size(0);
-    return;
-  }
-  size_t locals_enc_size = LEBHelper::sizeof_u32v(locals_.Size());
-  size_t func_start_size =
-      LEBHelper::sizeof_u32v(asm_func_start_source_position_);
-  buffer->write_size(asm_offsets_.size() + locals_enc_size + func_start_size);
-  // Offset of the recorded byte offsets.
-  DCHECK_GE(kMaxUInt32, locals_.Size());
-  buffer->write_u32v(static_cast<uint32_t>(locals_.Size()));
-  // Start position of the function.
-  buffer->write_u32v(asm_func_start_source_position_);
-  buffer->write(asm_offsets_.begin(), asm_offsets_.size());
 }
 
 WasmModuleBuilder::WasmModuleBuilder(Zone* zone)
@@ -1030,15 +981,6 @@ void WasmModuleBuilder::WriteTo(ZoneBuffer* buffer) const {
     }
     FixupSection(buffer, functions_start);
     FixupSection(buffer, start);
-  }
-}
-
-void WasmModuleBuilder::WriteAsmJsOffsetTable(ZoneBuffer* buffer) const {
-  // == Emit asm.js offset table ===============================================
-  buffer->write_size(functions_.size());
-  // Emit the offset table per function.
-  for (auto* function : functions_) {
-    function->WriteAsmWasmOffsetTable(buffer);
   }
 }
 }  // namespace wasm

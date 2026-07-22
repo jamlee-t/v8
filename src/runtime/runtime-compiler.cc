@@ -4,7 +4,6 @@
 
 #include <optional>
 
-#include "src/asmjs/asm-js.h"
 #include "src/codegen/assembler-inl.h"
 #include "src/codegen/compiler.h"
 #include "src/common/assert-scope.h"
@@ -382,64 +381,6 @@ RUNTIME_FUNCTION(Runtime_FunctionLogNextExecution) {
   DCHECK(v8_flags.log_function_events);
   LogExecution(isolate, js_function);
   return js_function->code(isolate);
-}
-
-// The enum values need to match "AsmJsInstantiateResult" in
-// tools/metrics/histograms/enums.xml.
-enum AsmJsInstantiateResult {
-  kAsmJsInstantiateSuccess = 0,
-  kAsmJsInstantiateFail = 1,
-};
-
-RUNTIME_FUNCTION(Runtime_InstantiateAsmJs) {
-  HandleScope scope(isolate);
-  DCHECK_EQ(args.length(), 4);
-  DirectHandle<JSFunction> function = args.at<JSFunction>(0);
-
-  DirectHandle<JSReceiver> stdlib;
-  if (IsJSReceiver(args[1])) {
-    stdlib = args.at<JSReceiver>(1);
-  }
-  DirectHandle<JSReceiver> foreign;
-  if (IsJSReceiver(args[2])) {
-    foreign = args.at<JSReceiver>(2);
-  }
-  DirectHandle<JSArrayBuffer> memory;
-  if (IsJSArrayBuffer(args[3])) {
-    memory = args.at<JSArrayBuffer>(3);
-  }
-  DirectHandle<SharedFunctionInfo> shared(function->shared(), isolate);
-#if V8_ENABLE_WEBASSEMBLY
-  if (shared->HasAsmWasmData()) {
-    DirectHandle<AsmWasmData> data(shared->asm_wasm_data(), isolate);
-    MaybeDirectHandle<Object> result = AsmJs::InstantiateAsmWasm(
-        isolate, shared, data, stdlib, foreign, memory);
-    if (!result.is_null()) {
-      isolate->counters()->asmjs_instantiate_result()->AddSample(
-          kAsmJsInstantiateSuccess);
-      return *result.ToHandleChecked();
-    }
-    if (isolate->has_exception()) {
-      // If instantiation fails, we do not propagate the exception but instead
-      // fall back to JS execution. The only exception (to that rule) is the
-      // termination exception.
-      DCHECK(isolate->is_execution_terminating());
-      return ReadOnlyRoots{isolate}.exception();
-    }
-    isolate->counters()->asmjs_instantiate_result()->AddSample(
-        kAsmJsInstantiateFail);
-
-    // Remove wasm data, mark as broken for asm->wasm, replace AsmWasmData on
-    // the SFI with UncompiledData and set entrypoint to CompileLazy builtin,
-    // and return a smi 0 to indicate failure.
-    SharedFunctionInfo::DiscardCompiled(isolate, shared);
-  }
-  shared->set_is_asm_wasm_broken(true);
-#endif
-  DCHECK_EQ(function->code(isolate), *BUILTIN_CODE(isolate, InstantiateAsmJs));
-  function->UpdateCode(isolate, *BUILTIN_CODE(isolate, CompileLazy));
-  DCHECK(!isolate->has_exception());
-  return Smi::zero();
 }
 
 namespace {

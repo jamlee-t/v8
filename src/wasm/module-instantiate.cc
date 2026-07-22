@@ -9,7 +9,6 @@
 
 #include <optional>
 
-#include "src/asmjs/asm-js.h"
 #include "src/codegen/compiler.h"
 #include "src/compiler/fast-api-calls.h"
 #include "src/compiler/wasm-compiler.h"
@@ -400,31 +399,28 @@ WellKnownImport CheckForWellKnownImport(
 
         // =================================================================
         // Math functions.
-#define COMPARE_MATH_BUILTIN_F64(name)                                       \
-  case Builtin::kMath##name: {                                               \
-    if (!v8_flags.wasm_math_intrinsics) return kGeneric;                     \
-    const FunctionSig* builtin_sig = WasmOpcodes::Signature(kExprF64##name); \
-    if (!builtin_sig) {                                                      \
-      builtin_sig = WasmOpcodes::AsmjsSignature(kExprF64##name);             \
-    }                                                                        \
-    DCHECK_NOT_NULL(builtin_sig);                                            \
-    if (EquivalentNumericSig(sig, builtin_sig)) {                            \
-      return WellKnownImport::kMathF64##name;                                \
-    }                                                                        \
-    break;                                                                   \
+#define COMPARE_MATH_BUILTIN_F64(name, sig_name)             \
+  case Builtin::kMath##name: {                               \
+    if (!v8_flags.wasm_math_intrinsics) return kGeneric;     \
+    const FunctionSig* builtin_sig = &impl::kSig_##sig_name; \
+    DCHECK_NOT_NULL(builtin_sig);                            \
+    if (EquivalentNumericSig(sig, builtin_sig)) {            \
+      return WellKnownImport::kMathF64##name;                \
+    }                                                        \
+    break;                                                   \
   }
 
-        COMPARE_MATH_BUILTIN_F64(Acos)
-        COMPARE_MATH_BUILTIN_F64(Asin)
-        COMPARE_MATH_BUILTIN_F64(Atan)
-        COMPARE_MATH_BUILTIN_F64(Atan2)
-        COMPARE_MATH_BUILTIN_F64(Cos)
-        COMPARE_MATH_BUILTIN_F64(Sin)
-        COMPARE_MATH_BUILTIN_F64(Tan)
-        COMPARE_MATH_BUILTIN_F64(Exp)
-        COMPARE_MATH_BUILTIN_F64(Log)
-        COMPARE_MATH_BUILTIN_F64(Pow)
-        COMPARE_MATH_BUILTIN_F64(Sqrt)
+        COMPARE_MATH_BUILTIN_F64(Acos, d_d)
+        COMPARE_MATH_BUILTIN_F64(Asin, d_d)
+        COMPARE_MATH_BUILTIN_F64(Atan, d_d)
+        COMPARE_MATH_BUILTIN_F64(Atan2, d_dd)
+        COMPARE_MATH_BUILTIN_F64(Cos, d_d)
+        COMPARE_MATH_BUILTIN_F64(Sin, d_d)
+        COMPARE_MATH_BUILTIN_F64(Tan, d_d)
+        COMPARE_MATH_BUILTIN_F64(Exp, d_d)
+        COMPARE_MATH_BUILTIN_F64(Log, d_d)
+        COMPARE_MATH_BUILTIN_F64(Pow, d_dd)
+        COMPARE_MATH_BUILTIN_F64(Sqrt, d_d)
 
 #undef COMPARE_MATH_BUILTIN_F64
 
@@ -869,13 +865,6 @@ class InstanceBuilder {
                                          DirectHandle<String> module_name,
                                          DirectHandle<String> import_name);
 
-  // Look up an import value in the {ffi_} object specifically for linking an
-  // asm.js module. This only performs non-observable lookups, which allows
-  // falling back to JavaScript proper (and hence re-executing all lookups) if
-  // module instantiation fails.
-  MaybeDirectHandle<Object> LookupImportAsm(uint32_t index,
-                                            DirectHandle<String> import_name);
-
   // Load data segments into the memory.
   void LoadDataSegments();
 
@@ -1056,9 +1045,8 @@ MaybeDirectHandle<WasmInstanceObject> InstanceBuilder::Build() {
   if (!start.IsNull()) {
     base::TimeDelta duration = base::TimeTicks::Now() - start;
     module_instantiated.wall_clock_duration_in_us = duration.InMicroseconds();
-    SELECT_WASM_COUNTER(isolate_->counters(), module_->origin, wasm_instantiate,
-                        module_time)
-        ->AddTimedSample(duration);
+    isolate_->counters()->wasm_instantiate_wasm_module_time()->AddTimedSample(
+        duration);
   }
 
   isolate_->metrics_recorder()->DelayMainThreadEvent(module_instantiated,
@@ -1093,56 +1081,21 @@ Maybe<bool> InstanceBuilder::Build_Phase1(
   // Set up the memory buffers and memory objects and attach them to the
   // instance.
   //--------------------------------------------------------------------------
-  if (is_asmjs_module(module_)) {
-    CHECK_EQ(1, module_->memories.size());
-    DirectHandle<JSArrayBuffer> buffer;
-    if (!asmjs_memory_buffer_.ToHandle(&buffer)) {
-      // Use an empty JSArrayBuffer for degenerate asm.js modules.
-      MaybeDirectHandle<JSArrayBuffer> new_buffer =
-          isolate_->factory()->NewJSArrayBufferAndBackingStore(
-              0, InitializedFlag{false});
-      if (!new_buffer.ToHandle(&buffer)) {
-        thrower_->RangeError("Out of memory: asm.js memory");
-        return {};
-      }
-      buffer->set_is_detachable(false);
-    }
-    // asm.js instantiation should have changed the state of the buffer (or we
-    // set it above).
-    CHECK(!buffer->is_detachable());
-
-    // The maximum number of pages isn't strictly necessary for memory
-    // objects used for asm.js, as they are never visible, but we might
-    // as well make it accurate.
-    auto maximum_pages =
-        static_cast<int>(RoundUp(buffer->byte_length(), wasm::kWasmPageSize) /
-                         wasm::kWasmPageSize);
-    DirectHandle<WasmMemoryObject> memory_object =
-        WasmMemoryObject::New(isolate_, buffer, buffer->GetBackingStore(),
-                              maximum_pages, AddressType::kI32);
-    constexpr int kMemoryIndexZero = 0;
-    trusted_data_->memory_objects()->set(kMemoryIndexZero, *memory_object);
-  } else {
-    CHECK(asmjs_memory_buffer_.is_null());
-    DirectHandle<FixedArray> memory_objects{trusted_data_->memory_objects(),
-                                            isolate_};
-    // First process all imported memories, then allocate non-imported ones.
-    if (!ProcessImportedMemories(memory_objects)) {
+  CHECK(asmjs_memory_buffer_.is_null());
+  DirectHandle<FixedArray> memory_objects{trusted_data_->memory_objects(),
+                                          isolate_};
+  // First process all imported memories, then allocate non-imported ones.
+  if (!ProcessImportedMemories(memory_objects)) return {};
+  static_assert(kV8MaxWasmMemories <= kMaxUInt32);
+  uint32_t num_memories = static_cast<uint32_t>(module_->memories.size());
+  for (uint32_t memory_index = 0; memory_index < num_memories; ++memory_index) {
+    if (!IsUndefined(memory_objects->get(memory_index))) continue;
+    DirectHandle<WasmMemoryObject> memory_object;
+    if (AllocateMemory(memory_index).ToHandle(&memory_object)) {
+      memory_objects->set(memory_index, *memory_object);
+    } else {
+      DCHECK(isolate_->has_exception() || thrower_->error());
       return {};
-    }
-    // Actual Wasm modules can have multiple memories.
-    static_assert(kV8MaxWasmMemories <= kMaxUInt32);
-    uint32_t num_memories = static_cast<uint32_t>(module_->memories.size());
-    for (uint32_t memory_index = 0; memory_index < num_memories;
-         ++memory_index) {
-      if (!IsUndefined(memory_objects->get(memory_index))) continue;
-      DirectHandle<WasmMemoryObject> memory_object;
-      if (AllocateMemory(memory_index).ToHandle(&memory_object)) {
-        memory_objects->set(memory_index, *memory_object);
-      } else {
-        DCHECK(isolate_->has_exception() || thrower_->error());
-        return {};
-      }
     }
   }
 
@@ -1475,37 +1428,6 @@ MaybeDirectHandle<Object> InstanceBuilder::LookupImport(
 }
 
 namespace {
-bool HasDefaultToNumberBehaviour(Isolate* isolate,
-                                 DirectHandle<JSFunction> function) {
-  // Disallow providing a [Symbol.toPrimitive] member.
-  LookupIterator to_primitive_it{isolate, function,
-                                 isolate->factory()->to_primitive_symbol()};
-  if (to_primitive_it.state() != LookupIterator::NOT_FOUND) return false;
-
-  // The {valueOf} member must be the default "ObjectPrototypeValueOf".
-  LookupIterator value_of_it{isolate, function,
-                             isolate->factory()->valueOf_string()};
-  if (value_of_it.state() != LookupIterator::DATA) return false;
-  DirectHandle<Object> value_of = value_of_it.GetDataValue();
-  if (!IsJSFunction(*value_of)) return false;
-  Builtin value_of_builtin_id =
-      Cast<JSFunction>(value_of)->code(isolate)->builtin_id();
-  if (value_of_builtin_id != Builtin::kObjectPrototypeValueOf) return false;
-
-  // The {toString} member must be the default "FunctionPrototypeToString".
-  LookupIterator to_string_it{isolate, function,
-                              isolate->factory()->toString_string()};
-  if (to_string_it.state() != LookupIterator::DATA) return false;
-  DirectHandle<Object> to_string = to_string_it.GetDataValue();
-  if (!IsJSFunction(*to_string)) return false;
-  Builtin to_string_builtin_id =
-      Cast<JSFunction>(to_string)->code(isolate)->builtin_id();
-  if (to_string_builtin_id != Builtin::kFunctionPrototypeToString) return false;
-
-  // Just a default function, which will convert to "Nan". Accept this.
-  return true;
-}
-
 bool MaybeMarkError(ValueOrError value, ErrorThrower* thrower) {
   if (is_error(value)) {
     thrower->RuntimeError("%s",
@@ -1515,70 +1437,6 @@ bool MaybeMarkError(ValueOrError value, ErrorThrower* thrower) {
   return false;
 }
 }  // namespace
-
-// Look up an import value in the {ffi_} object specifically for linking an
-// asm.js module. This only performs non-observable lookups, which allows
-// falling back to JavaScript proper (and hence re-executing all lookups) if
-// module instantiation fails.
-MaybeDirectHandle<Object> InstanceBuilder::LookupImportAsm(
-    uint32_t index, DirectHandle<String> import_name) {
-  // The caller checked that the ffi object is present.
-  DCHECK(!ffi_.is_null());
-
-  // Perform lookup of the given {import_name} without causing any observable
-  // side-effect. We only accept accesses that resolve to data properties,
-  // which is indicated by the asm.js spec in section 7 ("Linking") as well.
-  PropertyKey key(isolate_, Cast<Name>(import_name));
-  LookupIterator it(isolate_, ffi_.ToHandleChecked(), key);
-  for (;; it.Next()) {
-    switch (it.state()) {
-      case LookupIterator::ACCESS_CHECK:
-      case LookupIterator::TYPED_ARRAY_INDEX_NOT_FOUND:
-      case LookupIterator::INTERCEPTOR:
-      case LookupIterator::JSPROXY:
-      case LookupIterator::WASM_OBJECT:
-      case LookupIterator::ACCESSOR:
-      case LookupIterator::TRANSITION:
-        thrower_->LinkError("%s: not a data property",
-                            ImportName(index, import_name).c_str());
-        return {};
-      case LookupIterator::NOT_FOUND:
-        // Accepting missing properties as undefined does not cause any
-        // observable difference from JavaScript semantics, we are lenient.
-        return isolate_->factory()->undefined_value();
-      case LookupIterator::DATA: {
-        DirectHandle<Object> value = it.GetDataValue();
-        // For legacy reasons, we accept functions for imported globals (see
-        // {ProcessImportedGlobal}), but only if we can easily determine that
-        // their Number-conversion is side effect free and returns NaN (which
-        // is the case as long as "valueOf" (or others) are not overwritten).
-        if (IsJSFunction(*value) &&
-            module_->import_table[index].kind == kExternalGlobal &&
-            !HasDefaultToNumberBehaviour(isolate_, Cast<JSFunction>(value))) {
-          thrower_->LinkError("%s: function has special ToNumber behaviour",
-                              ImportName(index, import_name).c_str());
-          return {};
-        }
-        return value;
-      }
-      case LookupIterator::MODULE_NAMESPACE: {
-        // Deferred module namespaces trigger evaluation on property access,
-        // which is an observable side-effect. Treat as non-data property.
-        DirectHandle<JSModuleNamespace> ns = it.GetHolder<JSModuleNamespace>();
-        if (IsJSDeferredModuleNamespace(*ns)) {
-          thrower_->LinkError("%s: not a data property",
-                              ImportName(index, import_name).c_str());
-          return {};
-        }
-        // For regular module namespaces, continue the iteration to look up
-        // the property in the namespace's exports.
-        continue;
-      }
-      case LookupIterator::STRING_LOOKUP_START_OBJECT:
-        UNREACHABLE();
-    }
-  }
-}
 
 // Load data segments into the memory.
 void InstanceBuilder::LoadDataSegments() {
@@ -1769,9 +1627,7 @@ void InstanceBuilder::SanitizeImports() {
             isolate_, wire_bytes_, import.field_name, kInternalize);
 
     MaybeDirectHandle<Object> result =
-        is_asmjs_module(module_)
-            ? LookupImportAsm(index, import_name)
-            : LookupImport(index, module_name, import_name);
+        LookupImport(index, module_name, import_name);
     if (thrower_->error()) {
       return;
     }
@@ -2087,27 +1943,6 @@ bool InstanceBuilder::ProcessImportedGlobal(int import_index, int global_index,
     return false;
   }
 
-  if (is_asmjs_module(module_)) {
-    // Accepting {JSFunction} on top of just primitive values here is a
-    // workaround to support legacy asm.js code with broken binding. Note
-    // that using {NaN} (or Smi::zero()) here is what using the observable
-    // conversion via {ToPrimitive} would produce as well. {LookupImportAsm}
-    // checked via {HasDefaultToNumberBehaviour} that "valueOf" or friends have
-    // not been patched.
-    if (IsJSFunction(*value)) value = isolate_->factory()->nan_value();
-    if (IsPrimitive(*value)) {
-      MaybeDirectHandle<Object> converted =
-          global.type == kWasmI32 ? Object::ToInt32(isolate_, value)
-                                  : Object::ToNumber(isolate_, value);
-      if (!converted.ToHandle(&value)) {
-        // Conversion is known to fail for Symbols and BigInts.
-        thrower_->LinkError("%s: global import must be a number",
-                            ImportName(import_index).c_str());
-        return false;
-      }
-    }
-  }
-
   if (IsWasmGlobalObject(*value)) {
     auto global_object = Cast<WasmGlobalObject>(value);
     return ProcessImportedWasmGlobalObject(import_index, global, global_object);
@@ -2400,18 +2235,9 @@ void InstanceBuilder::ProcessExports() {
     }
   }
 
-  DirectHandle<WasmInstanceObject> instance_object{
-      trusted_data_->instance_object(), isolate_};
-  DirectHandle<JSObject> exports_object;
-  bool is_asm_js = is_asmjs_module(module_);
-  if (is_asm_js) {
-    DirectHandle<JSFunction> object_function = DirectHandle<JSFunction>(
-        isolate_->native_context()->object_function(), isolate_);
-    exports_object = isolate_->factory()->NewJSObject(object_function);
-  } else {
-    exports_object = isolate_->factory()->NewJSObjectWithNullProto();
-  }
-  instance_object->set_exports_object(*exports_object);
+  DirectHandle<JSObject> exports_object =
+      isolate_->factory()->NewJSObjectWithNullProto();
+  trusted_data_->instance_object()->set_exports_object(*exports_object);
 
   // Switch the exports object to dictionary mode and allocate enough storage
   // for the expected number of exports.
@@ -2421,9 +2247,9 @@ void InstanceBuilder::ProcessExports() {
       static_cast<int>(module_->export_table.size()), "WasmExportsObject");
 
   PropertyDescriptor desc;
-  desc.set_writable(is_asm_js);
+  desc.set_writable(false);
   desc.set_enumerable(true);
-  desc.set_configurable(is_asm_js);
+  desc.set_configurable(false);
 
   const PropertyDetails details{PropertyKind::kData, desc.ToAttributes(),
                                 PropertyConstness::kMutable};
@@ -2445,21 +2271,6 @@ void InstanceBuilder::ProcessExports() {
         DirectHandle<JSFunction> wasm_external_function =
             WasmInternalFunction::GetOrCreateExternal(internal_function);
         value = wasm_external_function;
-
-        if (is_asm_js &&
-            name->IsEqualTo(base::CStrVector(AsmJs::kSingleFunctionName))) {
-          PropertyDescriptor single_desc;
-          single_desc.set_value(value);
-          single_desc.set_writable(true);
-          single_desc.set_enumerable(false);
-          single_desc.set_configurable(true);
-          CHECK(JSReceiver::DefineOwnProperty(
-                    isolate_, instance_object,
-                    isolate_->factory()->wasm_asm_single_function_symbol(),
-                    &single_desc, Just(kThrowOnError))
-                    .FromMaybe(false));
-          continue;
-        }
         break;
       }
       case kExternalTable: {
@@ -2555,14 +2366,12 @@ void InstanceBuilder::ProcessExports() {
   // Switch back to fast properties if possible.
   JSObject::MigrateSlowToFast(exports_object, 0, "WasmExportsObjectFinished");
 
-  if (module_->origin == kWasmOrigin) {
-    // A well-timed concurrent mutation attack might manage to achieve
-    // execution of user code here; that's why ProcessExports() runs as
-    // part of Build_Phase2().
-    CHECK(JSReceiver::SetIntegrityLevel(isolate_, exports_object, FROZEN,
-                                        kDontThrow)
-              .FromMaybe(false));
-  }
+  // A well-timed concurrent mutation attack might manage to achieve
+  // execution of user code here; that's why ProcessExports() runs as
+  // part of Build_Phase2().
+  CHECK(JSReceiver::SetIntegrityLevel(isolate_, exports_object, FROZEN,
+                                      kDontThrow)
+            .FromMaybe(false));
 }
 
 namespace {

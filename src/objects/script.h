@@ -166,9 +166,6 @@ V8_OBJECT class Script : public Struct {
   // this wasm module.
   inline bool break_on_entry() const;
   inline void set_break_on_entry(bool value);
-
-  // Check if the script contains any Asm modules.
-  bool ContainsAsmModule();
 #endif  // V8_ENABLE_WEBASSEMBLY
 
   // Read/write the raw 'flags' field. This uses relaxed atomic loads/stores

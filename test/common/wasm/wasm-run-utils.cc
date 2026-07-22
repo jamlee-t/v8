@@ -188,7 +188,7 @@ uint8_t* TestingModuleBuilder::AddMemory(uint32_t size, SharedFlag shared,
   memory->initial_pages = initial_pages;
   memory->maximum_pages = maximum_pages;
   memory->address_type = address_type;
-  UpdateComputedInformation(memory, module_->origin);
+  UpdateComputedInformation(memory);
 
   // Create the WasmMemoryObject.
   DirectHandle<WasmMemoryObject> memory_object =

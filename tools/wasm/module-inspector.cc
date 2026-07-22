@@ -395,7 +395,7 @@ class HexDumpModuleDis : public ITracer {
     std::unique_ptr<NamesProvider> names_provider;
     NamesProvider* original_names = names_;
     if (!names_) {
-      fake_module.reset(new WasmModule(kWasmOrigin));
+      fake_module.reset(new WasmModule());
       names_provider.reset(
           new NamesProvider(fake_module.get(), wire_bytes_.module_bytes()));
       names_ = names_provider.get();
@@ -1303,7 +1303,7 @@ class FormatConverter {
 DumpingModuleDecoder::DumpingModuleDecoder(ModuleWireBytes wire_bytes,
                                            HexDumpModuleDis* module_dis)
     : ModuleDecoderImpl(WasmEnabledFeatures::All(), wire_bytes.module_bytes(),
-                        kWasmOrigin, &unused_detected_features_, module_dis) {}
+                        &unused_detected_features_, module_dis) {}
 
 }  // namespace v8::internal::wasm
 

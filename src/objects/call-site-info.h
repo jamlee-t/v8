@@ -24,11 +24,9 @@ class StructBodyDescriptor;
 V8_OBJECT class CallSiteInfo : public Struct {
  public:
   using IsWasmBit = base::BitField<bool, 0, 1, uint32_t>;
-  using IsAsmJsWasmBit = IsWasmBit::Next<bool, 1>;
-  using IsStrictBit = IsAsmJsWasmBit::Next<bool, 1>;
+  using IsStrictBit = IsWasmBit::Next<bool, 1>;
   using IsConstructorBit = IsStrictBit::Next<bool, 1>;
-  using IsAsmJsAtNumberConversionBit = IsConstructorBit::Next<bool, 1>;
-  using IsAsyncBit = IsAsmJsAtNumberConversionBit::Next<bool, 1>;
+  using IsAsyncBit = IsConstructorBit::Next<bool, 1>;
   using IsBuiltinBit = IsAsyncBit::Next<bool, 1>;
   using IsSourcePositionComputedBit = IsBuiltinBit::Next<bool, 1>;
   using IsDeferredBaselineFrameBit = IsSourcePositionComputedBit::Next<bool, 1>;
@@ -38,10 +36,8 @@ V8_OBJECT class CallSiteInfo : public Struct {
   enum Flag : uint32_t {
     kNone = 0,
     kIsWasm = IsWasmBit::kMask,
-    kIsAsmJsWasm = IsAsmJsWasmBit::kMask,
     kIsStrict = IsStrictBit::kMask,
     kIsConstructor = IsConstructorBit::kMask,
-    kIsAsmJsAtNumberConversion = IsAsmJsAtNumberConversionBit::kMask,
     kIsAsync = IsAsyncBit::kMask,
     kIsBuiltin = IsBuiltinBit::kMask,
     kIsSourcePositionComputed = IsSourcePositionComputedBit::kMask,
@@ -52,15 +48,13 @@ V8_OBJECT class CallSiteInfo : public Struct {
   };
   using Flags = base::Flags<Flag>;
 #if V8_ENABLE_DRUMBRAKE
-  static constexpr int kFlagCount = 10;
+  static constexpr int kFlagCount = 8;
 #else
-  static constexpr int kFlagCount = 9;
+  static constexpr int kFlagCount = 7;
 #endif
 
 #if V8_ENABLE_WEBASSEMBLY
   inline bool IsWasm() const;
-  inline bool IsAsmJsWasm() const;
-  inline bool IsAsmJsAtNumberConversion() const;
 #if V8_ENABLE_DRUMBRAKE
   inline bool IsWasmInterpretedFrame() const;
 #endif  // V8_ENABLE_DRUMBRAKE

@@ -31,7 +31,6 @@
 namespace v8 {
 namespace internal {
 
-class AsmWasmData;
 class CodeTracer;
 class CompilationStatistics;
 class HeapNumber;
@@ -129,7 +128,7 @@ class NativeModuleCache {
   };
 
   std::shared_ptr<NativeModule> MaybeGetNativeModule(
-      ModuleOrigin origin, base::Vector<const uint8_t> wire_bytes,
+      base::Vector<const uint8_t> wire_bytes,
       WasmEnabledFeatures enabled_features,
       const CompileTimeImports& compile_imports);
   bool GetStreamingCompilationOwnership(
@@ -188,17 +187,6 @@ class V8_EXPORT_PRIVATE WasmEngine {
   bool SyncValidate(Isolate* isolate, WasmEnabledFeatures enabled,
                     CompileTimeImports compile_imports,
                     base::Vector<const uint8_t> bytes);
-
-  // Synchronously compiles the given bytes that represent a translated
-  // asm.js module.
-  MaybeHandle<AsmWasmData> SyncCompileTranslatedAsmJs(
-      Isolate* isolate, ErrorThrower* thrower,
-      base::OwnedVector<const uint8_t> bytes, DirectHandle<Script> script,
-      base::Vector<const uint8_t> asm_js_offset_table_bytes,
-      DirectHandle<HeapNumber> uses_bitset, LanguageMode language_mode);
-  DirectHandle<WasmModuleObject> FinalizeTranslatedAsmJs(
-      Isolate* isolate, DirectHandle<AsmWasmData> asm_wasm_data,
-      DirectHandle<Script> script);
 
   // Synchronously compiles the given bytes that represent an encoded Wasm
   // module.
@@ -349,7 +337,7 @@ class V8_EXPORT_PRIVATE WasmEngine {
   // {imports()} function of any WasmModuleObjects we'll create for this
   // NativeModule later.
   std::shared_ptr<NativeModule> MaybeGetNativeModule(
-      ModuleOrigin origin, base::Vector<const uint8_t> wire_bytes,
+      base::Vector<const uint8_t> wire_bytes,
       WasmEnabledFeatures enabled_features,
       const CompileTimeImports& compile_imports);
 

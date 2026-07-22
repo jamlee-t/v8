@@ -415,21 +415,6 @@ void DeclarationScope::set_should_eager_compile() {
 bool Scope::IsAsmModule() const {
   return is_function_scope() && AsDeclarationScope()->is_asm_module();
 }
-
-bool Scope::ContainsAsmModule() const {
-  if (IsAsmModule()) return true;
-
-  // Check inner scopes recursively
-  for (Scope* scope = inner_scope_; scope != nullptr; scope = scope->sibling_) {
-    // Don't check inner functions which won't be eagerly compiled.
-    if (!scope->is_function_scope() ||
-        scope->AsDeclarationScope()->ShouldEagerCompile()) {
-      if (scope->ContainsAsmModule()) return true;
-    }
-  }
-
-  return false;
-}
 #endif  // V8_ENABLE_WEBASSEMBLY
 
 bool Scope::is_debug_evaluate_scope() const {

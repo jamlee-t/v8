@@ -2756,19 +2756,13 @@ void JSFunctionWithPrototype::JSFunctionWithPrototypePrint(std::ostream& os) {
 }
 
 void SharedFunctionInfo::PrintSourceCode(std::ostream& os) {
-  if (HasSourceCode()) {
-#if V8_ENABLE_WEBASSEMBLY
-    // asm.js functions have HasSourceCode() == true, but their start/end
-    // positions refer to module wire bytes, so the code below won't work.
-    if (HasWasmExportedFunctionData(GetCurrentIsolateForSandbox())) return;
-#endif  // V8_ENABLE_WEBASSEMBLY
-    os << "\n - source code: ";
-    Tagged<String> source = Cast<String>(Cast<Script>(script())->source());
-    int start = StartPosition();
-    int length = EndPosition() - start;
-    std::unique_ptr<char[]> source_string = source->ToCString(start, length);
-    os << source_string.get();
-  }
+  if (!HasSourceCode()) return;
+  os << "\n - source code: ";
+  Tagged<String> source = Cast<String>(Cast<Script>(script())->source());
+  int start = StartPosition();
+  int length = EndPosition() - start;
+  std::unique_ptr<char[]> source_string = source->ToCString(start, length);
+  os << source_string.get();
 }
 
 void SharedFunctionInfo::SharedFunctionInfoPrint(std::ostream& os) {
@@ -3200,12 +3194,6 @@ void WasmStringViewIter::WasmStringViewIterPrint(std::ostream& os) {
   os << "\n";
 }
 
-void AsmWasmData::AsmWasmDataPrint(std::ostream& os) {
-  PrintHeader(os, "AsmWasmData");
-  os << "\n - native module: " << Brief(managed_native_module());
-  os << "\n - uses bitset: " << uses_bitset();
-  os << "\n";
-}
 
 void WasmExceptionTag::WasmExceptionTagPrint(std::ostream& os) {
   PrintHeader(os, "WasmExceptionTag");

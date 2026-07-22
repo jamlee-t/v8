@@ -3132,8 +3132,7 @@ wasm::WasmCompilationResult Pipeline::GenerateWasmCode(
   CHECK(turboshaft_pipeline.Run<turboshaft::WasmLoweringPhase>());
 
   // TODO(14108): Do we need value numbering if wasm_opt is turned off?
-  const bool is_asm_js = is_asmjs_module(module);
-  if (v8_flags.wasm_opt || is_asm_js) {
+  if (v8_flags.wasm_opt) {
     CHECK(turboshaft_pipeline.Run<turboshaft::WasmOptimizePhase>());
   }
 

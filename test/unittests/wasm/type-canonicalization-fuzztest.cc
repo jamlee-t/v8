@@ -480,7 +480,7 @@ void TypeCanonicalizerTest::TestCanonicalization(
     bool kValidateModule = true;
     ModuleResult result =
         DecodeWasmModule(enabled_features_, base::VectorOf(buffer),
-                         kValidateModule, kWasmOrigin, &detected_features);
+                         kValidateModule, &detected_features);
 
     // If this fails due to too many types, we need to constrain vector sizes in
     // the fuzzer domains.

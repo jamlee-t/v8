@@ -2845,11 +2845,9 @@ FrameSummary::JavaScriptFrameSummary::CreateStackFrameInfo() const {
 #if V8_ENABLE_WEBASSEMBLY
 FrameSummary::WasmFrameSummary::WasmFrameSummary(
     Isolate* isolate, Handle<WasmTrustedInstanceData> instance_data,
-    wasm::WasmCode* code, int byte_offset, int function_index,
-    bool at_to_number_conversion)
+    wasm::WasmCode* code, int byte_offset, int function_index)
     : FrameSummaryBase(isolate, WASM),
       instance_data_(instance_data),
-      at_to_number_conversion_(at_to_number_conversion),
       code_(code),
       byte_offset_(byte_offset),
       function_index_(function_index) {}
@@ -2864,8 +2862,7 @@ uint32_t FrameSummary::WasmFrameSummary::function_index() const {
 
 int FrameSummary::WasmFrameSummary::SourcePosition() const {
   const wasm::WasmModule* module = wasm_trusted_instance_data()->module();
-  return GetSourcePosition(module, function_index(), code_offset(),
-                           at_to_number_conversion());
+  return GetSourcePosition(module, function_index(), code_offset());
 }
 
 Handle<Script> FrameSummary::WasmFrameSummary::script() const {
@@ -2918,7 +2915,7 @@ uint32_t FrameSummary::WasmInlinedFrameSummary::function_index() const {
 
 int FrameSummary::WasmInlinedFrameSummary::SourcePosition() const {
   const wasm::WasmModule* module = instance_data_->module();
-  return GetSourcePosition(module, function_index(), code_offset(), false);
+  return GetSourcePosition(module, function_index(), code_offset());
 }
 
 Handle<Script> FrameSummary::WasmInlinedFrameSummary::script() const {
@@ -2954,8 +2951,7 @@ Handle<Object> FrameSummary::WasmInterpretedFrameSummary::receiver() const {
 
 int FrameSummary::WasmInterpretedFrameSummary::SourcePosition() const {
   const wasm::WasmModule* module = instance_data()->module();
-  return GetSourcePosition(module, function_index(), byte_offset(),
-                           false /*at_to_number_conversion*/);
+  return GetSourcePosition(module, function_index(), byte_offset());
 }
 
 Handle<WasmTrustedInstanceData>
@@ -3649,7 +3645,7 @@ WasmFrame::GetInnermostSourcePositionAndFunctionIndex() const {
 int WasmFrame::position() const {
   auto [pos, func_index] = GetInnermostSourcePositionAndFunctionIndex();
   return GetSourcePosition(trusted_instance_data()->module(), func_index,
-                           pos.ScriptOffset(), at_to_number_conversion());
+                           pos.ScriptOffset());
 }
 
 int WasmFrame::GetInnermostFunctionIndex() const {
@@ -3676,7 +3672,6 @@ FrameSummaries WasmFrame::Summarize(AllowAllocation allow_allocation) const {
                                                 isolate()};
   // Push regular non-inlined summary.
   SourcePosition pos = code->GetSourcePositionBefore(offset);
-  bool at_conversion = at_to_number_conversion();
   bool child_was_tail_call = false;
   // Add summaries for each inlined function at the current location.
   while (pos.isInlined()) {
@@ -3688,60 +3683,23 @@ FrameSummaries WasmFrame::Summarize(AllowAllocation allow_allocation) const {
         code->GetInliningPosition(pos.InliningId());
     if (!child_was_tail_call) {
       FrameSummary::WasmFrameSummary summary(isolate(), instance_data, code,
-                                             pos.ScriptOffset(), func_index,
-                                             at_conversion);
+                                             pos.ScriptOffset(), func_index);
       summaries.frames.push_back(summary);
     }
     pos = caller_pos;
-    at_conversion = false;
     child_was_tail_call = was_tail_call;
   }
 
   if (!child_was_tail_call) {
     int func_index = code->index();
     FrameSummary::WasmFrameSummary summary(isolate(), instance_data, code,
-                                           pos.ScriptOffset(), func_index,
-                                           at_conversion);
+                                           pos.ScriptOffset(), func_index);
     summaries.frames.push_back(summary);
   }
 
   // The caller has to be on top.
   std::reverse(summaries.frames.begin(), summaries.frames.end());
   return summaries;
-}
-
-bool WasmFrame::at_to_number_conversion() const {
-  if (callee_pc() == kNullAddress) return false;
-  // Check whether our callee is a WASM_TO_JS frame, and this frame is at the
-  // ToNumber conversion call.
-  wasm::WasmCode* wasm_code =
-      wasm::GetWasmCodeManager()->LookupCode(isolate(), callee_pc());
-
-  if (wasm_code) {
-    if (wasm_code->kind() != wasm::WasmCode::kWasmToJsWrapper) return false;
-    int offset = static_cast<int>(callee_pc() - wasm_code->instruction_start());
-    int pos = wasm_code->GetSourceOffsetBefore(offset);
-    // The imported call has position 0, ToNumber has position 1.
-    // If there is no source position available, this is also not a ToNumber
-    // call.
-    DCHECK(pos == wasm::kNoCodePosition || pos == 0 || pos == 1);
-    return pos == 1;
-  }
-
-  if (!IsWasmToJsWrapperCSA(callee_pc())) {
-    return false;
-  }
-
-  // The generic wasm-to-js wrapper maintains a slot on the stack to indicate
-  // its state. Initially this slot contains a pointer to the signature, so that
-  // incoming parameters can be scanned. After all parameters have been
-  // processed, this slot is reset to nullptr. After returning from JavaScript,
-  // -1 is stored in the slot to indicate that any call from now on is a
-  // ToNumber conversion.
-  Address maybe_sig =
-      Memory<Address>(callee_fp() + WasmToJSWrapperConstants::kSignatureOffset);
-
-  return static_cast<intptr_t>(maybe_sig) == -1;
 }
 
 int WasmFrame::LookupExceptionHandlerInTable() {

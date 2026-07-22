@@ -1,7 +1,5 @@
 include_rules = [
   "+src",
-  "-src/asmjs",
-  "+src/asmjs/asm-js.h",
   "-src/baseline",
   "+src/baseline/baseline.h",
   "+src/baseline/baseline-batch-compiler.h",

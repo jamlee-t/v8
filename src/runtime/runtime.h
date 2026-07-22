@@ -133,7 +133,6 @@ constexpr bool CanTriggerGC(T... properties) {
   F(CompileBaseline, 1, 1)                                       \
   F(InstallBaselineCode, 1, 1)                                   \
   F(InstallSFICode, 1, 1)                                        \
-  F(InstantiateAsmJs, 4, 1)                                      \
   F(NotifyDeoptimized, 0, 1)                                     \
   F(ObserveNode, 1, 1)                                           \
   F(ResolvePossiblyDirectEval, 6, 1)                             \
@@ -803,7 +802,6 @@ constexpr bool CanTriggerGC(T... properties) {
   F(GetWasmExceptionValues, 1, 1)                               \
   F(GetWasmRecoveredTrapCount, 0, 1)                            \
   F(HasUnoptimizedWasmToJSWrapper, 1, 1)                        \
-  F(IsAsmWasmCode, 1, 1)                                        \
   F(IsLiftoffFunction, 1, 1)                                    \
   F(IsTurboFanFunction, 1, 1)                                   \
   F(IsUncompiledWasmFunction, 1, 1)                             \

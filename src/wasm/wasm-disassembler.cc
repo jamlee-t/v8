@@ -769,7 +769,7 @@ void OffsetsProvider::CollectOffsets(const WasmModule* module,
   recgroups_.reserve(4);  // We can't know, so this is just a guess.
 
   WasmDetectedFeatures unused_detected_features;
-  ModuleDecoderImpl decoder{WasmEnabledFeatures::All(), wire_bytes, kWasmOrigin,
+  ModuleDecoderImpl decoder{WasmEnabledFeatures::All(), wire_bytes,
                             &unused_detected_features, this};
   constexpr bool kNoVerifyFunctions = false;
   decoder.DecodeModule(kNoVerifyFunctions);
@@ -1088,9 +1088,9 @@ void ModuleDisassembler::PrintModule(Indentation indentation, size_t max_mb) {
     names_->PrintValueType(out_, elem.type);
 
     WasmDetectedFeatures unused_detected_features;
-    ModuleDecoderImpl decoder(
-        WasmEnabledFeatures::All(), wire_bytes_.module_bytes(),
-        ModuleOrigin::kWasmOrigin, &unused_detected_features);
+    ModuleDecoderImpl decoder(WasmEnabledFeatures::All(),
+                              wire_bytes_.module_bytes(),
+                              &unused_detected_features);
     decoder.consume_bytes(elem.elements_wire_bytes_offset);
     for (size_t j = 0; j < elem.element_count; j++) {
       ConstantExpression entry = decoder.consume_element_segment_entry(

@@ -71,8 +71,6 @@ DecodeResult ValidateFunctionBody(Zone* zone, WasmEnabledFeatures enabled,
                                   const WasmModule* module,
                                   WasmDetectedFeatures* detected,
                                   const FunctionBody& body) {
-  // Asm.js functions should never be validated; they are valid by design.
-  DCHECK_EQ(kWasmOrigin, module->origin);
   WasmFullDecoder<Decoder::FullValidationTag, EmptyInterface> decoder(
       zone, module, enabled, detected, body);
   decoder.Decode();

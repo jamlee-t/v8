@@ -215,10 +215,6 @@ class WasmWrapperTSGraphBuilder : public wasm::WasmGraphBuilderBase<Assembler> {
               CallBuiltin<WasmTaggedToFloat64Descriptor>(
                   Builtin::kWasmTaggedToFloat64, Operator::kNoProperties, value,
                   context));
-          // The source position here is needed for asm.js, see the comment on
-          // the source position of the call to JavaScript in the wasm-to-js
-          // wrapper.
-          __ output_graph().source_positions()[result] = SourcePosition(1);
         }
       }
     }
@@ -251,10 +247,6 @@ class WasmWrapperTSGraphBuilder : public wasm::WasmGraphBuilderBase<Assembler> {
           result = CallBuiltin<WasmTaggedToFloat64Descriptor>(
               Builtin::kWasmTaggedToFloat64, Operator::kNoProperties, value,
               context);
-          // The source position here is needed for asm.js, see the comment on
-          // the source position of the call to JavaScript in the wasm-to-js
-          // wrapper.
-          __ output_graph().source_positions()[result] = SourcePosition(1);
         }
       }
     }
@@ -287,10 +279,6 @@ class WasmWrapperTSGraphBuilder : public wasm::WasmGraphBuilderBase<Assembler> {
       result = CallBuiltin<WasmTaggedNonSmiToInt32Descriptor>(
           Builtin::kWasmTaggedNonSmiToInt32, Operator::kNoProperties, value,
           context);
-      // The source position here is needed for asm.js, see the comment on
-      // the source position of the call to JavaScript in the wasm-to-js
-      // wrapper.
-      __ output_graph().source_positions()[result] = SourcePosition(1);
     }
     return result;
   }

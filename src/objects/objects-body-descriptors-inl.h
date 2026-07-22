@@ -1421,20 +1421,7 @@ class WasmImportData::BodyDescriptor final : public BodyDescriptorBase {
   }
 };
 
-class AsmWasmData::BodyDescriptor final : public BodyDescriptorBase {
- public:
-  template <typename ObjectVisitor>
-  static inline void IterateBody(Tagged<Map> map, Tagged<HeapObject> obj,
-                                 int object_size, ObjectVisitor* v) {
-    IterateSelfIndirectPointer(obj, kAsmWasmDataIndirectPointerTag, v);
-    IterateProtectedPointer(obj, offsetof(AsmWasmData, managed_native_module_),
-                            v);
-  }
 
-  static inline int SizeOf(Tagged<Map> map, Tagged<HeapObject> object) {
-    return sizeof(AsmWasmData);
-  }
-};
 
 class WasmInternalFunction::BodyDescriptor final : public BodyDescriptorBase {
  public:

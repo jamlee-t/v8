@@ -1058,8 +1058,6 @@ DEFINE_NEG_IMPLICATION(disable_optimizing_compilers,
 DEFINE_IMPLICATION(disable_optimizing_compilers, liftoff)
 DEFINE_NEG_IMPLICATION(disable_optimizing_compilers, wasm_tier_up)
 DEFINE_NEG_IMPLICATION(disable_optimizing_compilers, wasm_dynamic_tiering)
-// Disable translation of asm.js to Wasm.
-DEFINE_NEG_IMPLICATION(disable_optimizing_compilers, validate_asm)
 #endif  // V8_ENABLE_WEBASSEMBLY
 // Field type tracking is only used by TurboFan, so can be disabled.
 DEFINE_NEG_IMPLICATION(disable_optimizing_compilers, track_field_types)
@@ -2101,28 +2099,11 @@ DEFINE_DEVELOPER_FLAG(
 DEFINE_ALIAS_BOOL_WITH_COMMENT(experimental_wasm_pgo_from_file,
                                wasm_pgo_from_file, TEMPORARY_WASM_ALIAS_COMMENT)
 
-DEFINE_BOOL(validate_asm, false,
-            "validate asm.js modules and translate them to Wasm (deprecated)")
-// Directly interpret asm.js code as regular JavaScript code.
-// asm.js validation is disabled since it triggers wasm code generation.
-DEFINE_NEG_IMPLICATION(jitless, validate_asm)
-
 #if V8_ENABLE_DRUMBRAKE
 // Wasm is put into interpreter-only mode. We repeat flag implications down
 // here to ensure they're applied correctly by setting the --jitless flag.
-DEFINE_NEG_IMPLICATION(jitless, asm_wasm_lazy_compilation)
 DEFINE_NEG_IMPLICATION(jitless, wasm_lazy_compilation)
 #endif  // V8_ENABLE_DRUMBRAKE
-
-DEFINE_DEVELOPER_FLAG(
-    suppress_asm_messages,
-    "don't emit asm.js related messages (for golden file testing)")
-DEFINE_DEVELOPER_FLAG(trace_asm_time, "print asm.js timing info to the console")
-DEFINE_DEVELOPER_FLAG(trace_asm_scanner,
-                      "print tokens encountered by asm.js scanner")
-DEFINE_DEVELOPER_FLAG(trace_asm_parser,
-                      "verbose logging of asm.js parse failures")
-DEFINE_BOOL(stress_validate_asm, false, "try to validate everything as asm.js")
 
 DEFINE_DEBUG_BOOL(dump_wasm_module, false, "dump wasm module bytes")
 DEFINE_STRING(dump_wasm_module_path, nullptr,
@@ -2278,9 +2259,6 @@ DEFINE_DEVELOPER_FLAG(print_wasm_code, "print WebAssembly code")
 DEFINE_INT(print_wasm_code_function_index, -1,
            "print WebAssembly code for function at index")
 DEFINE_DEVELOPER_FLAG(print_wasm_stub_code, "print WebAssembly stub code")
-DEFINE_BOOL(asm_wasm_lazy_compilation, true,
-            "enable lazy compilation for asm.js translated to wasm (see "
-            "--validate-asm)")
 DEFINE_BOOL(wasm_lazy_compilation, true,
             "enable lazy compilation for all wasm modules")
 DEFINE_DEBUG_BOOL(trace_wasm_lazy_compilation, false,
@@ -2400,13 +2378,7 @@ DEFINE_BOOL(drumbrake_register_optimization, true,
 DEFINE_BOOL(drumbrake_fuzzing_mode, false,
             "enable drumbrake fuzzer mode (for testing)")
 
-// Directly interpret asm.js code as regular JavaScript code, instead of
-// translating it to Wasm bytecode first and then interpreting that with
-// DrumBrake. (validate_asm=false turns off asm.js to Wasm compilation.)
-DEFINE_NEG_IMPLICATION(wasm_jitless, validate_asm)
-
-// --wasm-jitless resets {asm-,}wasm-lazy-compilation.
-DEFINE_NEG_IMPLICATION(wasm_jitless, asm_wasm_lazy_compilation)
+// --wasm-jitless resets --wasm-lazy-compilation and --wasm-tier-up.
 DEFINE_NEG_IMPLICATION(wasm_jitless, wasm_lazy_compilation)
 DEFINE_NEG_IMPLICATION(wasm_jitless, wasm_tier_up)
 

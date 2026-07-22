@@ -1233,14 +1233,12 @@ class WasmExportedFunction : public JSFunction {
       Isolate* isolate, DirectHandle<WasmTrustedInstanceData> instance_data,
       DirectHandle<WasmFuncRef> func_ref,
       DirectHandle<WasmInternalFunction> internal_function, int arity,
-      DirectHandle<Code> export_wrapper, wasm::ModuleOrigin origin,
-      int func_index, wasm::Promise promise);
+      DirectHandle<Code> export_wrapper, int func_index, wasm::Promise promise);
 
   // Returns the generic wrapper, or a cached compiled wrapper, or
   // a freshly-compiled wrapper.
   static DirectHandle<Code> GetWrapper(Isolate* isolate,
-                                       const wasm::CanonicalSig* sig,
-                                       wasm::ModuleOrigin origin);
+                                       const wasm::CanonicalSig* sig);
 
   // Return a null-terminated string with the debug name in the form
   // 'js-to-wasm:<sig>'.
@@ -1671,38 +1669,6 @@ V8_OBJECT class WasmExceptionTag : public Struct {
   friend class TorqueGeneratedWasmExceptionTagAsserts;
 
   TaggedMember<Smi> index_;
-} V8_OBJECT_END;
-
-// Data annotated to the asm.js Module function. Used for later instantiation of
-// that function.
-V8_OBJECT class AsmWasmData : public ExposedTrustedObject {
- public:
-  static Handle<AsmWasmData> New(
-      Isolate* isolate, std::shared_ptr<wasm::NativeModule> native_module,
-      uint64_t uses_bitset);
-
-  inline Tagged<TrustedManaged<wasm::NativeModule>> managed_native_module()
-      const;
-  inline void set_managed_native_module(
-      Tagged<TrustedManaged<wasm::NativeModule>> value,
-      WriteBarrierMode mode = UPDATE_WRITE_BARRIER);
-  inline bool has_managed_native_module() const;
-  inline void clear_managed_native_module();
-
-  inline uint64_t uses_bitset() const;
-  inline void set_uses_bitset(uint64_t value);
-
-  DECL_PRINTER(AsmWasmData)
-  DECL_VERIFIER(AsmWasmData)
-
-  class BodyDescriptor;
-
- private:
-  friend class TorqueGeneratedAsmWasmDataAsserts;
-
-  ProtectedTaggedMember<TrustedManaged<wasm::NativeModule>>
-      managed_native_module_;
-  UnalignedValueMember<uint64_t> uses_bitset_;
 } V8_OBJECT_END;
 
 V8_OBJECT class WasmTypeInfo : public HeapObject {

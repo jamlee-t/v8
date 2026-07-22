@@ -9438,24 +9438,6 @@ bool WasmBytecodeGenerator::HasSideEffects(WasmOpcode opcode) {
     case kExprNopForTestingUnsupportedInLiftoff:
     case kExprTryTable:
     case kExprThrowRef:
-    case kExprF64Acos:
-    case kExprF64Asin:
-    case kExprF64Atan:
-    case kExprF64Atan2:
-    case kExprF64Cos:
-    case kExprF64Sin:
-    case kExprF64Tan:
-    case kExprF64Exp:
-    case kExprF64Log:
-    case kExprF64Pow:  // 0xdc - 0xe6
-    case kExprI32AsmjsDivS:
-    case kExprI32AsmjsDivU:
-    case kExprI32AsmjsRemS:
-    case kExprI32AsmjsRemU:
-    case kExprI32AsmjsSConvertF32:
-    case kExprI32AsmjsUConvertF32:
-    case kExprI32AsmjsSConvertF64:
-    case kExprI32AsmjsUConvertF64:  // 0xe7 - 0xfa
     case kExprRefCastNop:
 
     // StringRef

@@ -429,9 +429,6 @@ class V8_EXPORT_PRIVATE Scope : public NON_EXPORTED_BASE(ZoneObject) {
 
 #if V8_ENABLE_WEBASSEMBLY
   bool IsAsmModule() const;
-  // Returns true if this scope or any inner scopes that might be eagerly
-  // compiled are asm modules.
-  bool ContainsAsmModule() const;
 #endif  // V8_ENABLE_WEBASSEMBLY
 
   bool is_hoisted_in_context() const {

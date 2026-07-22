@@ -2703,7 +2703,7 @@ void NativeModule::SampleCodeSize(Counters* counters) const {
   // absolute and relative. Code GC does not happen on asm.js
   // modules, and small modules will never trigger GC anyway.
   size_t generated_size = code_allocator_.generated_code_size();
-  if (generated_size >= 2 * MB && module()->origin == kWasmOrigin) {
+  if (generated_size >= 2 * MB) {
     size_t freed_size = code_allocator_.freed_code_size();
     DCHECK_LE(freed_size, generated_size);
     int freed_percent = static_cast<int>(100 * freed_size / generated_size);
@@ -2825,9 +2825,6 @@ std::vector<UnpublishedWasmCode> NativeModule::AddCompiledCode(
 }
 
 void NativeModule::SetDebugState(DebugState new_debug_state) {
-  // Do not tier down asm.js (just never change the tiering state).
-  if (module()->origin != kWasmOrigin) return;
-
   base::RecursiveMutexGuard lock(&allocation_mutex_);
   debug_state_ = new_debug_state;
 }

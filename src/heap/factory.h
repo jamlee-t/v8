@@ -883,9 +883,6 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
       const wasm::CanonicalSig* sig, SharedFlag shared);
   DirectHandle<WasmImportData> NewWasmImportData(
       DirectHandle<WasmImportData> ref, SharedFlag shared);
-  Handle<AsmWasmData> NewAsmWasmData(
-      DirectHandle<TrustedManaged<wasm::NativeModule>> managed_native_module,
-      uint64_t uses_bitset);
 
   DirectHandle<WasmFastApiCallData> NewWasmFastApiCallData(
       DirectHandle<HeapObject> signature, DirectHandle<Object> callback_data);

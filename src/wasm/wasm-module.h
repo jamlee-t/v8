@@ -32,7 +32,6 @@ namespace v8::internal::wasm {
 
 using WasmName = base::Vector<const char>;
 
-struct AsmJsOffsets;
 class ErrorThrower;
 #if V8_ENABLE_DRUMBRAKE
 class WasmInterpreterRuntime;
@@ -123,12 +122,6 @@ struct WasmTag {
   ModuleTypeIndex sig_index;
 };
 
-enum ModuleOrigin : uint8_t {
-  kWasmOrigin,
-  kAsmJsSloppyOrigin,
-  kAsmJsStrictOrigin
-};
-
 enum BoundsCheckStrategy : int8_t {
   // Emit trapping instructions, use the trap handler for OOB detection.
   kTrapHandler,
@@ -173,8 +166,7 @@ struct WasmMemory {
   }
 };
 
-V8_EXPORT void UpdateComputedInformation(WasmMemory* memory,
-                                         ModuleOrigin origin);
+V8_EXPORT void UpdateComputedInformation(WasmMemory* memory);
 
 // Static representation of a wasm literal stringref.
 struct WasmStringRefLiteral {
@@ -281,9 +273,6 @@ struct WasmExport {
   uint32_t index = 0;         // index into the respective space.
 };
 
-#define SELECT_WASM_COUNTER(counters, origin, prefix, suffix)     \
-  ((origin) == kWasmOrigin ? (counters)->prefix##_wasm_##suffix() \
-                           : (counters)->prefix##_asm_##suffix())
 
 // Uses a map as backing storage when sparsely, or a vector when densely
 // populated. Requires {Value} to implement `bool is_set()` to identify
@@ -381,34 +370,6 @@ class V8_EXPORT_PRIVATE LazilyGeneratedNames {
   mutable base::Mutex mutex_;
   bool has_functions_{false};
   NameMap function_names_;
-};
-
-class V8_EXPORT_PRIVATE AsmJsOffsetInformation {
- public:
-  explicit AsmJsOffsetInformation(base::Vector<const uint8_t> encoded_offsets);
-
-  // Destructor defined in wasm-module.cc, where the definition of
-  // {AsmJsOffsets} is available.
-  ~AsmJsOffsetInformation();
-
-  int GetSourcePosition(int func_index, int byte_offset,
-                        bool is_at_number_conversion);
-
-  std::pair<int, int> GetFunctionOffsets(int func_index);
-
- private:
-  void EnsureDecodedOffsets();
-
-  // The offset information table is decoded lazily, hence needs to be
-  // protected against concurrent accesses.
-  // Exactly one of the two fields below will be set at a time.
-  mutable base::Mutex mutex_;
-
-  // Holds the encoded offset table bytes.
-  base::OwnedVector<const uint8_t> encoded_offsets_;
-
-  // Holds the decoded offset table.
-  std::unique_ptr<AsmJsOffsets> decoded_offsets_;
 };
 
 struct TypeDefinition {
@@ -856,17 +817,12 @@ struct V8_EXPORT_PRIVATE WasmModule {
   // TODO(jkummerow): Rename.
   mutable TypeFeedbackStorage type_feedback;
 
-  const ModuleOrigin origin;
   mutable LazilyGeneratedNames lazily_generated_names;
   std::array<WasmDebugSymbols, WasmDebugSymbols::kNumTypes> debug_symbols{};
   WireBytesRef build_id;
 
-  // Asm.js source position information. Only available for modules compiled
-  // from asm.js.
-  std::unique_ptr<AsmJsOffsetInformation> asm_js_offset_information;
-
   // ================ Constructors =============================================
-  explicit WasmModule(ModuleOrigin = kWasmOrigin);
+  WasmModule();
   WasmModule(const WasmModule&) = delete;
   WasmModule& operator=(const WasmModule&) = delete;
 
@@ -1037,10 +993,6 @@ struct V8_EXPORT_PRIVATE WasmModule {
   size_t EstimateCurrentMemoryConsumption() const;  // With tracing.
 };
 
-inline bool is_asmjs_module(const WasmModule* module) {
-  return module->origin != kWasmOrigin;
-}
-
 // Return the byte offset of the function identified by the given index.
 // The offset will be relative to the start of the module bytes.
 // Returns -1 if the function index is invalid.
@@ -1146,10 +1098,9 @@ DirectHandle<JSArray> GetCustomSections(Isolate* isolate,
                                         DirectHandle<String> name,
                                         ErrorThrower* thrower);
 
-// Get the source position from a given function index and byte offset,
-// for either asm.js or pure Wasm modules.
+// Get the source position from a given function index and byte offset.
 int GetSourcePosition(const WasmModule*, uint32_t func_index,
-                      uint32_t byte_offset, bool is_at_number_conversion);
+                      uint32_t byte_offset);
 
 // Translate function index to the index relative to the first declared (i.e.
 // non-imported) function.

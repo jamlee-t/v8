@@ -9,7 +9,6 @@
 
 #include "include/v8-script.h"
 #include "src/api/api-inl.h"
-#include "src/asmjs/asm-js.h"
 #include "src/ast/scopes.h"
 #include "src/base/fpu.h"
 #include "src/base/logging.h"
@@ -422,18 +421,9 @@ void LogUnoptimizedCompilation(Isolate* isolate,
                                LogEventListener::CodeTag code_type,
                                base::TimeDelta time_taken_to_execute,
                                base::TimeDelta time_taken_to_finalize) {
-  DirectHandle<AbstractCode> abstract_code;
-  if (shared->HasBytecodeArray()) {
-    abstract_code = direct_handle(
-        Cast<AbstractCode>(shared->GetBytecodeArray(isolate)), isolate);
-  } else {
-#if V8_ENABLE_WEBASSEMBLY
-    DCHECK(shared->HasAsmWasmData());
-    abstract_code = Cast<AbstractCode>(BUILTIN_CODE(isolate, InstantiateAsmJs));
-#else
-    UNREACHABLE();
-#endif  // V8_ENABLE_WEBASSEMBLY
-  }
+  DCHECK(shared->HasBytecodeArray());
+  DirectHandle<AbstractCode> abstract_code(
+      Cast<AbstractCode>(shared->GetBytecodeArray(isolate)), isolate);
 
   double time_taken_ms = time_taken_to_execute.InMillisecondsF() +
                          time_taken_to_finalize.InMillisecondsF();
@@ -657,23 +647,6 @@ uint64_t TurbofanCompilationJob::trace_id() const {
 
 namespace {
 
-#if V8_ENABLE_WEBASSEMBLY
-bool UseAsmWasm(FunctionLiteral* literal, bool asm_wasm_broken) {
-  // Check whether asm.js validation is enabled.
-  if (!v8_flags.validate_asm) return false;
-
-  // Modules that have validated successfully, but were subsequently broken by
-  // invalid module instantiation attempts are off limit forever.
-  if (asm_wasm_broken) return false;
-
-  // In stress mode we want to run the validator on everything.
-  if (v8_flags.stress_validate_asm) return true;
-
-  // In general, we respect the "use asm" directive.
-  return literal->scope()->IsAsmModule();
-}
-#endif
-
 }  // namespace
 
 void Compiler::InstallInterpreterTrampolineCopy(
@@ -721,37 +694,16 @@ template <typename IsolateT>
 void InstallUnoptimizedCode(UnoptimizedCompilationInfo* compilation_info,
                             DirectHandle<SharedFunctionInfo> shared_info,
                             IsolateT* isolate) {
-  if (compilation_info->has_bytecode_array()) {
-    DCHECK(!shared_info->HasBytecodeArray());  // Only compiled once.
-    DCHECK(!compilation_info->has_asm_wasm_data());
-    DCHECK(!shared_info->HasFeedbackMetadata());
+  DCHECK(compilation_info->has_bytecode_array());
+  DCHECK(!shared_info->HasBytecodeArray());  // Only compiled once.
+  DCHECK(!shared_info->HasFeedbackMetadata());
 
-#if V8_ENABLE_WEBASSEMBLY
-    // If the function failed asm-wasm compilation, mark asm_wasm as broken
-    // to ensure we don't try to compile as asm-wasm.
-    if (compilation_info->literal()->scope()->IsAsmModule()) {
-      shared_info->set_is_asm_wasm_broken(true);
-    }
-#endif  // V8_ENABLE_WEBASSEMBLY
+  DirectHandle<FeedbackMetadata> feedback_metadata =
+      FeedbackMetadata::New(isolate, compilation_info->feedback_vector_spec());
+  shared_info->set_feedback_metadata(*feedback_metadata, kReleaseStore);
 
-    DirectHandle<FeedbackMetadata> feedback_metadata = FeedbackMetadata::New(
-        isolate, compilation_info->feedback_vector_spec());
-    shared_info->set_feedback_metadata(*feedback_metadata, kReleaseStore);
-
-    shared_info->set_age(0);
-    shared_info->set_bytecode_array(*compilation_info->bytecode_array());
-  } else {
-#if V8_ENABLE_WEBASSEMBLY
-    DCHECK(compilation_info->has_asm_wasm_data());
-    // We should only have asm/wasm data when finalizing on the main thread.
-    DCHECK((std::is_same_v<IsolateT, Isolate>));
-    shared_info->set_asm_wasm_data(*compilation_info->asm_wasm_data());
-    shared_info->set_feedback_metadata(
-        ReadOnlyRoots(isolate).empty_feedback_metadata(), kReleaseStore);
-#else
-    UNREACHABLE();
-#endif  // V8_ENABLE_WEBASSEMBLY
-  }
+  shared_info->set_age(0);
+  shared_info->set_bytecode_array(*compilation_info->bytecode_array());
 }
 
 template <typename IsolateT>
@@ -830,20 +782,6 @@ ExecuteSingleUnoptimizedCompilationJob(
     AccountingAllocator* allocator,
     std::vector<FunctionLiteral*>* eager_inner_literals,
     LocalIsolate* local_isolate) {
-#if V8_ENABLE_WEBASSEMBLY
-  if (UseAsmWasm(literal, parse_info->flags().is_asm_wasm_broken())) {
-    std::unique_ptr<UnoptimizedCompilationJob> asm_job(
-        AsmJs::NewCompilationJob(parse_info, literal, allocator));
-    if (asm_job->ExecuteJob() == CompilationJob::SUCCEEDED) {
-      return asm_job;
-    }
-    // asm.js validation failed, fall through to standard unoptimized compile.
-    // Note: we rely on the fact that AsmJs jobs have done all validation in the
-    // PrepareJob and ExecuteJob phases and can't fail in FinalizeJob with
-    // with a validation error or another error that could be solve by falling
-    // through to standard unoptimized compile.
-  }
-#endif
   std::unique_ptr<UnoptimizedCompilationJob> job(
       interpreter::Interpreter::NewCompilationJob(
           parse_info, literal, script, allocator, eager_inner_literals,
@@ -2728,7 +2666,7 @@ MaybeHandle<SharedFunctionInfo> BackgroundCompileTask::FinalizeScript(
   Handle<Script> script = script_;
 
   // We might not have been able to finalize all jobs on the background
-  // thread (e.g. asm.js jobs), so finalize those deferred jobs now.
+  // thread, so finalize those deferred jobs now.
   if (FinalizeDeferredUnoptimizedCompilationJobs(
           isolate, script, &jobs_to_retry_finalization_on_main_thread_,
           compile_state_.pending_error_handler(),
@@ -2752,13 +2690,7 @@ MaybeHandle<SharedFunctionInfo> BackgroundCompileTask::FinalizeScript(
       // compilation (HasUncompiledData). Function here are all user defined
       // functions and should not have a builtin_id.
       DCHECK(!shared->HasBuiltinId());
-      DCHECK(shared->HasBytecodeArray() ||
-             shared->HasUncompiledData(isolate)
-#if V8_ENABLE_WEBASSEMBLY
-             // compiled data for 'use asm' functions
-             || shared->HasAsmWasmData()
-#endif
-      );
+      DCHECK(shared->HasBytecodeArray() || shared->HasUncompiledData(isolate));
     }
   }
 #endif
@@ -2819,7 +2751,7 @@ bool BackgroundCompileTask::FinalizeFunction(
       input_shared_info_.ToHandleChecked();
 
   // We might not have been able to finalize all jobs on the background
-  // thread (e.g. asm.js jobs), so finalize those deferred jobs now.
+  // thread, so finalize those deferred jobs now.
   if (FinalizeDeferredUnoptimizedCompilationJobs(
           isolate, script_, &jobs_to_retry_finalization_on_main_thread_,
           compile_state_.pending_error_handler(),
@@ -4673,7 +4605,7 @@ void Compiler::PostInstantiation(Isolate* isolate,
                                  IsCompiledScope* is_compiled_scope) {
   DirectHandle<SharedFunctionInfo> shared(function->shared(), isolate);
 
-  // If code is compiled to bytecode (i.e., isn't asm.js), then allocate a
+  // If code is compiled to bytecode, then allocate a
   // feedback and check for optimized code.
   if (is_compiled_scope->is_compiled() && shared->HasBytecodeArray()) {
     // Don't reset budget if there is a closure feedback cell array already. We
