@@ -1630,7 +1630,19 @@ void VisitSpillSlot(Isolate* isolate, RootVisitor* v,
   // to use CodeTs instead of InstructionStream objects.
   Address value = *spill_slot.location();
   Tagged_t compressed_value = static_cast<Tagged_t>(value);
-  if (!HAS_SMI_TAG(compressed_value) && value <= 0xFFFF'FFFF) {
+#if V8_TARGET_ARCH_LOONG64
+  // On loong64, compressed pointers should be sign-extended. Consequently,
+  // the upper 32 bits may consist entirely of 1s (e.g., 0xFFFFFFFF8XXXXXXX).
+  // Therefore, `is_int32()` is used here to correctly identify these
+  // sign-extended compressed pointers.
+  // Retain the validation logic to handle potentially zero-extended
+  // compressed values.
+  bool is_compressed = is_int32(value) || (value <= 0xFFFF'FFFF);
+#else
+  bool is_compressed = (value <= 0xFFFF'FFFF);
+#endif
+
+  if (!HAS_SMI_TAG(compressed_value) && is_compressed) {
     Address decompressed =
         V8HeapCompressionScheme::DecompressTagged(compressed_value);
     FullObjectSlot local_slot(&decompressed);
