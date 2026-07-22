@@ -969,6 +969,12 @@ class KnownMapsMerger {
       if (intersect_set_.is_empty()) {
         // TODO(marja): Refactor to return false here explicitly.
         node_type_ = EmptyNodeType();
+      } else if (RequestedMapsAdmitSmis()) {
+        // Smis pass a map check against the HeapNumber map, so the check does
+        // not prove that the object is a heap object. InsertMap accounts for
+        // this, but the HeapNumber map might have been filtered out above (or
+        // might not be a known possible map at all), so re-apply it here.
+        node_type_ = maglev::UnionType(node_type_, NodeType::kSmi);
       }
     } else {
       // A missing entry here means the universal set, i.e., we don't know
@@ -1042,6 +1048,12 @@ class KnownMapsMerger {
   NodeType node_type_ = EmptyNodeType();
 
   Zone* zone() const { return zone_; }
+
+  bool RequestedMapsAdmitSmis() const {
+    return std::any_of(
+        requested_maps_.begin(), requested_maps_.end(),
+        [](compiler::MapRef map) { return map.IsHeapNumberMap(); });
+  }
 
   void InsertMap(compiler::MapRef map) {
     if (map.is_migration_target()) {

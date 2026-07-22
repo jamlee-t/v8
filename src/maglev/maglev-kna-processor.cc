@@ -25,6 +25,7 @@ ProcessResult RecomputeKnownNodeAspectsProcessor::OnContradiction() {
     // re-establishing recorded facts on loads and inlined-call-result
     // wrappers.
     CHECK(current_node()->opcode() == Opcode::kAssumeType ||
+          current_node()->opcode() == Opcode::kAssumeMap ||
           current_node()->opcode() == Opcode::kLoadTaggedField ||
           current_node()->opcode() == Opcode::kReturnedValue ||
           current_node()->opcode() == Opcode::kIdentity);
@@ -43,18 +44,19 @@ ProcessResult RecomputeKnownNodeAspectsProcessor::RecordType(ValueNode* node,
   return ProcessResult::kContinue;
 }
 
-ProcessResult RecomputeKnownNodeAspectsProcessor::ProcessNode(AssumeMap* node) {
-  auto merger = KnownMapsMerger<compiler::ZoneRefSet<Map>>(broker(), zone(),
-                                                           node->maps());
-  merger.IntersectWithKnownNodeAspects(node->ObjectInput().node(),
-                                       known_node_aspects());
-  if (!merger.UpdateKnownNodeAspects(node->ObjectInput().node(),
-                                     known_node_aspects())) {
-    ReduceResult result = reducer_.BuildAbort(AbortReason::kUnreachable);
-    CHECK(result.IsDoneWithAbort());
-    return ProcessResult::kTruncateBlock;
+ProcessResult RecomputeKnownNodeAspectsProcessor::RecordMaps(
+    ValueNode* object, const compiler::ZoneRefSet<Map>& maps) {
+  auto merger =
+      KnownMapsMerger<compiler::ZoneRefSet<Map>>(broker(), zone(), maps);
+  merger.IntersectWithKnownNodeAspects(object, known_node_aspects());
+  if (!merger.UpdateKnownNodeAspects(object, known_node_aspects())) {
+    return OnContradiction();
   }
   return ProcessResult::kContinue;
+}
+
+ProcessResult RecomputeKnownNodeAspectsProcessor::ProcessNode(AssumeMap* node) {
+  return RecordMaps(node->ObjectInput().node(), node->maps());
 }
 
 #define DEFINE_PROCESS_SAFE_CONV(Node, Alt, Type)                              \

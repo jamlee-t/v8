@@ -265,6 +265,8 @@ class RecomputeKnownNodeAspectsProcessor {
   }
 
   V8_NODISCARD ProcessResult RecordType(ValueNode* node, NodeType type);
+  V8_NODISCARD ProcessResult RecordMaps(ValueNode* object,
+                                        const compiler::ZoneRefSet<Map>& maps);
   V8_NODISCARD ProcessResult OnContradiction();
 
   void Merge(BasicBlock* block) {
@@ -366,18 +368,7 @@ class RecomputeKnownNodeAspectsProcessor {
     // Re-establish map knowledge implied by an emitted check, so that later
     // phases re-running check building (e.g. the graph optimizer) do not
     // pessimize checks that the graph builder could fold.
-    NodeInfo* info = GetOrCreateInfoFor(node->ReceiverInput().node());
-    NodeType type = NodeType::kNone;
-    bool any_map_is_unstable = false;
-    for (compiler::MapRef map : node->maps()) {
-      type = maglev::UnionType(type, StaticTypeForMap(map, broker()));
-      if (!map.is_stable()) any_map_is_unstable = true;
-    }
-    if (!info->SetPossibleMaps(node->maps(), any_map_is_unstable, type,
-                               broker(), known_node_aspects())) {
-      return OnContradiction();
-    }
-    return ProcessResult::kContinue;
+    return RecordMaps(node->ReceiverInput().node(), node->maps());
   }
 
   ProcessResult ProcessNode(LoadTaggedField* node) {
