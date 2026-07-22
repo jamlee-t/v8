@@ -4061,6 +4061,46 @@ ReduceResult MaglevReducer<BaseT>::BuildInt32Min(ValueNode* a, ValueNode* b) {
 }
 
 template <typename BaseT>
+ReduceResult MaglevReducer<BaseT>::BuildInt32Sign(ValueNode* value) {
+  return Select(
+      [&](auto& branch) -> BranchResult {
+        return BuildBranchIfInt32Compare(branch, Operation::kLessThan, value,
+                                         GetInt32Constant(0));
+      },
+      [&]() -> ReduceResult { return GetInt32Constant(-1); },
+      [&]() -> ReduceResult {
+        return Select(
+            [&](auto& branch) -> BranchResult {
+              return BuildBranchIfInt32Compare(branch, Operation::kLessThan,
+                                               GetInt32Constant(0), value);
+            },
+            [&]() -> ReduceResult { return GetInt32Constant(1); },
+            [&]() -> ReduceResult { return GetInt32Constant(0); });
+      });
+}
+
+template <typename BaseT>
+ReduceResult MaglevReducer<BaseT>::BuildFloat64Sign(ValueNode* value) {
+  return Select(
+      [&](auto& branch) -> BranchResult {
+        return branch.template Build<BranchIfFloat64Compare>(
+            {value, GetFloat64Constant(0.0)}, Operation::kLessThan);
+      },
+      [&]() -> ReduceResult { return GetFloat64Constant(-1.0); },
+      [&]() -> ReduceResult {
+        return Select(
+            [&](auto& branch) -> BranchResult {
+              return branch.template Build<BranchIfFloat64Compare>(
+                  {GetFloat64Constant(0.0), value}, Operation::kLessThan);
+            },
+            [&]() -> ReduceResult { return GetFloat64Constant(1.0); },
+            // Returning the input rather than zero is what makes NaN, +0 and -0
+            // pass through unchanged.
+            [&]() -> ReduceResult { return value; });
+      });
+}
+
+template <typename BaseT>
 MaybeReduceResult MaglevReducer<BaseT>::TryReduceMathSqrt(
     compiler::JSFunctionRef target, CallArguments& args) {
   if (args.count() < 1) {
@@ -4202,6 +4242,56 @@ MaybeReduceResult MaglevReducer<BaseT>::TryReduceMathAbs(
       UNREACHABLE();
   }
   return {};
+}
+
+template <typename BaseT>
+MaybeReduceResult MaglevReducer<BaseT>::TryReduceMathSign(
+    compiler::JSFunctionRef target, CallArguments& args) {
+  if (args.count() == 0) {
+    return GetRootConstant(RootIndex::kNanValue);
+  }
+  ValueNode* arg = args[0];
+
+  if (auto cst = TryGetFloat64OrHoleyFloat64Constant(
+          UseRepresentation::kFloat64, arg,
+          TaggedToFloat64ConversionType::kNumberOrOddball)) {
+    double value = cst.value().get_scalar();
+    // NaN, +0 and -0 are returned unchanged.
+    return GetFloat64Constant(value > 0 ? 1.0 : (value < 0 ? -1.0 : value));
+  }
+
+  if (!CanSpeculateCall() && !CheckType(arg, NodeType::kNumber)) {
+    return {};
+  }
+
+  switch (arg->value_representation()) {
+    case ValueRepresentation::kInt32:
+      return BuildInt32Sign(arg);
+    case ValueRepresentation::kTagged:
+      if (CheckType(arg, NodeType::kSmi)) {
+        ValueNode* int32_value;
+        GET_VALUE_OR_ABORT(int32_value, GetInt32(arg));
+        return BuildInt32Sign(int32_value);
+      }
+      break;
+    case ValueRepresentation::kHoleyFloat64:
+      arg = AddNewNodeNoInputConversion<UnsafeHoleyFloat64ToFloat64>({arg});
+      break;
+    // TODO(victorgomes): Uint32 and IntPtr only need a single comparison
+    // against zero.
+    case ValueRepresentation::kUint32:
+    case ValueRepresentation::kIntPtr:
+    case ValueRepresentation::kFloat64:
+      break;
+    case ValueRepresentation::kRawPtr:
+    case ValueRepresentation::kNone:
+      UNREACHABLE();
+  }
+
+  ValueNode* float64_value;
+  GET_VALUE_OR_ABORT(float64_value,
+                     GetFloat64ForToNumber(arg, NodeType::kNumberOrOddball));
+  return BuildFloat64Sign(float64_value);
 }
 
 template <typename BaseT>

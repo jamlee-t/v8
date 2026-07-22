@@ -1141,6 +1141,7 @@ class MaglevReducer {
   V(MathMax)                                   \
   V(MathMin)                                   \
   V(MathRound)                                 \
+  V(MathSign)                                  \
   V(MathSqrt)                                  \
   V(MathTrunc)                                 \
   V(ObjectPrototypeIsPrototypeOf)              \
@@ -1207,6 +1208,8 @@ class MaglevReducer {
 
   ReduceResult BuildInt32Max(ValueNode* a, ValueNode* b);
   ReduceResult BuildInt32Min(ValueNode* a, ValueNode* b);
+  ReduceResult BuildInt32Sign(ValueNode* value);
+  ReduceResult BuildFloat64Sign(ValueNode* value);
 
   class BranchBuilder : public BranchBuilderBase<BranchBuilder> {
    public:
