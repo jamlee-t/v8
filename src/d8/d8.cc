@@ -5864,6 +5864,8 @@ class InspectorFrontend final : public v8_inspector::V8Inspector::Channel {
   void Send(const v8_inspector::StringView& string) {
     v8::Isolate::AllowJavascriptExecutionScope allow_script(isolate_);
     v8::HandleScope handle_scope(isolate_);
+    Local<Context> context = context_.Get(isolate_);
+    v8::Context::Scope context_scope(context);
     if (string.length() > size_t{v8::String::kMaxLength}) {
       fprintf(stderr, "Response from inspector exceeds max string length.\n");
       return;
@@ -5882,7 +5884,6 @@ class InspectorFrontend final : public v8_inspector::V8Inspector::Channel {
             .ToLocalChecked();
     Local<String> callback_name = v8::String::NewFromUtf8Literal(
         isolate_, "receive", NewStringType::kInternalized);
-    Local<Context> context = context_.Get(isolate_);
     Local<Value> callback;
     if (!context->Global()->Get(context, callback_name).ToLocal(&callback)) {
       return;
