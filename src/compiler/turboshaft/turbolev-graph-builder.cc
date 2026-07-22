@@ -3174,9 +3174,10 @@ class GraphBuildingNodeProcessor {
     ThrowingScope throwing_scope(this, node);
 
     GET_FRAME_STATE_MAYBE_ABORT(frame_state, node->lazy_deopt_info());
-    SetMap(node, __ HasInPrototypeChain(
-                     Map(node->ValueInput()), node->prototype(), frame_state,
-                     native_context(), ShouldLazyDeoptOnThrow(node)));
+    SetMap(node, __ HasInPrototypeChain(Map(node->ObjectInput()),
+                                        Map(node->PrototypeInput()),
+                                        frame_state, native_context(),
+                                        ShouldLazyDeoptOnThrow(node)));
     return maglev::ProcessResult::kContinue;
   }
 

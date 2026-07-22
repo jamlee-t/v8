@@ -2313,34 +2313,37 @@ MaglevReducer<BaseT>::InferHasInPrototypeChain(
     ValueNode* receiver, compiler::HeapObjectRef prototype) {
   MapInference<MaglevReducer<BaseT>> inference(this, receiver);
   auto possible_maps = inference.TryGetPossibleMaps();
-  // If the map set is not found, then we don't know anything about the map of
-  // the receiver, so bail.
-  if (!possible_maps) {
+  // Since we only consider fresh maps, it is not necessary to emit map checks.
+  bool all_maps_are_fresh = false;
+  ZoneVector<compiler::MapRef> receiver_map_refs(zone());
+  if (possible_maps) {
+    // If the set of possible maps is empty, then there's no possible map for
+    // this receiver, therefore this path is unreachable at runtime. We're
+    // unlikely to ever hit this case, BuildCheckMaps should already
+    // unconditionally deopt, but check it in case another checking operation
+    // fails to statically unconditionally deopt.
+    if (possible_maps->is_empty()) {
+      // TODO(leszeks): Add an unreachable assert here.
+      return kIsNotInPrototypeChain;
+    }
+    all_maps_are_fresh = inference.all_maps_are_fresh();
+    for (compiler::MapRef map : *possible_maps) {
+      receiver_map_refs.push_back(map);
+    }
+  } else if (compiler::OptionalHeapObjectRef constant =
+                 TryGetConstant<HeapObject>(receiver)) {
+    receiver_map_refs.push_back(constant->map(broker()));
+  } else {
+    // We don't know anything about the map of the receiver, so bail.
     return kMayBeInPrototypeChain;
   }
-
-  // If the set of possible maps is empty, then there's no possible map for this
-  // receiver, therefore this path is unreachable at runtime. We're unlikely to
-  // ever hit this case, BuildCheckMaps should already unconditionally deopt,
-  // but check it in case another checking operation fails to statically
-  // unconditionally deopt.
-  if (possible_maps->is_empty()) {
-    // TODO(leszeks): Add an unreachable assert here.
-    return kIsNotInPrototypeChain;
-  }
-
-  // Since we only consider fresh maps, it is not necessary to emit map checks.
-  const bool all_maps_are_fresh = inference.all_maps_are_fresh();
-
-  ZoneVector<compiler::MapRef> receiver_map_refs(zone());
 
   // Try to determine either that all of the {receiver_maps} have the given
   // {prototype} in their chain, or that none do. If we can't tell, return
   // kMayBeInPrototypeChain.
   bool all = true;
   bool none = true;
-  for (compiler::MapRef map : *possible_maps) {
-    receiver_map_refs.push_back(map);
+  for (compiler::MapRef map : receiver_map_refs) {
     if (!all_maps_are_fresh && !map.is_stable()) {
       return kMayBeInPrototypeChain;
     }
@@ -2441,7 +2444,7 @@ MaybeReduceResult MaglevReducer<BaseT>::TryBuildFastOrdinaryHasInstance(
     compiler::HeapObjectRef prototype =
         broker()->dependencies()->DependOnPrototypeProperty(function);
     RETURN_IF_DONE(TryBuildFastHasInPrototypeChain(object, prototype));
-    return AddNewNode<HasInPrototypeChain>({object}, prototype);
+    return AddNewNode<HasInPrototypeChain>({object, GetConstant(prototype)});
   }
 
   return {};
@@ -2640,6 +2643,29 @@ MaybeReduceResult MaglevReducer<BaseT>::TryReduceFunctionPrototypeHasInstance(
   return BuildOrdinaryHasInstance(GetConstant(target.context(broker())),
                                   args[0], maybe_receiver_constant.value(),
                                   nullptr);
+}
+
+template <typename BaseT>
+MaybeReduceResult MaglevReducer<BaseT>::TryReduceObjectPrototypeIsPrototypeOf(
+    compiler::JSFunctionRef target, CallArguments& args) {
+  if (args.receiver_mode() == ConvertReceiverMode::kNullOrUndefined) {
+    return {};
+  }
+  // The receiver must be known to be a JSReceiver, so that the ToObject step
+  // of Object.prototype.isPrototypeOf is a no-op (and cannot throw). The
+  // argument needs no checks: primitive values have null as their prototype,
+  // so the prototype chain walk immediately aborts and yields false.
+  ValueNode* receiver = args.receiver();
+  ValueNode* value =
+      args.count() == 0 ? GetRootConstant(RootIndex::kUndefinedValue) : args[0];
+  if (compiler::OptionalJSReceiverRef receiver_constant =
+          TryGetConstant<JSReceiver>(receiver)) {
+    RETURN_IF_DONE(TryBuildFastHasInPrototypeChain(value, *receiver_constant));
+    return AddNewNode<HasInPrototypeChain>(
+        {value, GetConstant(*receiver_constant)});
+  }
+  if (!CheckType(receiver, NodeType::kJSReceiver)) return {};
+  return AddNewNode<HasInPrototypeChain>({value, receiver});
 }
 
 template <typename BaseT>

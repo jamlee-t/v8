@@ -7985,26 +7985,19 @@ class GetTemplateObject : public FixedInputValueNodeT<1, GetTemplateObject> {
 };
 
 class HasInPrototypeChain
-    : public FixedInputValueNodeT<1, HasInPrototypeChain> {
+    : public FixedInputValueNodeT<2, HasInPrototypeChain> {
  public:
-  explicit HasInPrototypeChain(uint64_t bitfield,
-                               compiler::HeapObjectRef prototype)
-      : Base(bitfield), prototype_(prototype) {}
+  explicit HasInPrototypeChain(uint64_t bitfield) : Base(bitfield) {}
   // The implementation can enter user code in the deferred call (due to
   // proxied getPrototypeOf).
   static constexpr OpProperties kProperties =
       OpProperties::DeferredCall() | OpProperties::CanCallUserCode();
-  DECLARE_UNOP(Tagged)
-
-  compiler::HeapObjectRef prototype() { return prototype_; }
+  DECLARE_INPUTS(Object, Prototype)
+  DECLARE_INPUT_TYPES(Tagged, Tagged)
 
   int MaxCallStackArgs() const;
   void SetValueLocationConstraints();
   void GenerateCode(MaglevAssembler*, const ProcessingState&);
-  void PrintParams(std::ostream&) const;
-
- private:
-  compiler::HeapObjectRef prototype_;
 };
 
 class BuiltinStringFromCharCode

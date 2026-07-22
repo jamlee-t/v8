@@ -4803,14 +4803,16 @@ int HasInPrototypeChain::MaxCallStackArgs() const {
   return 2;
 }
 void HasInPrototypeChain::SetValueLocationConstraints() {
-  UseRegister(ValueInput());
+  UseRegister(ObjectInput());
+  UseRegister(PrototypeInput());
   DefineAsRegister(this);
   set_temporaries_needed(2);
 }
 void HasInPrototypeChain::GenerateCode(MaglevAssembler* masm,
                                        const ProcessingState& state) {
   MaglevAssembler::TemporaryRegisterScope temps(masm);
-  Register object_reg = ToRegister(ValueInput());
+  Register object_reg = ToRegister(ObjectInput());
+  Register prototype_reg = ToRegister(PrototypeInput());
   Register result_reg = ToRegister(result());
 
   Label return_false, return_true;
@@ -4834,9 +4836,10 @@ void HasInPrototypeChain::GenerateCode(MaglevAssembler* masm,
     __ JumpToDeferredIf(
         jump_cond,
         [](MaglevAssembler* masm, RegisterSnapshot snapshot,
-           Register object_reg, Register map, Register instance_type,
-           Register result_reg, HasInPrototypeChain* node,
-           ZoneLabelRef if_objectisdirect, ZoneLabelRef done) {
+           Register object_reg, Register prototype_reg, Register map,
+           Register instance_type, Register result_reg,
+           HasInPrototypeChain* node, ZoneLabelRef if_objectisdirect,
+           ZoneLabelRef done) {
           Label return_runtime;
           // The {object_map} is a special receiver map or a primitive map,
           // check if we need to use the if_objectisspecial path in the runtime.
@@ -4852,7 +4855,7 @@ void HasInPrototypeChain::GenerateCode(MaglevAssembler* masm,
           {
             snapshot.live_registers.clear(result_reg);
             SaveRegisterStateForCall save_register_state(masm, snapshot);
-            __ Push(object_reg, node->prototype().object());
+            __ Push(object_reg, prototype_reg);
             __ Move(kContextRegister, masm->native_context().object());
             __ CallRuntime(Runtime::kHasInPrototypeChain, 2);
             masm->DefineExceptionHandlerPoint(node);
@@ -4862,8 +4865,8 @@ void HasInPrototypeChain::GenerateCode(MaglevAssembler* masm,
           }
           __ Jump(*done);
         },
-        register_snapshot(), object_reg, map, instance_type, result_reg, this,
-        if_objectisdirect, done);
+        register_snapshot(), object_reg, prototype_reg, map, instance_type,
+        result_reg, this, if_objectisdirect, done);
     instance_type = Register::no_reg();
 
     __ bind(*if_objectisdirect);
@@ -4872,7 +4875,7 @@ void HasInPrototypeChain::GenerateCode(MaglevAssembler* masm,
     __ LoadTaggedField(object_prototype, map, offsetof(Map, prototype_));
     __ JumpIfRoot(object_prototype, RootIndex::kNullValue, &return_false,
                   v8_flags.debug_code ? Label::kFar : Label::kNear);
-    __ CompareTaggedAndJumpIf(object_prototype, prototype().object(), kEqual,
+    __ CompareTaggedAndJumpIf(object_prototype, prototype_reg, kEqual,
                               &return_true, Label::kNear);
 
     // Continue with the prototype.
@@ -9095,10 +9098,6 @@ void SetNamedGeneric::PrintParams(std::ostream& os) const {
 
 void DefineNamedOwnGeneric::PrintParams(std::ostream& os) const {
   os << "(" << *name_.object() << ")";
-}
-
-void HasInPrototypeChain::PrintParams(std::ostream& os) const {
-  os << "(" << *prototype_.object() << ")";
 }
 
 void GapMove::PrintParams(std::ostream& os) const {

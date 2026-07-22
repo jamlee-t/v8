@@ -1143,6 +1143,7 @@ class MaglevReducer {
   V(MathRound)                                 \
   V(MathSqrt)                                  \
   V(MathTrunc)                                 \
+  V(ObjectPrototypeIsPrototypeOf)              \
   V(PromisePrototypeThen)                      \
   V(PromiseResolveTrampoline)                  \
   V(RegExpPrototypeTest)                       \

@@ -410,7 +410,7 @@ struct runtime : CallDescriptorBuilder {
     static constexpr auto kFunction = Runtime::kHasInPrototypeChain;
     struct Arguments : ArgumentsBase {
       ARG(V<Object>, object)
-      ARG(V<HeapObject>, prototype)
+      ARG(V<Object>, prototype)
     };
     using returns_t = V<Boolean>;
 
