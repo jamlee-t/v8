@@ -175,7 +175,7 @@ class GraphProcessor {
     process_constants(graph->holey_float64());
     process_constants(graph->heap_number());
     process_constants(graph->trusted_constants());
-    // LINT.ThenChange()
+    // LINT.ThenChange(/src/maglev/maglev-graph-processor.h:maglev_backward_constant_nodes)
 
     for (current_block_index_ = 0; current_block_index_ < graph->num_blocks();
          current_block_index_++) {
@@ -466,6 +466,18 @@ class GraphBackwardProcessor {
     node_processor_.PreProcessGraph(graph);
 
     for (BasicBlock* block : base::Reversed(graph->blocks())) {
+      if (V8_UNLIKELY(block->is_dead())) continue;
+      BlockProcessResult preprocess_result =
+          node_processor_.PreProcessBasicBlock(block);
+      switch (preprocess_result) {
+        [[likely]] case BlockProcessResult::kContinue:
+          break;
+        case BlockProcessResult::kSkip:
+          continue;
+        case BlockProcessResult::kRevisitLoop:
+          UNREACHABLE();
+      }
+
       {
         ProcessResult control_result = ProcessNodeBase(block->control_node());
         switch (control_result) {
@@ -544,6 +556,8 @@ class GraphBackwardProcessor {
         }
       }
     };
+
+  // LINT.IfChange(maglev_backward_constant_nodes)
     process_constants(graph->heap_constants());
     process_constants(graph->root());
     process_constants(graph->smi());
@@ -552,8 +566,10 @@ class GraphBackwardProcessor {
     process_constants(graph->uint32());
     process_constants(graph->intptr());
     process_constants(graph->float64());
+    process_constants(graph->holey_float64());
     process_constants(graph->heap_number());
     process_constants(graph->trusted_constants());
+  // LINT.ThenChange(/src/maglev/maglev-graph-processor.h:maglev_constant_nodes)
 
     node_processor_.PostProcessGraph(graph);
   }
@@ -589,8 +605,8 @@ class NodeMultiProcessor<> {
   BlockProcessResult PostProcessBasicBlock(BasicBlock* block) {
     return BlockProcessResult::kContinue;
   }
-  V8_INLINE ProcessResult Process(NodeBase* node,
-                                  const ProcessingState& state) {
+  template <typename... Args>
+  V8_INLINE ProcessResult Process(NodeBase* node, const Args&... args) {
     return ProcessResult::kContinue;
   }
   void PostPhiProcessing() {}
@@ -610,12 +626,15 @@ class NodeMultiProcessor<Processor, Processors...>
   explicit NodeMultiProcessor(Args&&... processors)
       : Base(std::forward<Args>(processors)...) {}
 
-  template <typename Node>
-  ProcessResult Process(Node* node, const ProcessingState& state) {
-    auto res = processor_.Process(node, state);
+  // Forwards Process calls to each processor in the chain.
+  // Forward processors receive (Node* node, const ProcessingState& state),
+  // whereas backward processors receive only (Node* node).
+  template <typename Node, typename... Args>
+  ProcessResult Process(Node* node, const Args&... args) {
+    auto res = processor_.Process(node, args...);
     switch (res) {
       [[likely]] case ProcessResult::kContinue:
-        return Base::Process(node, state);
+        return Base::Process(node, args...);
       case ProcessResult::kRevisit:
       case ProcessResult::kAbort:
       case ProcessResult::kRemove:
@@ -629,6 +648,7 @@ class NodeMultiProcessor<Processor, Processors...>
     }
     UNREACHABLE();
   }
+
   void PreProcessGraph(Graph* graph) {
     processor_.PreProcessGraph(graph);
     Base::PreProcessGraph(graph);
@@ -680,7 +700,9 @@ class NodeMultiProcessor<Processor, Processors...>
   }
 
   void PostPhiProcessing() {
-    processor_.PostPhiProcessing();
+    if constexpr (requires(Processor& p) { p.PostPhiProcessing(); }) {
+      processor_.PostPhiProcessing();
+    }
     Base::PostPhiProcessing();
   }
 
@@ -690,6 +712,10 @@ class NodeMultiProcessor<Processor, Processors...>
 
 template <typename... Processors>
 using GraphMultiProcessor = GraphProcessor<NodeMultiProcessor<Processors...>>;
+
+template <typename... Processors>
+using GraphBackwardMultiProcessor =
+    GraphBackwardProcessor<NodeMultiProcessor<Processors...>>;
 
 }  // namespace maglev
 }  // namespace internal
