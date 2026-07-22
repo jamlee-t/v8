@@ -173,8 +173,8 @@ ALL_VARIANT_FLAGS = {
 # disabled (i.e. not part of the binary), or when all codegen is disallowed (in
 # jitless mode).
 kIncompatibleFlagsForNoTurbofan = [
-    "--turbofan", "--liftoff", "--validate-asm", "--maglev", "--turbolev",
-    "--turbolev-future", "--stress-concurrent-inlining", "--turboshaft"
+    "--turbofan", "--liftoff", "--maglev", "--turbolev", "--turbolev-future",
+    "--stress-concurrent-inlining", "--turboshaft"
 ]
 
 kIncompatibleFlagsForNoLiftoff = [
@@ -228,7 +228,6 @@ INCOMPATIBLE_FLAGS_PER_VARIANT = {
         "--no-liftoff",
         "--wasm-tier-up",
         "--wasm-dynamic-tiering",
-        "--validate-asm",
         "--track-field-types",
         "--stress-concurrent-inlining",
         "--additive-safe-int-feedback",
