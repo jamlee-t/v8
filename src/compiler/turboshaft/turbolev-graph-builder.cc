@@ -5598,6 +5598,17 @@ class GraphBuildingNodeProcessor {
     return result;
   }
   V<Word32> Float64ToUint8Clamped(V<Float64> value) {
+    if (SupportedOperations::float64_min_max()) {
+      // ToUint8Clamp, branchless: clamp to [0, 255], round ties to even,
+      // truncate. NaN is correct with either NaN semantics of Float64Min/Max:
+      // if it propagates through the clamping, JSTruncateFloat64ToWord32 maps
+      // it to 0; if min/max ignore it, it was already clamped to 0.
+      V<Float64> clamped = __ Float64Min(__ Float64Max(value, kMinClampedUint8),
+                                         kMaxClampedUint8);
+      return __ JSTruncateFloat64ToWord32(__ Float64RoundTiesEven(clamped));
+    }
+    // Without native Float64Min/Max, the branchless version lowers to a long
+    // branchy sequence; use an explicit comparison chain instead.
     ScopedVar<Word32, AssemblerT> result(this);
     IF (__ Float64LessThan(value, kMinClampedUint8)) {
       result = __ Word32Constant(kMinClampedUint8);

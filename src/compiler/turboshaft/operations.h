@@ -1363,6 +1363,7 @@ struct FixedArityOperationT : OperationT<Derived> {
   V(word64_reverse_bits, Word64ReverseBits)                \
   V(float32_select, Float32Select)                         \
   V(float64_select, Float64Select)                         \
+  V(float64_min_max, Float64MinMax)                        \
   V(int32_abs_with_overflow, Int32AbsWithOverflow)         \
   V(int64_abs_with_overflow, Int64AbsWithOverflow)         \
   V(word32_rol, Word32Rol)                                 \
