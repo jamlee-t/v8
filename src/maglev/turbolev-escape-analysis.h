@@ -36,7 +36,12 @@ namespace v8::internal::maglev {
 //
 // # Implementation
 //
-// Escape Analysis happens in 2 phases:
+// Escape Analysis happens in 3 phases:
+//
+//   * `AnalyzerPrePass` does a single forward pass over the graph to check if
+//     there are any objects that might not escape (if not, we stop here) and to
+//     mark objects that definitely escape as escaping so that
+//     `CandidateAnalyzer` doesn't both tracking them from the start.
 //
 //   * `CandidateAnalyzer` looks at the graph, computes which objects are
 //     escaping, and decides which objects to elide. It also computes the value
@@ -119,6 +124,14 @@ struct EscapeAnalysisData {
   FieldValuesTable field_values;
   ZoneAbslFlatHashMap<NodeBase*, Snapshot> snapshots;
   ZoneAbslFlatHashMap<ObjectField, Key> keys_mappings;
+
+  // In order to handle exception handlers (which have no explicit predecessors
+  // in Maglev), we would need to compute the state from the predecessors, but
+  // predecessors are not available. For now, we just don't do any escape
+  // analysis if the graph has an exception handler.
+  // TODO(dmercadier): while iterating the graph, we could record exception
+  // handlers predecessors in a side table fairly easily.
+  bool has_exception_handler = false;
 
   // When the CandidateAnalyzer encounters a LoadTaggedField, it must resolve it
   // right away, rather than resolving it once its users are visited, so that if

@@ -469,6 +469,111 @@ void EscapeAnalysis::Run(Graph* graph, MaglevCompilationInfo* compilation_info,
   analyzer.ElideCandidates();
 }
 
+// The AnalyzerPrePass is a simple straightword pass over the graph whose goal
+// is to:
+//
+//    1. Figure out whether any allocation is not guaranteed to escape. If we
+//       find such an allocation, then EscapeAnalysis::AnalyzeCandidates will
+//       run the CandidateAnalyzer which will do more expensive state tracking
+//       and loop fixpoints to figure precisely what can definitely be elided
+//       and how.
+//
+//    2. Figure out which allocations are guaranteed to eventually escape. The
+//       CandidateAnalyzer can then ignore them, thus saving memory (no need to
+//       track their fields) and time (no need to revisit loops because of
+//       them).
+class AnalyzerPrePass {
+ public:
+  explicit AnalyzerPrePass(EscapeAnalysisData& data)
+      : data_(data), tracer_(data.compilation_info) {}
+  void PreProcessGraph(Graph* graph) {}
+  void PostProcessGraph(Graph* graph) {}
+  BlockProcessResult PreProcessBasicBlock(BasicBlock* block) {
+    if (block->is_exception_handler_block()) {
+      data_.has_exception_handler = true;
+    }
+    return BlockProcessResult::kContinue;
+  }
+  BlockProcessResult PostProcessBasicBlock(BasicBlock* block) {
+    return BlockProcessResult::kContinue;
+  }
+  void PostPhiProcessing() {}
+
+// List of nodes that might not make their inputs escape. This list should be
+// kept in sync with the overloads in the CandidateAnalyzer and in the Elider;
+// HasSpecificProcess at the end of this file will trigger a static_assert if
+// this list falls out of sync.
+#define NOT_ESCAPING_OPS(V)                 \
+  V(StoreMap)                               \
+  V(StoreTaggedFieldNoWriteBarrier)         \
+  V(StoreTaggedFieldWithWriteBarrier)       \
+  V(StoreFixedArrayElementNoWriteBarrier)   \
+  V(StoreFixedArrayElementWithWriteBarrier) \
+  V(StoreFixedDoubleArrayElement)           \
+  V(StoreInt32)                             \
+  V(StoreFloat64)                           \
+  V(AssertEscapeAnalysisElided)             \
+  V(CheckMaps)                              \
+  V(CheckMapsWithMigration)                 \
+  V(CheckMapsWithMigrationAndDeopt)         \
+  V(AssumeMap)                              \
+  V(LoadTaggedField)                        \
+  V(LoadFloat64)                            \
+  V(LoadFixedDoubleArrayElement)            \
+  V(LoadFixedArrayElement)                  \
+  V(BranchIfReferenceEqual)
+
+#define PROCESS_NOT_ESCAPING(Op)                               \
+  ProcessResult Process(maglev::Op*, const ProcessingState&) { \
+    return ProcessResult::kContinue;                           \
+  }
+  NOT_ESCAPING_OPS(PROCESS_NOT_ESCAPING)
+#undef PROCESS_NOT_ESCAPING
+#undef NOT_ESCAPING_OPS
+
+  ProcessResult Process(InlinedAllocation* node, const ProcessingState&) {
+    auto [it, inserted] =
+        data_.candidates.try_emplace(node, CandidateStatus::kCanMaybeElide);
+    if (!inserted) {
+      // If {node} is already recorded, it must be because it got marked as
+      // CannotElide as the backedge of a loop phi (since otherwise we always
+      // visit definitions before uses).
+      DCHECK_EQ(it->second, CandidateStatus::kCannotElide);
+      DCHECK(node->HasEscaped());
+    }
+    return ProcessResult::kContinue;
+  }
+
+  ProcessResult Process(Phi* node, const ProcessingState& state) {
+    // Phis make their input escape but need a special overload in order to keep
+    // the overloads in this class in sync with the CandidateAnalyzer and the
+    // Elider (cf the HasSpecificProcess check).
+    return Process(static_cast<NodeBase*>(node), state);
+  }
+
+  template <class NodeT>
+  ProcessResult Process(NodeT* node, const ProcessingState&) {
+    // Any operation that isn't whitelisted in NOT_ESCAPING_OPS is assumed to
+    // make its inputs escape.
+    for (Input input : node->inputs()) {
+      if (InlinedAllocation* alloc =
+              input.node()->template TryCast<InlinedAllocation>()) {
+        data_.candidates[alloc] = CandidateStatus::kCannotElide;
+        if (!alloc->HasBeenAnalysed()) {
+          alloc->SetEscaped();
+        } else {
+          DCHECK(alloc->HasEscaped());
+        }
+      }
+    }
+    return ProcessResult::kContinue;
+  }
+
+ private:
+  EscapeAnalysisData& data_;
+  Tracer tracer_;
+};
+
 class CandidateAnalyzer {
  public:
   explicit CandidateAnalyzer(EscapeAnalysisData& data)
@@ -888,19 +993,8 @@ class FieldValuesTracker : public CandidateAnalyzer {
       }
     }
 
-    if (block->is_exception_handler_block()) {
-      // TODO(dmercadier): we would need to compute the state from the
-      // predecessors, but predecessors are not available. For now, we're just
-      // nuking everything. While iterating the graph, we could record exception
-      // handlers predecessor in a side table fairly easily.
-      base::SmallVector<InlinedAllocation*, 8> to_mark_as_escaped;
-      for (auto candidate : data_.candidates) {
-        to_mark_as_escaped.push_back(candidate.first);
-      }
-      for (InlinedAllocation* alloc : to_mark_as_escaped) {
-        data_.MarkAsEscaped(alloc);
-      }
-    }
+    // The PrePass should make escape analysis bail on exception handlers.
+    DCHECK(!block->is_exception_handler_block());
 
     CreateSnapshotFor(block);
 
@@ -1272,8 +1366,28 @@ class FieldValuesTracker : public CandidateAnalyzer {
 
 void EscapeAnalysis::AnalyzeCandidates() {
   TRACE("EscapeAnalysis::AnalyzeCandidates");
-  GraphProcessor<FieldValuesTracker> processor(data_);
-  processor.ProcessGraph(data_.graph);
+
+  // Running a very quick pre-pass over the graph to spot candidates that
+  // definitely escape and that thus don't need to be tracked. This makes the
+  // main analysis faster and in some cases we can even just not run the main
+  // analysis at all because the pre-pass will figure out that all candidates
+  // actually escape.
+  TRACE("Running the prepass...");
+  // TODO(dmercadier): we should run the PrePass with the last processor before
+  // Escape Analysis to save time. To do so, it would be nice if the PrePass
+  // didn't need the EscapeAnalysisData. We can achieve this by not relying on
+  // `data_.candidates` but instead use the HasEscaped bit of InlinedAllocation.
+  GraphProcessor<AnalyzerPrePass> prepass(data_);
+  prepass.ProcessGraph(data_.graph);
+
+  if (!HasElidableCandidates()) {
+    TRACE("> No candidates after the pre-pass; stopping here.");
+    return;
+  }
+
+  TRACE("Running the main analysis...");
+  GraphProcessor<FieldValuesTracker> main_analysis(data_);
+  main_analysis.ProcessGraph(data_.graph);
 
   // Sanity check: {loop_stack} should be empty (except for its dummy initial
   // input), since for each loop we should have pushed once at the beginning and
@@ -1295,6 +1409,7 @@ void EscapeAnalysis::AnalyzeCandidates() {
 }
 
 bool EscapeAnalysis::HasElidableCandidates() const {
+  if (data_.has_exception_handler) return false;
   for (auto candidate : data_.candidates) {
     if (candidate.second != CandidateStatus::kCannotElide) {
       return true;
@@ -1719,18 +1834,16 @@ class Elider {
     return ProcessResult::kContinue;
   }
 
-  maglev::ProcessResult Process(maglev::LoadTaggedField* node,
-                                const maglev::ProcessingState& state) {
+  ProcessResult Process(LoadTaggedField* node, const ProcessingState& state) {
     return ProcessLoad(node, node->ValueInput().node(), node->offset());
   }
 
-  maglev::ProcessResult Process(maglev::LoadFloat64* node,
-                                const maglev::ProcessingState& state) {
+  ProcessResult Process(LoadFloat64* node, const ProcessingState& state) {
     return ProcessLoad(node, node->ValueInput().node(), node->offset());
   }
 
-  maglev::ProcessResult Process(maglev::LoadFixedDoubleArrayElement* node,
-                                const maglev::ProcessingState& state) {
+  ProcessResult Process(LoadFixedDoubleArrayElement* node,
+                        const ProcessingState& state) {
     if (Int32Constant* cst =
             node->IndexInput().node()->TryCast<Int32Constant>()) {
       int offset = FixedDoubleArray::OffsetOfElementAt(cst->value());
@@ -1921,11 +2034,21 @@ constexpr bool HasSpecificProcess() {
   return static_cast<Signature>(&T::Process) != &T::template Process<NodeT>;
 }
 
-// Static assertion check for a single node type
-#define CHECK_SYNCHRONIZED_OVERLOAD(NodeT)                                 \
-  static_assert(HasSpecificProcess<CandidateAnalyzer, NodeT>() ==          \
-                    HasSpecificProcess<Elider, NodeT>(),                   \
-                "CandidateAnalyzer and Elider must be synchronized: both " \
+// Static assertion check for a single node type.
+// Note that It's not required for correctness that the AnalyzerPrePass has the
+// same Process overloads as the CandidateAnalyzer, but keeping them in sync
+// makes sure that the pre-pass doesn't wrongly treat an operation as escaping
+// even though it's not.
+// On the other hand, keeping the CandidateAnalyzer and Elider is required for
+// correctness; cf comment at the beginning of this anonymous namespace.
+#define CHECK_SYNCHRONIZED_OVERLOAD(NodeT)                                    \
+  static_assert(HasSpecificProcess<CandidateAnalyzer, NodeT>() ==             \
+                    HasSpecificProcess<AnalyzerPrePass, NodeT>(),             \
+                "CandidateAnalyzer and Elider must be synchronized: both "    \
+                "must either overload or not overload Process(" #NodeT "*)"); \
+  static_assert(HasSpecificProcess<CandidateAnalyzer, NodeT>() ==             \
+                    HasSpecificProcess<Elider, NodeT>(),                      \
+                "CandidateAnalyzer and Elider must be synchronized: both "    \
                 "must either overload or not overload Process(" #NodeT "*)");
 
 // Run the check for all Maglev node types automatically
