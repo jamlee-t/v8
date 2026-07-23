@@ -6884,7 +6884,6 @@ v8_cluster_source_set("v8_base_without_compiler") {
         "src/diagnostics/etw-jit-metadata-win.h",
         "src/diagnostics/etw-jit-win.cc",
         "src/diagnostics/etw-jit-win.h",
-        "src/runtime/runtime-etw.cc",
       ]
     }
   }
