@@ -344,9 +344,6 @@ void DeclarationScope::SetDefaults() {
                            is_module_scope());
   set_needs_private_name_context_chain_recalc(false);
   set_class_scope_has_private_brand(false);
-#if V8_ENABLE_WEBASSEMBLY
-  set_is_asm_module(false);
-#endif  // V8_ENABLE_WEBASSEMBLY
   receiver_ = nullptr;
   new_target_ = nullptr;
   function_ = nullptr;
@@ -410,12 +407,6 @@ bool Scope::HasSimpleParameters() {
 void DeclarationScope::set_should_eager_compile() {
   set_should_eager_compile(!was_lazily_parsed());
 }
-
-#if V8_ENABLE_WEBASSEMBLY
-bool Scope::IsAsmModule() const {
-  return is_function_scope() && AsDeclarationScope()->is_asm_module();
-}
-#endif  // V8_ENABLE_WEBASSEMBLY
 
 bool Scope::is_debug_evaluate_scope() const {
   return IsDynamicScopeField::decode(flags_) &&
@@ -488,11 +479,6 @@ Scope* Scope::DeserializeScopeChain(
     if (scope_info->scope_type() == FUNCTION_SCOPE) {
       outer_scope = zone->New<DeclarationScope>(
           zone, FUNCTION_SCOPE, ast_value_factory, handle(scope_info, isolate));
-#if V8_ENABLE_WEBASSEMBLY
-      if (scope_info->IsAsmModule()) {
-        outer_scope->AsDeclarationScope()->set_is_asm_module(true);
-      }
-#endif  // V8_ENABLE_WEBASSEMBLY
     } else if (scope_info->scope_type() == CLASS_SCOPE) {
       outer_scope = zone->New<ClassScope>(isolate, zone, ast_value_factory,
                                           handle(scope_info, isolate));
@@ -2107,9 +2093,6 @@ void Scope::Print(int n) {
   if (is_strict(language_mode())) {
     Indent(n1, "// strict mode scope\n");
   }
-#if V8_ENABLE_WEBASSEMBLY
-  if (IsAsmModule()) Indent(n1, "// scope is an asm module\n");
-#endif  // V8_ENABLE_WEBASSEMBLY
   if (is_declaration_scope() &&
       AsDeclarationScope()->sloppy_eval_can_extend_vars()) {
     Indent(n1, "// scope calls sloppy 'eval'\n");
@@ -2874,14 +2857,10 @@ void Scope::AllocateVariablesRecursively() {
     // Force allocation of a context for this scope if necessary. For a 'with'
     // scope and for a function scope that makes an 'eval' call we need a
     // context, even if no local variables were statically allocated in the
-    // scope. Likewise for modules and function scopes representing asm.js
-    // modules. Also force a context, if the scope is stricter than the outer
-    // scope.
+    // scope. Likewise for modules. Also force a context, if the scope is
+    // stricter than the outer scope.
     bool must_have_context =
         scope->is_with_scope() || scope->is_module_scope() ||
-#if V8_ENABLE_WEBASSEMBLY
-        scope->IsAsmModule() ||
-#endif  // V8_ENABLE_WEBASSEMBLY
         scope->ForceContextForLanguageMode() ||
         (scope->is_function_scope() &&
          scope->AsDeclarationScope()->sloppy_eval_can_extend_vars()) ||

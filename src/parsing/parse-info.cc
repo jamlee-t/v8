@@ -203,9 +203,6 @@ ParseInfo::ParseInfo(const UnoptimizedCompileFlags flags,
       source_range_map_(nullptr),
       literal_(nullptr),
       allow_eval_cache_(false),
-#if V8_ENABLE_WEBASSEMBLY
-      contains_asm_module_(false),
-#endif  // V8_ENABLE_WEBASSEMBLY
       language_mode_(flags.outer_language_mode()),
       is_background_compilation_(false),
       is_streaming_compilation_(false),

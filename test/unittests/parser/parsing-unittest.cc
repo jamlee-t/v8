@@ -4193,59 +4193,6 @@ TEST_F(ParsingTest, MaybeAssignedTopLevel) {
   }
 }
 
-#if V8_ENABLE_WEBASSEMBLY
-namespace {
-
-i::Scope* DeserializeFunctionScope(i::Isolate* isolate, i::Zone* zone,
-                                   i::DirectHandle<i::JSObject> m,
-                                   const char* name) {
-  i::AstValueFactory avf(zone, isolate->ast_string_constants(),
-                         HashSeed(isolate));
-  i::DirectHandle<i::JSFunction> f = i::Cast<i::JSFunction>(
-      i::JSReceiver::GetProperty(isolate, m, name).ToHandleChecked());
-  i::DeclarationScope* script_scope =
-      zone->New<i::DeclarationScope>(zone, &avf);
-  i::Scope* s = i::Scope::DeserializeScopeChain(
-      isolate, zone, f->context()->scope_info(), script_scope, &avf,
-      i::Scope::DeserializationMode::kIncludingVariables);
-  return s;
-}
-
-}  // namespace
-
-TEST_F(ParsingTest, AsmModuleFlag) {
-  i::Isolate* isolate = i_isolate();
-
-  const char* src =
-      "function m() {"
-      "  'use asm';"
-      "  function f() { return 0 };"
-      "  return { f:f };"
-      "}"
-      "m();";
-
-  v8::Local<v8::Value> v = RunJS(src);
-  i::DirectHandle<i::Object> o = v8::Utils::OpenDirectHandle(*v);
-  i::DirectHandle<i::JSObject> m = i::Cast<i::JSObject>(o);
-
-  // The asm.js module should be marked as such.
-  i::Scope* s = DeserializeFunctionScope(isolate, zone(), m, "f");
-  CHECK(s->IsAsmModule() && s->AsDeclarationScope()->is_asm_module());
-}
-
-TEST_F(ParsingTest, UseAsmUseCount) {
-  int use_counts[v8::Isolate::kUseCounterFeatureCount] = {};
-  global_use_counts = use_counts;
-  v8_isolate()->SetUseCounterCallback(MockUseCounterCallback);
-  RunJS(
-      "\"use asm\";\n"
-      "var foo = 1;\n"
-      "function bar() { \"use asm\"; var baz = 1; }");
-  CHECK_LT(0, use_counts[v8::Isolate::kUseAsm]);
-  global_use_counts = nullptr;
-}
-#endif  // V8_ENABLE_WEBASSEMBLY
-
 TEST_F(ParsingTest, StrictModeUseCount) {
   int use_counts[v8::Isolate::kUseCounterFeatureCount] = {};
   global_use_counts = use_counts;

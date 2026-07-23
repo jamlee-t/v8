@@ -991,7 +991,6 @@ class PreParser : public ParserBase<PreParser> {
   V8_INLINE void SetLanguageMode(Scope* scope, LanguageMode mode) {
     scope->SetLanguageMode(mode);
   }
-  V8_INLINE void SetAsmModule() {}
 
   V8_INLINE void PrepareGeneratorVariables() {}
 

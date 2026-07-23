@@ -4149,7 +4149,6 @@ void ScopeInfo::ScopeInfoPrint(std::ostream& os) {
     os << "\n - function name(" << FunctionVariableBits::decode(flags) << "): ";
     ShortPrint(FunctionName(), os);
   }
-  if (IsAsmModule()) os << "\n - asm module";
   if (HasSimpleParameters()) os << "\n - simple parameters";
   if (PrivateNameLookupSkipsOuterClass()) {
     os << "\n - private name lookup skips outer class";
