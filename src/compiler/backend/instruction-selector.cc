@@ -2422,7 +2422,9 @@ void InstructionSelector::VisitTailCall(OpIndex node) {
                        OptionalOpIndex::Nullopt(), call_op.arguments(),
                        static_cast<int>(call_op.outputs_rep().size()),
                        stack_param_delta);
-  UpdateMaxPushedArgumentCount(stack_param_delta);
+  if (stack_param_delta > 0) {
+    UpdateMaxPushedArgumentCount(stack_param_delta);
+  }
 
   // Select the appropriate opcode based on the call type.
   InstructionCode opcode;
