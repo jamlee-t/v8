@@ -49,6 +49,9 @@ ProcessResult RecomputeKnownNodeAspectsProcessor::RecordMaps(
   auto merger =
       KnownMapsMerger<compiler::ZoneRefSet<Map>>(broker(), zone(), maps);
   merger.IntersectWithKnownNodeAspects(object, known_node_aspects());
+  if (merger.intersect_set().is_empty()) {
+    return OnContradiction();
+  }
   if (!merger.UpdateKnownNodeAspects(object, known_node_aspects())) {
     return OnContradiction();
   }
