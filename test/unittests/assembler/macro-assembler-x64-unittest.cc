@@ -2679,6 +2679,66 @@ TEST_F(MacroAssemblerX64Test, Cvtpd2ph) {
   }
 }
 
+TEST_F(MacroAssemblerX64Test, I64x2ShrS_SignReplication_63) {
+  Isolate* isolate = i_isolate();
+  HandleScope handles(isolate);
+
+  // Expected Optimal Codegen for I64x2ShrS with shift count 63:
+  //   - x64: 2-instruction sequence: pshufd/vpshufd + psrad/vpsrad
+  int size_63 = 0;
+  {
+    auto buffer = AllocateAssemblerBuffer();
+    MacroAssembler masm(isolate, v8::internal::CodeObjectRequired{true},
+                        buffer->CreateView());
+    masm.movdqu(xmm0, Operand(kCArgRegs[0], 0));
+    masm.I64x2ShrS(xmm0, xmm0, 63, xmm1);
+    masm.movdqu(Operand(kCArgRegs[1], 0), xmm0);
+    masm.ret(0);
+
+    CodeDesc desc;
+    masm.GetCode(isolate, &desc);
+    size_63 = desc.instr_size;
+
+    // Run and assert correctness
+    buffer->MakeExecutable();
+    using F18 = int(int64_t*, int64_t*);
+    auto f = GeneratedCode<F18>::FromBuffer(i_isolate(), buffer->start());
+    int64_t input[2] = {1, -2};
+    int64_t output[2] = {0, 0};
+    f.Call(input, output);
+    CHECK_EQ(output[0], static_cast<int64_t>(1) >> 63);
+    CHECK_EQ(output[1], static_cast<int64_t>(-2) >> 63);
+  }
+
+  int size_other = 0;
+  {
+    auto buffer = AllocateAssemblerBuffer();
+    MacroAssembler masm(isolate, v8::internal::CodeObjectRequired{true},
+                        buffer->CreateView());
+    masm.movdqu(xmm0, Operand(kCArgRegs[0], 0));
+    masm.I64x2ShrS(xmm0, xmm0, 13, xmm1);
+    masm.movdqu(Operand(kCArgRegs[1], 0), xmm0);
+    masm.ret(0);
+
+    CodeDesc desc;
+    masm.GetCode(isolate, &desc);
+    size_other = desc.instr_size;
+
+    // Run and assert correctness
+    buffer->MakeExecutable();
+    using F18 = int(int64_t*, int64_t*);
+    auto f = GeneratedCode<F18>::FromBuffer(i_isolate(), buffer->start());
+    int64_t input[2] = {std::numeric_limits<int64_t>::max(),
+                        std::numeric_limits<int64_t>::min()};
+    int64_t output[2] = {0, 0};
+    f.Call(input, output);
+    CHECK_EQ(output[0], std::numeric_limits<int64_t>::max() >> 13);
+    CHECK_EQ(output[1], std::numeric_limits<int64_t>::min() >> 13);
+  }
+
+  CHECK_LT(size_63, size_other);
+}
+
 #undef __
 
 }  // namespace test_macro_assembler_x64
