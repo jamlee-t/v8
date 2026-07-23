@@ -2800,14 +2800,13 @@ bool LiftoffAssembler::emit_f16x8_demote_f64x2_zero(LiftoffRegister dst,
   if (!CpuFeatures::IsSupported(ZVFH) || !CpuFeatures::IsSupported(ZFH)) {
     return false;
   }
-  VU.SetSimd128(E16);
-  vmv_vx(dst.simd128(), zero_reg);
   VU.SetSimd128(E64);
   vfmv_fs(kScratchDoubleReg, src.simd128());
   fcvt_h_d(kScratchDoubleReg, kScratchDoubleReg);
   fmv_x_h(kScratchReg, kScratchDoubleReg);
-  VU.SetSimd128(E16);
-  vmv_sx(dst.simd128(), kScratchReg);
+  VU.SetSimd128(E16, tu);
+  vmv_vx(kSimd128ScratchReg3, zero_reg);
+  vmv_sx(kSimd128ScratchReg3, kScratchReg);
   VU.SetSimd128(E64);
   vslidedown_vi(kSimd128ScratchReg, src.simd128(), 1);
   vfmv_fs(kScratchDoubleReg, kSimd128ScratchReg);
@@ -2816,7 +2815,7 @@ bool LiftoffAssembler::emit_f16x8_demote_f64x2_zero(LiftoffRegister dst,
   VU.SetSimd128(E16);
   li(kScratchReg, 0b10);
   vmv_sx(v0, kScratchReg);
-  vmerge_vx(dst.simd128(), kScratchReg2, dst.simd128());
+  vmerge_vx(dst.simd128(), kScratchReg2, kSimd128ScratchReg3);
   return true;
 }
 bool LiftoffAssembler::emit_f32x4_promote_low_f16x8(LiftoffRegister dst,

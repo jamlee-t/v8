@@ -3698,8 +3698,6 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       break;
     }
     case kRiscvF16x8DemoteF64x2Zero: {
-      __ VU.SetSimd128(E16);
-      __ vmv_vx(i.OutputSimd128Register(), zero_reg);
       // convert the first two lanes of f64 to f16
       // and store them in the first two lanes of
       // the output vector
@@ -3707,8 +3705,9 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       __ vfmv_fs(kScratchDoubleReg, i.InputSimd128Register(0));
       __ fcvt_h_d(kScratchDoubleReg, kScratchDoubleReg);
       __ fmv_x_h(kScratchReg, kScratchDoubleReg);
-      __ VU.SetSimd128(E16);
-      __ vmv_sx(i.OutputSimd128Register(), kScratchReg);
+      __ VU.SetSimd128(E16, tu);
+      __ vmv_vx(kSimd128ScratchReg3, zero_reg);
+      __ vmv_sx(kSimd128ScratchReg3, kScratchReg);
       // convert the second two lanes of f64 to f16
       __ VU.SetSimd128(E64);
       __ vslidedown_vi(kSimd128ScratchReg, i.InputSimd128Register(0), 1);
@@ -3719,7 +3718,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       __ li(kScratchReg, 0b10);
       __ vmv_sx(v0, kScratchReg);
       __ vmerge_vx(i.OutputSimd128Register(), kScratchReg2,
-                   i.OutputSimd128Register());
+                   kSimd128ScratchReg3);
       break;
     }
     case kRiscvF32x4PromoteLowF16x8: {
