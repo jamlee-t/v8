@@ -153,7 +153,7 @@ class WasmTracingTest : public TestWithContextAndZone {
 
     DirectHandle<WasmInstanceObject> instance =
         GetWasmEngine()
-            ->SyncInstantiate(v8_isolate, &thrower, module, {}, {})
+            ->SyncInstantiate(v8_isolate, &thrower, module, {})
             .ToHandleChecked();
     CHECK(!instance.is_null());
 

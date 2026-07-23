@@ -3025,7 +3025,7 @@ bool Compiler::Compile(Isolate* isolate, Handle<SharedFunctionInfo> shared_info,
   }
   parse_info.literal()->set_shared_function_info(shared_info);
 
-  // Generate the unoptimized bytecode or asm-js data.
+  // Generate the unoptimized bytecode.
   FinalizeUnoptimizedCompilationDataList
       finalize_unoptimized_compilation_data_list;
 

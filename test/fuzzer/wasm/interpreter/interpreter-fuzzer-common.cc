@@ -317,7 +317,7 @@ bool InstantiateModule(Isolate* isolate,
   ErrorThrower thrower(isolate, "WebAssembly Instantiation");
 
   if (!GetWasmEngine()
-           ->SyncInstantiate(isolate, &thrower, module_object, imports_obj, {})
+           ->SyncInstantiate(isolate, &thrower, module_object, imports_obj)
            .ToHandle(instance)) {
     isolate->clear_exception();
     thrower.Reset();  // Ignore errors.

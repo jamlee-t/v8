@@ -246,12 +246,6 @@ class V8_EXPORT_PRIVATE WasmModuleBuilder : public ZoneObject {
   // different than the version in wasm-module.h.
   class WasmElemSegment {
    public:
-    // asm.js gives function indices starting with the first non-imported
-    // function.
-    enum FunctionIndexingMode {
-      kRelativeToImports,
-      kRelativeToDeclaredFunctions
-    };
     enum Status {
       kStatusActive,      // copied automatically during instantiation.
       kStatusPassive,     // copied explicitly after instantiation.
@@ -292,7 +286,6 @@ class V8_EXPORT_PRIVATE WasmModuleBuilder : public ZoneObject {
     ValueType type;
     uint32_t table_index;
     WasmInitExpr offset;
-    FunctionIndexingMode indexing_mode = kRelativeToImports;
     ZoneVector<Entry> entries;
     Status status;
 
@@ -326,8 +319,7 @@ class V8_EXPORT_PRIVATE WasmModuleBuilder : public ZoneObject {
   // Helper method to create an active segment with one function. Assumes that
   // table segment at {table_index} is typed as funcref.
   void SetIndirectFunction(uint32_t table_index, uint32_t index_in_table,
-                           uint32_t direct_function_index,
-                           WasmElemSegment::FunctionIndexingMode indexing_mode);
+                           uint32_t direct_function_index);
   // Increase the starting size of the table at {table_index} by {count}. Also
   // increases the maximum table size if needed. Returns the former starting
   // size, or the maximum uint32_t value if the maximum table size has been

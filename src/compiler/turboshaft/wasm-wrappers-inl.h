@@ -549,13 +549,7 @@ void WasmWrapperTSGraphBuilder<Assembler>::BuildWasmToJSWrapper(
     default:
       UNIMPLEMENTED();
   }
-  // For asm.js the error location can differ depending on whether an
-  // exception was thrown in imported JS code or an exception was thrown in
-  // the ToNumber builtin that converts the result of the JS code a
-  // WebAssembly value. The source position allows asm.js to determine the
-  // correct error location. Source position 1 encodes the call to ToNumber,
-  // source position 0 encodes the call to the imported JS code.
-  __ output_graph().source_positions()[call] = SourcePosition(0);
+
   DCHECK(call.valid());
 
   if (suspend == wasm::kSuspend) {

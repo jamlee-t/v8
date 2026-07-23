@@ -2420,8 +2420,7 @@ WASM_EXPORT own<Instance> Instance::make(Store* store_abs,
   i::wasm::ErrorThrower thrower(isolate, "instantiation");
   i::MaybeDirectHandle<i::WasmInstanceObject> instance_obj =
       i::wasm::GetWasmEngine()->SyncInstantiate(
-          isolate, &thrower, module->v8_object(), imports_obj,
-          i::MaybeDirectHandle<i::JSArrayBuffer>());
+          isolate, &thrower, module->v8_object(), imports_obj);
   if (trap) {
     if (thrower.error()) {
       *trap = implement<Trap>::type::make(

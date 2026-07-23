@@ -790,8 +790,7 @@ static Tagged<Object> CreateWasmObject(Isolate* isolate,
   // Instantiate the module.
   MaybeDirectHandle<WasmInstanceObject> maybe_instance =
       engine->SyncInstantiate(isolate, &thrower, module_object,
-                              Handle<JSReceiver>::null(),
-                              MaybeDirectHandle<JSArrayBuffer>());
+                              Handle<JSReceiver>::null());
   CHECK(!thrower.error());
   DirectHandle<WasmInstanceObject> instance;
   if (!maybe_instance.ToHandle(&instance)) {

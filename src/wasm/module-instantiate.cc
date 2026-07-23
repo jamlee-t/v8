@@ -806,8 +806,7 @@ class InstanceBuilder {
   InstanceBuilder(Isolate* isolate, v8::metrics::Recorder::ContextId context_id,
                   ErrorThrower* thrower,
                   DirectHandle<WasmModuleObject> module_object,
-                  MaybeDirectHandle<JSReceiver> ffi,
-                  MaybeDirectHandle<JSArrayBuffer> memory_buffer);
+                  MaybeDirectHandle<JSReceiver> ffi);
 
   // Build an instance, in all of its glory.
   MaybeDirectHandle<WasmInstanceObject> Build();
@@ -825,7 +824,6 @@ class InstanceBuilder {
   DirectHandle<WasmModuleObject> untrusted_module_object_;
   DirectHandle<WasmTrustedInstanceData> trusted_data_;
   MaybeDirectHandle<JSReceiver> ffi_;
-  MaybeDirectHandle<JSArrayBuffer> asmjs_memory_buffer_;
   DirectHandle<ByteArray> untagged_globals_;
   DirectHandle<FixedArray> tagged_globals_;
   DirectHandleVector<WasmTagObject> tags_wrappers_;
@@ -974,12 +972,10 @@ class WriteOutPGOTask : public v8::Task {
 MaybeDirectHandle<WasmInstanceObject> InstantiateToInstanceObject(
     Isolate* isolate, ErrorThrower* thrower,
     DirectHandle<WasmModuleObject> module_object,
-    MaybeDirectHandle<JSReceiver> imports,
-    MaybeDirectHandle<JSArrayBuffer> memory_buffer) {
+    MaybeDirectHandle<JSReceiver> imports) {
   v8::metrics::Recorder::ContextId context_id =
       isolate->GetOrRegisterRecorderContextId(isolate->native_context());
-  InstanceBuilder builder(isolate, context_id, thrower, module_object, imports,
-                          memory_buffer);
+  InstanceBuilder builder(isolate, context_id, thrower, module_object, imports);
   MaybeDirectHandle<WasmInstanceObject> instance_object = builder.Build();
   if (!instance_object.is_null()) {
     Managed<NativeModule>::Ptr native_module = module_object->native_module();
@@ -995,11 +991,11 @@ MaybeDirectHandle<WasmInstanceObject> InstantiateToInstanceObject(
   return {};
 }
 
-InstanceBuilder::InstanceBuilder(
-    Isolate* isolate, v8::metrics::Recorder::ContextId context_id,
-    ErrorThrower* thrower, DirectHandle<WasmModuleObject> module_object,
-    MaybeDirectHandle<JSReceiver> ffi,
-    MaybeDirectHandle<JSArrayBuffer> asmjs_memory_buffer)
+InstanceBuilder::InstanceBuilder(Isolate* isolate,
+                                 v8::metrics::Recorder::ContextId context_id,
+                                 ErrorThrower* thrower,
+                                 DirectHandle<WasmModuleObject> module_object,
+                                 MaybeDirectHandle<JSReceiver> ffi)
     : isolate_(isolate),
       context_id_(context_id),
       native_module_(module_object->native_module().as_shared_ptr()),
@@ -1009,7 +1005,6 @@ InstanceBuilder::InstanceBuilder(
       thrower_(thrower),
       untrusted_module_object_(module_object),
       ffi_(ffi),
-      asmjs_memory_buffer_(asmjs_memory_buffer),
       tags_wrappers_(isolate),
       sanitized_imports_(isolate),
       init_expr_zone_(isolate_->allocator(), "constant expression zone") {
@@ -1081,7 +1076,6 @@ Maybe<bool> InstanceBuilder::Build_Phase1(
   // Set up the memory buffers and memory objects and attach them to the
   // instance.
   //--------------------------------------------------------------------------
-  CHECK(asmjs_memory_buffer_.is_null());
   DirectHandle<FixedArray> memory_objects{trusted_data_->memory_objects(),
                                           isolate_};
   // First process all imported memories, then allocate non-imported ones.

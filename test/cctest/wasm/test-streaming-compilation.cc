@@ -341,8 +341,7 @@ ZoneBuffer GetValidCompiledModuleBytes(v8::Isolate* isolate, Zone* zone,
     ErrorThrower thrower{i_isolate, "GetValidCompiledModuleBytes"};
     DirectHandle<WasmInstanceObject> instance =
         GetWasmEngine()
-            ->SyncInstantiate(i_isolate, &thrower, tester.module_object(), {},
-                              {})
+            ->SyncInstantiate(i_isolate, &thrower, tester.module_object(), {})
             .ToHandleChecked();
     CHECK(!thrower.error());
 
@@ -1287,7 +1286,7 @@ STREAM_TEST(TestIncrementalCaching) {
     // We instantiated before, so the second instantiation must also succeed:
     instance = indirect_handle(
         GetWasmEngine()
-            ->SyncInstantiate(i_isolate, &thrower, module_object, {}, {})
+            ->SyncInstantiate(i_isolate, &thrower, module_object, {})
             .ToHandleChecked(),
         i_isolate);
     CHECK(!thrower.error());
@@ -1479,8 +1478,7 @@ STREAM_TEST(TestMoreFunctionsCanBeSerializedCallback) {
     ErrorThrower thrower{i_isolate, "TestMoreFunctionsCanBeSerializedCallback"};
     DirectHandle<WasmInstanceObject> instance =
         GetWasmEngine()
-            ->SyncInstantiate(i_isolate, &thrower, tester.module_object(), {},
-                              {})
+            ->SyncInstantiate(i_isolate, &thrower, tester.module_object(), {})
             .ToHandleChecked();
     CHECK(!thrower.error());
 
@@ -1593,12 +1591,11 @@ STREAM_TEST(TestMoreFunctionsCanBeSerializedCallbackWithTimeout) {
   {
     // Create an instance.
     ErrorThrower thrower{i_isolate, "TestMoreFunctionsCanBeSerializedCallback"};
-    instance =
-        indirect_handle(GetWasmEngine()
-                            ->SyncInstantiate(i_isolate, &thrower,
-                                              tester.module_object(), {}, {})
-                            .ToHandleChecked(),
-                        i_isolate);
+    instance = indirect_handle(
+        GetWasmEngine()
+            ->SyncInstantiate(i_isolate, &thrower, tester.module_object(), {})
+            .ToHandleChecked(),
+        i_isolate);
     CHECK(!thrower.error());
 
     // Execute the first function 100 times (which triggers tier-up and hence
@@ -1698,8 +1695,7 @@ STREAM_TEST(TestHardCachingThreshold) {
     ErrorThrower thrower{i_isolate, "TestMoreFunctionsCanBeSerializedCallback"};
     DirectHandle<WasmInstanceObject> instance =
         GetWasmEngine()
-            ->SyncInstantiate(i_isolate, &thrower, tester.module_object(), {},
-                              {})
+            ->SyncInstantiate(i_isolate, &thrower, tester.module_object(), {})
             .ToHandleChecked();
     CHECK(!thrower.error());
     CHECK(!caching_was_triggered);

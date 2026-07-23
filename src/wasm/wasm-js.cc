@@ -1106,8 +1106,7 @@ void WebAssemblyInstanceImpl(const v8::FunctionCallbackInfo<v8::Value>& info) {
 
     if (!i::wasm::GetWasmEngine()
              ->SyncInstantiate(i_isolate, &thrower, module_object,
-                               ImportsAsMaybeReceiver(ffi),
-                               i::MaybeDirectHandle<i::JSArrayBuffer>())
+                               ImportsAsMaybeReceiver(ffi))
              .ToHandle(&instance_obj)) {
       return js_api_scope.AssertException();
     }

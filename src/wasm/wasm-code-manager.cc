@@ -2470,8 +2470,8 @@ size_t WasmCodeManager::EstimateNativeModuleCodeSize(
   // The size for the jump table and far jump table is added later, per code
   // space (see {OverheadPerCodeSpace}). We still need to add the overhead for
   // the lazy compile table once, though. There are configurations where we do
-  // not need it (non-asm.js, no dynamic tiering and no lazy compilation), but
-  // we ignore this here as most of the time we will need it.
+  // not need it (no dynamic tiering and no lazy compilation), but we ignore
+  // this here as most of the time we will need it.
   const size_t lazy_compile_table_size =
       JumpTableAssembler::SizeForNumberOfLazyFunctions(num_functions);
 
@@ -2482,8 +2482,6 @@ size_t WasmCodeManager::EstimateNativeModuleCodeSize(
 
   const size_t overhead_per_function_liftoff =
       kLiftoffFunctionOverhead + kCodeAlignment / 2;
-  // Note: For asm.js we do not have Liftoff support, but this corner case is
-  // being ignored here.
   size_t size_of_liftoff =
       v8_flags.liftoff ? overhead_per_function_liftoff * num_functions +
                              kLiftoffCodeSizeMultiplier * code_section_length
@@ -2700,8 +2698,7 @@ void NativeModule::SampleCodeSize(Counters* counters) const {
     metadata_histogram->AddSample(metadata_size_kb);
   }
   // If this is a wasm module of >= 2MB, also sample the freed code size,
-  // absolute and relative. Code GC does not happen on asm.js
-  // modules, and small modules will never trigger GC anyway.
+  // absolute and relative. Small modules are unlikely to trigger GC anyway.
   size_t generated_size = code_allocator_.generated_code_size();
   if (generated_size >= 2 * MB) {
     size_t freed_size = code_allocator_.freed_code_size();

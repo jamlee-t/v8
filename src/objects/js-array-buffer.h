@@ -68,8 +68,7 @@ V8_OBJECT class JSArrayBuffer : public JSAPIObjectWithEmbedderSlots {
   using IsExternalBit = base::BitField<bool, 0, 1, uint32_t>;
   using IsDetachableBit = IsExternalBit::Next<bool, 1>;
   using WasDetachedBit = IsDetachableBit::Next<bool, 1>;
-  using IsAsmJsMemoryBit = WasDetachedBit::Next<bool, 1>;
-  using IsSharedBit = IsAsmJsMemoryBit::Next<SharedFlag, 1>;
+  using IsSharedBit = WasDetachedBit::Next<SharedFlag, 1>;
   using IsResizableByJsBit = IsSharedBit::Next<ResizableFlag, 1>;
   using IsImmutableBit = IsResizableByJsBit::Next<ImmutableFlag, 1>;
   enum Flag : uint32_t {
@@ -77,13 +76,12 @@ V8_OBJECT class JSArrayBuffer : public JSAPIObjectWithEmbedderSlots {
     kIsExternal = IsExternalBit::kMask,
     kIsDetachable = IsDetachableBit::kMask,
     kWasDetached = WasDetachedBit::kMask,
-    kIsAsmJsMemory = IsAsmJsMemoryBit::kMask,
     kIsShared = IsSharedBit::kMask,
     kIsResizableByJs = IsResizableByJsBit::kMask,
     kIsImmutable = IsImmutableBit::kMask,
   };
   using Flags = base::Flags<Flag>;
-  static constexpr int kFlagCount = 7;
+  static constexpr int kFlagCount = 6;
 
   // [is_external]: true indicates that the embedder is in charge of freeing the
   // backing_store, while is_external == false means that v8 will free the

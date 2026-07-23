@@ -63,10 +63,10 @@ namespace v8::internal::wasm {
 // In the other direction, the Scripts keep the NativeModule alive, IOW
 // usually the Scripts die first, and the WeakScriptHandles are cleared
 // before being freed.
-// In case of asm.js modules and in case of Isolate shutdown, it can happen
-// that the NativeModule dies first, so the WeakScriptHandles are no longer
-// needed and should be destroyed. That can only happen on the main thread of
-// the Isolate they belong to, whereas the last thread that releases a
+// In case of Isolate shutdown (or other corner cases like debugging), it can
+// happen that the NativeModule dies first, so the WeakScriptHandles are no
+// longer needed and should be destroyed. That can only happen on the main
+// thread of the Isolate they belong to, whereas the last thread that releases a
 // NativeModule might be any other thread, so we post a
 // ClearWeakScriptHandleTask to that isolate's foreground task runner.
 // In case of Isolate shutdown at an inconvenient moment, this task runner can
@@ -240,7 +240,7 @@ class WeakScriptHandle {
     // because the Script keeps the NativeModule alive. In that case,
     // {location_} is already cleared, and there is nothing to do.
     if (location_ == nullptr || *location_ == nullptr) return;
-    // For asm.js modules, the Script usually outlives the NativeModule.
+    // In some corner cases, the Script can outlive the NativeModule.
     // We must destroy the GlobalHandle before freeing the memory that's
     // backing {location_}, so that when the Script does die eventually, there
     // is no lingering weak GlobalHandle that would try to clear {location_}.
@@ -681,11 +681,9 @@ MaybeDirectHandle<WasmModuleObject> WasmEngine::SyncCompile(
 MaybeDirectHandle<WasmInstanceObject> WasmEngine::SyncInstantiate(
     Isolate* isolate, ErrorThrower* thrower,
     DirectHandle<WasmModuleObject> module_object,
-    MaybeDirectHandle<JSReceiver> imports,
-    MaybeDirectHandle<JSArrayBuffer> memory) {
+    MaybeDirectHandle<JSReceiver> imports) {
   TRACE_EVENT("v8.wasm", "wasm.SyncInstantiate");
-  return InstantiateToInstanceObject(isolate, thrower, module_object, imports,
-                                     memory);
+  return InstantiateToInstanceObject(isolate, thrower, module_object, imports);
 }
 
 void WasmEngine::AsyncInstantiate(
@@ -703,8 +701,7 @@ void WasmEngine::AsyncInstantiate(
   catcher.SetCaptureMessage(false);
 
   MaybeDirectHandle<WasmInstanceObject> instance_object =
-      SyncInstantiate(isolate, &thrower, module_object, imports,
-                      DirectHandle<JSArrayBuffer>::null());
+      SyncInstantiate(isolate, &thrower, module_object, imports);
 
   if (!instance_object.is_null()) {
     resolver->OnInstantiationSucceeded(instance_object.ToHandleChecked());

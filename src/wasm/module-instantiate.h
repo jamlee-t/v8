@@ -101,8 +101,7 @@ class ResolvedWasmImport {
 MaybeDirectHandle<WasmInstanceObject> InstantiateToInstanceObject(
     Isolate* isolate, ErrorThrower* thrower,
     DirectHandle<WasmModuleObject> module_object,
-    MaybeDirectHandle<JSReceiver> imports,
-    MaybeDirectHandle<JSArrayBuffer> memory);
+    MaybeDirectHandle<JSReceiver> imports);
 
 // Initializes a segment at index {segment_index} of the segment array of
 // {instance}. If successful, returns the empty {Optional}, otherwise an

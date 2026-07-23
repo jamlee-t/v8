@@ -272,7 +272,7 @@ void FuzzIt(base::Vector<const uint8_t> data) {
       compiled_module.ToHandleChecked();
   DirectHandle<WasmInstanceObject> instance =
       GetWasmEngine()
-          ->SyncInstantiate(i_isolate, &thrower, module_object, {}, {})
+          ->SyncInstantiate(i_isolate, &thrower, module_object, {})
           .ToHandleChecked();
   CHECK_EQ(expression_count,
            module_object->native_module()->module()->num_declared_functions);

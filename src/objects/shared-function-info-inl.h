@@ -435,9 +435,8 @@ SharedFunctionInfo::Inlineability SharedFunctionInfo::GetInlineability(
 
   if (!IsUserJavaScript()) return kIsNotUserCode;
 
-  // If there is no bytecode array, it is either not compiled or it is compiled
-  // with WebAssembly for the asm.js pipeline. In either case we don't want to
-  // inline.
+  // If there is no bytecode array, the function is not compiled, so we don't
+  // want to inline.
   if (!HasBytecodeArray()) return kHasNoBytecode;
 
   if (GetBytecodeArray(isolate)->length() >

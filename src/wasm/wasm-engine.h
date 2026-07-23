@@ -199,13 +199,10 @@ class V8_EXPORT_PRIVATE WasmEngine {
       base::Vector<const char> source_url = {});
 
   // Synchronously instantiate the given Wasm module with the given imports.
-  // If the module represents an asm.js module, then the supplied {memory}
-  // should be used as the memory of the instance.
   MaybeDirectHandle<WasmInstanceObject> SyncInstantiate(
       Isolate* isolate, ErrorThrower* thrower,
       DirectHandle<WasmModuleObject> module_object,
-      MaybeDirectHandle<JSReceiver> imports,
-      MaybeDirectHandle<JSArrayBuffer> memory);
+      MaybeDirectHandle<JSReceiver> imports);
 
   // Begin an asynchronous compilation of the given bytes that represent an
   // encoded Wasm module.

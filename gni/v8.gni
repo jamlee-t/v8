@@ -159,8 +159,7 @@ declare_args() {
 
   # Include support for WebAssembly. If disabled, the 'WebAssembly' global
   # will not be available, and embedder APIs to generate WebAssembly modules
-  # will fail. Also, asm.js will not be translated to WebAssembly and will be
-  # executed as standard JavaScript instead.
+  # will fail.
   # Sets -dV8_ENABLE_WEBASSEMBLY.
   v8_enable_webassembly = ""
 

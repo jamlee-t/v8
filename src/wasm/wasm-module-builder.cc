@@ -542,13 +542,11 @@ uint32_t WasmModuleBuilder::AddElementSegment(WasmElemSegment segment) {
   return static_cast<uint32_t>(element_segments_.size() - 1);
 }
 
-void WasmModuleBuilder::SetIndirectFunction(
-    uint32_t table_index, uint32_t index_in_table,
-    uint32_t direct_function_index,
-    WasmElemSegment::FunctionIndexingMode indexing_mode) {
+void WasmModuleBuilder::SetIndirectFunction(uint32_t table_index,
+                                            uint32_t index_in_table,
+                                            uint32_t direct_function_index) {
   WasmElemSegment segment(zone_, kWasmFuncRef, table_index,
                           WasmInitExpr(static_cast<int>(index_in_table)));
-  segment.indexing_mode = indexing_mode;
   segment.entries.emplace_back(WasmElemSegment::Entry::kRefFuncEntry,
                                direct_function_index);
   AddElementSegment(std::move(segment));
@@ -890,16 +888,8 @@ void WasmModuleBuilder::WriteTo(ZoneBuffer* buffer) const {
                 : entry.kind == WasmElemSegment::Entry::kRefFuncEntry
                       ? kExprRefFunc
                       : kExprRefNull;
-        bool needs_function_offset =
-            segment.indexing_mode ==
-                WasmElemSegment::kRelativeToDeclaredFunctions &&
-            entry.kind == WasmElemSegment::Entry::kRefFuncEntry;
-        uint32_t index =
-            entry.index + (needs_function_offset
-                               ? static_cast<uint32_t>(function_imports_.size())
-                               : 0);
         buffer->write_u8(opcode);
-        buffer->write_u32v(index);
+        buffer->write_u32v(entry.index);
         buffer->write_u8(kExprEnd);
       }
     }

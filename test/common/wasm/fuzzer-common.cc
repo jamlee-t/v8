@@ -521,8 +521,8 @@ ExecutionResult ExecuteReferenceRun(Isolate* isolate,
   {
     ErrorThrower thrower(isolate, "ExecuteAgainstReference");
     if (!GetWasmEngine()
-             ->SyncInstantiate(isolate, &thrower, module_ref, {},
-                               {})  // no imports & memory
+             ->SyncInstantiate(isolate, &thrower, module_ref,
+                               /* no imports */ {})
              .ToHandle(&instance_ref)) {
       isolate->clear_exception();
       thrower.Reset();  // Ignore errors.
@@ -619,8 +619,8 @@ static std::optional<ExecutionResult> ExecuteNonReferenceRun(
   {
     ErrorThrower thrower(isolate, "ExecuteNonReferenceRun");
     if (!GetWasmEngine()
-             ->SyncInstantiate(isolate, &thrower, module_object, {},
-                               {})  // no imports & memory
+             ->SyncInstantiate(isolate, &thrower, module_object,
+                               /* no imports */ {})
              .ToHandle(&instance)) {
       CHECK(thrower.error());
       // The only reason to fail this instantiation should be OOM, because
