@@ -3589,6 +3589,16 @@ class GraphBuildingNodeProcessor {
     }
     return MemoryRepresentation::AnyTagged();
   }
+  WriteBarrierKind WriteBarrierKindFor(MemoryRepresentation mem_repr) {
+    if (mem_repr == MemoryRepresentation::TaggedSigned()) {
+      return WriteBarrierKind::kNoWriteBarrier;
+    }
+    if (mem_repr == MemoryRepresentation::TaggedPointer()) {
+      return WriteBarrierKind::kPointerWriteBarrier;
+    }
+    DCHECK(mem_repr == MemoryRepresentation::AnyTagged());
+    return WriteBarrierKind::kFullWriteBarrier;
+  }
   maglev::ProcessResult Process(maglev::StoreTaggedFieldNoWriteBarrier* node,
                                 const maglev::ProcessingState& state) {
     __ Store(Map(node->ObjectInput()), Map(node->ValueInput()),
@@ -3601,17 +3611,12 @@ class GraphBuildingNodeProcessor {
   }
   maglev::ProcessResult Process(maglev::StoreTaggedFieldWithWriteBarrier* node,
                                 const maglev::ProcessingState& state) {
-    WriteBarrierKind write_barrier =
-        node->value_can_be_smi() ? WriteBarrierKind::kFullWriteBarrier
-                                 : WriteBarrierKind::kPointerWriteBarrier;
-    // Note: a barriered store must not use TaggedSigned (the write barrier
-    // implies a heap-object value), so only the pointer refinement applies.
-    MemoryRepresentation mem_repr = node->value_can_be_smi()
-                                        ? MemoryRepresentation::AnyTagged()
-                                        : MemoryRepresentation::TaggedPointer();
+    MemoryRepresentation mem_repr = TaggedMemoryRepresentation(
+        node->ValueInput().node()->GetStaticType(broker_));
     __ Store(Map(node->ObjectInput()), Map(node->ValueInput()),
-             StoreOp::Kind::TaggedBase(), mem_repr, write_barrier,
-             node->offset(), node->initializing_or_transitioning());
+             StoreOp::Kind::TaggedBase(), mem_repr,
+             WriteBarrierKindFor(mem_repr), node->offset(),
+             node->initializing_or_transitioning());
     return maglev::ProcessResult::kContinue;
   }
   maglev::ProcessResult Process(maglev::StoreContextSlotWithWriteBarrier* node,
