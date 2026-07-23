@@ -14,6 +14,7 @@
 #include "src/heap/local-factory-inl.h"
 #include "src/logging/runtime-call-stats-scope.h"
 #include "src/objects/scope-info.h"
+#include "src/objects/shared-function-info-inl.h"
 #include "src/objects/string-inl.h"
 #include "src/objects/string-set.h"
 #include "src/parsing/parse-info.h"

@@ -7,6 +7,7 @@
 #include "src/common/synchronization-point-support.h"
 #include "src/compiler/js-heap-broker.h"
 #include "src/heap/local-heap.h"
+#include "src/heap/read-only-heap-inl.h"
 #include "src/objects/string-inl.h"
 
 namespace v8::internal::compiler::utils {

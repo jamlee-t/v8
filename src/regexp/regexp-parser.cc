@@ -6,6 +6,7 @@
 
 #include "src/base/logging.h"
 #include "src/execution/isolate.h"
+#include "src/heap/read-only-heap-inl.h"
 #include "src/objects/string-inl.h"
 #include "src/regexp/regexp-ast-printer.h"
 #include "src/regexp/regexp-ast.h"
