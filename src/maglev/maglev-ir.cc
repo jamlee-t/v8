@@ -3103,6 +3103,46 @@ void Float64Compare::GenerateCode(MaglevAssembler* masm,
   __ bind(&end);
 }
 
+void Float64SameValue::SetValueLocationConstraints() {
+  UseRegister(LeftInput());
+  UseRegister(RightInput());
+  set_temporaries_needed(2);
+  DefineAsRegister(this);
+}
+
+void Float64SameValue::GenerateCode(MaglevAssembler* masm,
+                                    const ProcessingState& state) {
+  MaglevAssembler::TemporaryRegisterScope temps(masm);
+  Register left_bits = temps.Acquire();
+  Register right_bits = temps.Acquire();
+  DoubleRegister left = ToDoubleRegister(LeftInput());
+  DoubleRegister right = ToDoubleRegister(RightInput());
+  Register result = ToRegister(this->result());
+  Label is_true, is_false, maybe_nan, end;
+  __ CompareFloat64AndJumpIf(left, right, kNotEqual, &is_false, &maybe_nan);
+  // Two doubles that compare equal have the same bits, except for +0 and -0.
+  // Those differ in their sign bit, so comparing the high words is enough.
+  __ Float64ExtractHighWord32(left_bits, left);
+  __ Float64ExtractHighWord32(right_bits, right);
+  __ CompareInt32AndJumpIf(left_bits, right_bits, kNotEqual, &is_false);
+  __ Jump(&is_true);
+  {
+    // The comparison above was unordered, so at least one side is a NaN. NaN is
+    // same-value as itself, but not as any other value.
+    __ bind(&maybe_nan);
+    __ JumpIfNotNan(left, &is_false);
+    __ JumpIfNotNan(right, &is_false);
+  }
+  __ bind(&is_true);
+  __ LoadRoot(result, RootIndex::kTrueValue);
+  __ Jump(&end);
+  {
+    __ bind(&is_false);
+    __ LoadRoot(result, RootIndex::kFalseValue);
+  }
+  __ bind(&end);
+}
+
 void Float64ToBoolean::SetValueLocationConstraints() {
   UseRegister(ValueInput());
   set_double_temporaries_needed(1);

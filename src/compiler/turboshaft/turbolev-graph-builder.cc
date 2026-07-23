@@ -4073,6 +4073,13 @@ class GraphBuildingNodeProcessor {
     SetMap(node, ConvertWord32ToJSBool(bool_res));
     return maglev::ProcessResult::kContinue;
   }
+  maglev::ProcessResult Process(maglev::Float64SameValue* node,
+                                const maglev::ProcessingState& state) {
+    V<Word32> bool_res =
+        __ Float64SameValue(Map(node->LeftInput()), Map(node->RightInput()));
+    SetMap(node, ConvertWord32ToJSBool(bool_res));
+    return maglev::ProcessResult::kContinue;
+  }
   maglev::ProcessResult Process(maglev::BigIntBinaryOperation* node,
                                 const maglev::ProcessingState& state) {
     GET_FRAME_STATE_MAYBE_ABORT(frame_state, node->eager_deopt_info());

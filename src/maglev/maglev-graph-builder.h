@@ -1583,8 +1583,12 @@ class MaglevGraphBuilder {
   bool HasValidInitialMap(compiler::JSFunctionRef new_target,
                           compiler::JSFunctionRef constructor);
 
-  ReduceResult BuildTaggedEqual(ValueNode* lhs, ValueNode* rhs);
-  ReduceResult BuildTaggedEqual(ValueNode* lhs, RootIndex rhs_index);
+  ReduceResult BuildTaggedEqual(ValueNode* lhs, ValueNode* rhs) {
+    return reducer_.BuildTaggedEqual(lhs, rhs);
+  }
+  ReduceResult BuildTaggedEqual(ValueNode* lhs, RootIndex rhs_index) {
+    return reducer_.BuildTaggedEqual(lhs, rhs_index);
+  }
 
   using BranchResult = ::v8::internal::maglev::BranchResult;
   using BranchType = ::v8::internal::maglev::BranchType;

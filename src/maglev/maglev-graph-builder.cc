@@ -3200,34 +3200,6 @@ ReduceResult MaglevGraphBuilder::VisitPopContext() {
   return ReduceResult::Done();
 }
 
-ReduceResult MaglevGraphBuilder::BuildTaggedEqual(ValueNode* lhs,
-                                                  ValueNode* rhs) {
-  ValueNode* tagged_lhs;
-  GET_VALUE_OR_ABORT(tagged_lhs, GetTaggedValue(lhs));
-  ValueNode* tagged_rhs;
-  GET_VALUE_OR_ABORT(tagged_rhs, GetTaggedValue(rhs));
-  if (tagged_lhs == tagged_rhs) {
-    return GetBooleanConstant(true);
-  }
-  if (reducer_.HaveDisjointTypes(tagged_lhs, tagged_rhs)) {
-    return GetBooleanConstant(false);
-  }
-  // TODO(victorgomes): We could retrieve the HeapObjectRef in HeapConstant and
-  // compare them.
-  if (IsConstantNode(tagged_lhs->opcode()) && !tagged_lhs->Is<HeapConstant>() &&
-      tagged_lhs->opcode() == tagged_rhs->opcode()) {
-    // Constants nodes are canonicalized, except for the node holding
-    // HeapObjectRef, so equal constants should have been handled above.
-    return GetBooleanConstant(false);
-  }
-  return AddNewNodeNoInputConversion<TaggedEqual>({tagged_lhs, tagged_rhs});
-}
-
-ReduceResult MaglevGraphBuilder::BuildTaggedEqual(ValueNode* lhs,
-                                                  RootIndex rhs_index) {
-  return BuildTaggedEqual(lhs, GetRootConstant(rhs_index));
-}
-
 ReduceResult MaglevGraphBuilder::VisitTestReferenceEqual() {
   ValueNode* lhs = LoadRegister(0);
   ValueNode* rhs = GetAccumulator();

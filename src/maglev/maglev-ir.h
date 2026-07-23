@@ -177,6 +177,7 @@ class ExceptionHandlerInfo;
   V(Float64RoundToFloat32)              \
   V(Float64Round)                       \
   V(Float64Compare)                     \
+  V(Float64SameValue)                   \
   V(Float64ToBoolean)                   \
   V(Float64Ieee754Unary)                \
   V(Float64Ieee754Binary)               \
@@ -3763,6 +3764,20 @@ class Float64Compare : public FixedInputValueNodeT<2, Float64Compare> {
 
  private:
   using OperationBitField = NextBitField<Operation, kOperationBits>;
+};
+
+// https://tc39.es/ecma262/#sec-samevalue restricted to Number inputs: unlike
+// Float64Compare, NaN is same-value as itself and +0 is not same-value as -0.
+class Float64SameValue : public FixedInputValueNodeT<2, Float64SameValue> {
+ public:
+  explicit Float64SameValue(uint64_t bitfield) : Base(bitfield) {}
+
+  DECLARE_BINOP(Float64, Float64)
+
+  void SetValueLocationConstraints();
+  void GenerateCode(MaglevAssembler*, const ProcessingState&);
+
+  NodeType type() const { return NodeType::kBoolean; }
 };
 
 class Float64ToBoolean : public FixedInputValueNodeT<1, Float64ToBoolean> {

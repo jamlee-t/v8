@@ -3184,6 +3184,22 @@ ProcessResult MaglevGraphOptimizer::VisitFloat64Compare(
   return ProcessResult::kContinue;
 }
 
+ProcessResult MaglevGraphOptimizer::VisitFloat64SameValue(
+    Float64SameValue* node, const ProcessingState& state) {
+  auto left = reducer_.TryGetFloat64OrHoleyFloat64Constant(
+      UseRepresentation::kFloat64, node->input_node(0),
+      TaggedToFloat64ConversionType::kOnlyNumber);
+  if (!left) return ProcessResult::kContinue;
+
+  auto right = reducer_.TryGetFloat64OrHoleyFloat64Constant(
+      UseRepresentation::kFloat64, node->input_node(1),
+      TaggedToFloat64ConversionType::kOnlyNumber);
+  if (!right) return ProcessResult::kContinue;
+
+  return ReplaceWith(reducer_.GetBooleanConstant(
+      Object::SameNumberValue(left->get_scalar(), right->get_scalar())));
+}
+
 ProcessResult MaglevGraphOptimizer::VisitFloat64ToBoolean(
     Float64ToBoolean* node, const ProcessingState& state) {
   if (auto cst = reducer_.TryGetFloat64OrHoleyFloat64Constant(

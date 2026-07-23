@@ -677,6 +677,7 @@ class V8_EXPORT_PRIVATE MaglevAssembler : public MacroAssembler {
                          Label* target, Label::Distance distance = Label::kFar);
 
   inline void Float64SilenceNan(DoubleRegister value);
+  inline void Float64ExtractHighWord32(Register dst, DoubleRegister src);
 #ifdef V8_ENABLE_UNDEFINED_DOUBLE
   inline void JumpIfUndefinedNan(DoubleRegister value, Register scratch,
                                  Label* target,

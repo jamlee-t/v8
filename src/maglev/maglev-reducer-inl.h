@@ -2671,6 +2671,126 @@ MaybeReduceResult MaglevReducer<BaseT>::TryReduceObjectPrototypeIsPrototypeOf(
 }
 
 template <typename BaseT>
+ReduceResult MaglevReducer<BaseT>::BuildTaggedEqual(ValueNode* lhs,
+                                                    ValueNode* rhs) {
+  ValueNode* tagged_lhs;
+  GET_VALUE_OR_ABORT(tagged_lhs, GetTaggedValue(lhs));
+  ValueNode* tagged_rhs;
+  GET_VALUE_OR_ABORT(tagged_rhs, GetTaggedValue(rhs));
+  if (tagged_lhs == tagged_rhs) {
+    return GetBooleanConstant(true);
+  }
+  if (HaveDisjointTypes(tagged_lhs, tagged_rhs)) {
+    return GetBooleanConstant(false);
+  }
+  // TODO(victorgomes): We could retrieve the HeapObjectRef in HeapConstant and
+  // compare them.
+  if (IsConstantNode(tagged_lhs->opcode()) &&
+      !tagged_lhs->template Is<HeapConstant>() &&
+      tagged_lhs->opcode() == tagged_rhs->opcode()) {
+    // Constants nodes are canonicalized, except for the node holding
+    // HeapObjectRef, so equal constants should have been handled above.
+    return GetBooleanConstant(false);
+  }
+  return AddNewNodeNoInputConversion<TaggedEqual>({tagged_lhs, tagged_rhs});
+}
+
+template <typename BaseT>
+ReduceResult MaglevReducer<BaseT>::BuildTaggedEqual(ValueNode* lhs,
+                                                    RootIndex rhs_index) {
+  return BuildTaggedEqual(lhs, GetRootConstant(rhs_index));
+}
+
+template <typename BaseT>
+bool MaglevReducer<BaseT>::IsNeitherNaNNorZero(ValueNode* node) {
+  if (auto constant = TryGetFloat64OrHoleyFloat64Constant(
+          UseRepresentation::kFloat64, node,
+          TaggedToFloat64ConversionType::kOnlyNumber)) {
+    double value = constant->get_scalar();
+    // Note that `value != 0` rules out both +0 and -0.
+    return !std::isnan(value) && value != 0;
+  }
+  return false;
+}
+
+template <typename BaseT>
+ReduceResult MaglevReducer<BaseT>::BuildNumberSameValue(ValueNode* lhs,
+                                                        ValueNode* rhs) {
+  DCHECK(CheckType(lhs, NodeType::kNumber));
+  DCHECK(CheckType(rhs, NodeType::kNumber));
+  ValueNode* int32_lhs = TryGetInt32(lhs);
+  ValueNode* int32_rhs = TryGetInt32(rhs);
+  if (int32_lhs != nullptr && int32_rhs != nullptr) {
+    return AddNewNodeNoInputConversion<Int32Compare>({int32_lhs, int32_rhs},
+                                                     Operation::kEqual);
+  }
+  // Narrowing a holey float64 to a float64 emits an eager deopt check, so only
+  // do that when the call may speculate.
+  auto needs_hole_check = [](ValueNode* node) {
+    return node->value_representation() == ValueRepresentation::kHoleyFloat64;
+  };
+  if (!CanSpeculateCall() && (needs_hole_check(lhs) || needs_hole_check(rhs))) {
+    return BuildCallBuiltinWithTaggedInputs<Builtin::kSameValue>({lhs, rhs});
+  }
+  ValueNode* float64_lhs;
+  GET_VALUE_OR_ABORT(float64_lhs, GetFloat64(lhs));
+  ValueNode* float64_rhs;
+  GET_VALUE_OR_ABORT(float64_rhs, GetFloat64(rhs));
+  // SameValue and numeric equality disagree only when both sides are NaN, or
+  // when one is +0 and the other -0. A side that is neither NaN nor zero rules
+  // both out.
+  if (IsNeitherNaNNorZero(lhs) || IsNeitherNaNNorZero(rhs)) {
+    return AddNewNodeNoInputConversion<Float64Compare>(
+        {float64_lhs, float64_rhs}, Operation::kEqual);
+  }
+  return AddNewNodeNoInputConversion<Float64SameValue>(
+      {float64_lhs, float64_rhs});
+}
+
+template <typename BaseT>
+ReduceResult MaglevReducer<BaseT>::BuildSameValue(ValueNode* lhs,
+                                                  ValueNode* rhs) {
+  // SameValue is reflexive, including for NaN.
+  if (lhs == rhs) return GetBooleanConstant(true);
+
+  // Values of disjoint types are never SameValue, with one exception: kSmi and
+  // kHeapNumber are disjoint but can hold the same number.
+  NodeType lhs_type = GetType(lhs);
+  NodeType rhs_type = GetType(rhs);
+  if (IsEmptyNodeType(IntersectType(lhs_type, rhs_type)) &&
+      !(NodeTypeCanBe(lhs_type, NodeType::kNumber) &&
+        NodeTypeCanBe(rhs_type, NodeType::kNumber))) {
+    return GetBooleanConstant(false);
+  }
+
+  // No value can be SameValue to a JSReceiver, a Symbol or an Oddball without
+  // being that very object, so knowing one of the sides is enough here.
+  const NodeType kReferenceEqual = UnionType(
+      NodeType::kJSReceiver, UnionType(NodeType::kSymbol, NodeType::kOddball));
+
+  if (NodeTypeIs(lhs_type, NodeType::kNumber) &&
+      NodeTypeIs(rhs_type, NodeType::kNumber)) {
+    return BuildNumberSameValue(lhs, rhs);
+  } else if (NodeTypeIs(lhs_type, kReferenceEqual) ||
+             NodeTypeIs(rhs_type, kReferenceEqual)) {
+    return BuildTaggedEqual(lhs, rhs);
+  } else if (NodeTypeIs(lhs_type, NodeType::kString) &&
+             NodeTypeIs(rhs_type, NodeType::kString)) {
+    return AddNewNode<StringEqual>({lhs, rhs},
+                                   StringEqualInputMode::kOnlyStrings);
+  }
+
+  return BuildCallBuiltinWithTaggedInputs<Builtin::kSameValue>({lhs, rhs});
+}
+
+template <typename BaseT>
+MaybeReduceResult MaglevReducer<BaseT>::TryReduceObjectIs(
+    compiler::JSFunctionRef target, CallArguments& args) {
+  return BuildSameValue(GetValueOrUndefined(args[0]),
+                        GetValueOrUndefined(args[1]));
+}
+
+template <typename BaseT>
 ReduceResult MaglevReducer<BaseT>::BuildCheckSmi(ValueNode* object) {
   if (object->StaticTypeIs(broker(), NodeType::kSmi)) return object;
   RETURN_IF_DONE(EnsureType(object, NodeType::kSmi, DeoptimizeReason::kSmi));

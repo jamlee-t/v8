@@ -806,6 +806,13 @@ class MaglevReducer {
   ReduceResult BuildCheckSmi(ValueNode* object);
   ReduceResult BuildCheckString(ValueNode* object);
 
+  ReduceResult BuildTaggedEqual(ValueNode* lhs, ValueNode* rhs);
+  ReduceResult BuildTaggedEqual(ValueNode* lhs, RootIndex rhs_index);
+
+  ReduceResult BuildSameValue(ValueNode* lhs, ValueNode* rhs);
+  ReduceResult BuildNumberSameValue(ValueNode* lhs, ValueNode* rhs);
+  bool IsNeitherNaNNorZero(ValueNode* node);
+
   ReduceResult TryBuildCheckInt32Condition(ValueNode* lhs, ValueNode* rhs,
                                            AssertCondition condition,
                                            DeoptimizeReason reason);
@@ -1144,6 +1151,7 @@ class MaglevReducer {
   V(MathSign)                                  \
   V(MathSqrt)                                  \
   V(MathTrunc)                                 \
+  V(ObjectIs)                                  \
   V(ObjectPrototypeIsPrototypeOf)              \
   V(PromisePrototypeThen)                      \
   V(PromiseResolveTrampoline)                  \
