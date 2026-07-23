@@ -5181,6 +5181,8 @@ ReduceResult MaglevGraphBuilder::BuildLoadTypedArrayLength(
     ValueNode* object, ElementsKind elements_kind) {
   DCHECK(IsTypedArrayOrRabGsabTypedArrayElementsKind(elements_kind));
   bool is_variable_length = IsRabGsabTypedArrayElementsKind(elements_kind);
+  bool is_const_length =
+      !is_variable_length && !v8_flags.track_array_buffer_views;
 
   if (!is_variable_length) {
     if (auto const_object = TryGetConstant<JSTypedArray>(object)) {
@@ -5198,8 +5200,8 @@ ReduceResult MaglevGraphBuilder::BuildLoadTypedArrayLength(
     // Note: We can't use broker()->length_string() here, because it could
     // conflict with redefinitions of the TypedArray length property.
 
-    if (ValueNode* length = known_node_aspects().TryFindLoadedConstantProperty(
-            object, PropertyKey::TypedArrayLength())) {
+    if (ValueNode* length = known_node_aspects().TryFindLoadedProperty(
+            object, PropertyKey::TypedArrayLength(), is_const_length)) {
       return length;
     }
   }
@@ -5209,7 +5211,8 @@ ReduceResult MaglevGraphBuilder::BuildLoadTypedArrayLength(
                      AddNewNode<LoadTypedArrayLength>({object}, elements_kind));
   if (!is_variable_length) {
     reducer_.RecordKnownProperty(object, PropertyKey::TypedArrayLength(),
-                                 result, true, compiler::AccessMode::kLoad);
+                                 result, is_const_length,
+                                 compiler::AccessMode::kLoad);
   }
   return result;
 }

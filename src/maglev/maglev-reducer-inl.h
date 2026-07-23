@@ -4586,11 +4586,11 @@ void MaglevReducer<BaseT>::RecordKnownProperty(
 template <typename BaseT>
 ReduceResult MaglevReducer<BaseT>::BuildLoadJSDataViewByteLength(
     ValueNode* js_data_view) {
+  bool is_const = !v8_flags.track_array_buffer_views;
   // Note: We can't use broker()->byte_length_string() here, because it could
   // conflict with redefinitions of the ArrayBufferView byteLength property.
-  if (ValueNode* byte_length =
-          known_node_aspects().TryFindLoadedConstantProperty(
-              js_data_view, PropertyKey::ArrayBufferViewByteLength())) {
+  if (ValueNode* byte_length = known_node_aspects().TryFindLoadedProperty(
+          js_data_view, PropertyKey::ArrayBufferViewByteLength(), is_const)) {
     return byte_length;
   }
 
@@ -4598,16 +4598,16 @@ ReduceResult MaglevReducer<BaseT>::BuildLoadJSDataViewByteLength(
   GET_VALUE_OR_ABORT(result,
                      AddNewNode<LoadDataViewByteLength>({js_data_view}));
   RecordKnownProperty(js_data_view, PropertyKey::ArrayBufferViewByteLength(),
-                      result, true, compiler::AccessMode::kLoad);
+                      result, is_const, compiler::AccessMode::kLoad);
   return result;
 }
 
 template <typename BaseT>
 ReduceResult MaglevReducer<BaseT>::BuildLoadJSDataViewDataPointer(
     ValueNode* js_data_view) {
-  if (ValueNode* backing_store =
-          known_node_aspects().TryFindLoadedConstantProperty(
-              js_data_view, PropertyKey::ArrayBufferViewDataPointer())) {
+  bool is_const = !v8_flags.track_array_buffer_views;
+  if (ValueNode* backing_store = known_node_aspects().TryFindLoadedProperty(
+          js_data_view, PropertyKey::ArrayBufferViewDataPointer(), is_const)) {
     return backing_store;
   }
 
@@ -4615,7 +4615,7 @@ ReduceResult MaglevReducer<BaseT>::BuildLoadJSDataViewDataPointer(
   GET_VALUE_OR_ABORT(result,
                      AddNewNode<LoadDataViewDataPointer>({js_data_view}));
   RecordKnownProperty(js_data_view, PropertyKey::ArrayBufferViewDataPointer(),
-                      result, true, compiler::AccessMode::kLoad);
+                      result, is_const, compiler::AccessMode::kLoad);
   return result;
 }
 

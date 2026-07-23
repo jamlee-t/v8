@@ -2394,7 +2394,7 @@ const Operator* SimplifiedOperatorBuilder::TypedArrayLength(
       IrOpcode::kTypedArrayLength,                                   // opcode
       Operator::kNoWrite | Operator::kNoThrow | Operator::kNoDeopt,  // flags
       "TypedArrayLength",                                            // name
-      1, 0, 0, 1, 0, 0,                                              // counts
+      1, 1, 1, 1, 1, 0,                                              // counts
       elements_kind);  // parameter
 }
 

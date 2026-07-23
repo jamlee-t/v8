@@ -395,16 +395,18 @@ class RecomputeKnownNodeAspectsProcessor {
   }
 
   ProcessResult ProcessNode(LoadDataViewByteLength* node) {
+    bool is_const = !v8_flags.track_array_buffer_views;
     auto& props_for_key = known_node_aspects().GetLoadedPropertiesForKey(
-        zone(), true, PropertyKey::ArrayBufferViewByteLength());
+        zone(), is_const, PropertyKey::ArrayBufferViewByteLength());
     props_for_key[node->ValueInput().node()] = node;
     return ProcessResult::kContinue;
   }
 
   ProcessResult ProcessNode(LoadTypedArrayLength* node) {
     if (!IsRabGsabTypedArrayElementsKind(node->elements_kind())) {
+      bool is_const = !v8_flags.track_array_buffer_views;
       auto& props_for_key = known_node_aspects().GetLoadedPropertiesForKey(
-          zone(), true, PropertyKey::TypedArrayLength());
+          zone(), is_const, PropertyKey::TypedArrayLength());
       props_for_key[node->ValueInput().node()] = node;
     }
     return ProcessResult::kContinue;

@@ -6243,7 +6243,8 @@ struct TypedArrayLengthOp : FixedArityOperationT<1, TypedArrayLengthOp> {
       // it's pure.
       OpEffects()
           // We rely on the input being a JSTypedArray.
-          .CanDependOnChecks();
+          .CanDependOnChecks()
+          .CanReadMemory();
   base::Vector<const RegisterRepresentation> outputs_rep() const {
     return RepVector<RegisterRepresentation::WordPtr()>();
   }
