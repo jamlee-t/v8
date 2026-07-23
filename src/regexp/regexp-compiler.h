@@ -119,8 +119,10 @@ class QuickCheckDetails {
     DCHECK_GT(characters_, index);
     return positions_ + index;
   }
-  uint32_t mask() { return mask_; }
-  uint32_t value() { return value_; }
+  uint32_t mask() const { return mask_; }
+  uint32_t value() const { return value_; }
+  void set_mask(uint32_t mask) { mask_ = mask; }
+  void set_value(uint32_t value) { value_ = value; }
 
  private:
   static constexpr int kMaxPositions = 4;
@@ -246,6 +248,21 @@ class BoyerMooreLookahead : public ZoneObject {
                       Handle<ByteArray>* table,
                       Handle<ByteArray>* nibble_table);
 
+  // Fills |boolean_skip_table| (one byte per character, indexed mod kTableSize)
+  // with 1 for every character in the lookahead maps [min_lookahead,
+  // max_lookahead] and 0 elsewhere, and optionally the SIMD |nibble_table|.
+  // Returns the resulting skip stride. With a single map (min == max) this is
+  // just that position's membership table.
+  int GetSkipTable(
+      int min_lookahead, int max_lookahead,
+      DirectHandle<ByteArray> boolean_skip_table,
+      DirectHandle<ByteArray> nibble_table = DirectHandle<ByteArray>{});
+
+  // Transient probes opt out so they don't clobber the shared bm_info_ (see
+  // Node::set_bm_info).
+  bool caches_node_info() const { return caches_node_info_; }
+  void set_caches_node_info(bool value) { caches_node_info_ = value; }
+
  private:
   // This is the value obtained by EatsAtLeast.  If we do not have at least this
   // many characters left in the sample string then the match is bound to fail.
@@ -256,11 +273,8 @@ class BoyerMooreLookahead : public ZoneObject {
   // 0xff for Latin1, 0xffff for UTF-16.
   int max_char_;
   ZoneList<BoyerMoorePositionInfo*>* bitmaps_;
+  bool caches_node_info_ = true;
 
-  int GetSkipTable(
-      int min_lookahead, int max_lookahead,
-      DirectHandle<ByteArray> boolean_skip_table,
-      DirectHandle<ByteArray> nibble_table = DirectHandle<ByteArray>{});
   bool FindWorthwhileInterval(int* from, int* to);
   int FindBestInterval(int max_number_of_chars, int old_biggest_points,
                        int* from, int* to);

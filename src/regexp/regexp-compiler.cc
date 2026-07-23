@@ -1891,10 +1891,89 @@ bool QuickCheckDetails::Rationalize(bool asc) {
   return found_useful_op;
 }
 
+void Node::set_bm_info(bool not_at_start, BoyerMooreLookahead* bm) {
+  if (!bm->caches_node_info()) return;
+  bm_info_[not_at_start ? 1 : 0] = bm;
+}
+
 uint32_t Node::EatsAtLeast(bool not_at_start) {
   return not_at_start ? eats_at_least_.from_not_start
                       : eats_at_least_.from_possibly_start;
 }
+
+namespace {
+
+// An approximate single-character quick check (Position::determines_perfectly
+// == false) admits many false positives: a scattered class like [+\-%&|^]
+// rationalizes to a weak common-bits mask, and merging a choice's alternatives
+// weakens it further.  When the node's own first-character set is small, reject
+// non-members exactly with a membership table instead. The table is indexed
+// modulo kTableSize (see CheckBitInTable), so in two-byte mode it still admits
+// false positives from aliasing; the body's full check backstops it.
+//
+// Returns a table whose bit is set for every first character the node can
+// match, or an empty handle when a table is not worthwhile.
+//
+// The set is recovered by a fresh position-0 FillInBMInfo walk of this node.
+// FillInBMInfo only ever over-approximates, so a nonzero result is a valid
+// superset (false positives allowed, false negatives not). The walk is fresh
+// rather than reading the shared bm_info_ because that slot holds the union
+// over sibling alternatives, not this node's own set. It runs on a non-caching
+// lookahead (set_caches_node_info) so the transient walk does not overwrite
+// that shared slot.
+Handle<ByteArray> TryBuildFirstCharacterTable(Node* node, uint32_t mask,
+                                              Compiler* compiler,
+                                              bool not_at_start) {
+  if (node->EatsAtLeast(not_at_start) < 1) {
+    TRACE("* No first-character table: eats nothing");
+    return {};
+  }
+
+  Zone* zone = node->zone();
+  BoyerMooreLookahead* lookahead =
+      zone->New<BoyerMooreLookahead>(1, compiler, zone);
+  lookahead->set_caches_node_info(false);
+  node->FillInBMInfo(compiler->isolate(), 0, Node::kRecursionBudget, lookahead,
+                     not_at_start);
+
+  const int count = lookahead->at(0)->map_count();
+  if (count == 0) {
+    // First-character set unknown; keep the mask.
+    TRACE("* No first-character table: set unknown");
+    return {};
+  }
+
+  // The mask already rejects everything outside 2^popcount(~mask) characters. A
+  // table is only worth its load and heap object when it is strictly more
+  // selective than that, so bail when the mask is at least as discriminating.
+  //
+  // Each table bit stands for (char_mask + 1) / kTableSize code units (2 in
+  // one-byte mode, 512 in two-byte), since map_count() and CheckBitInTable both
+  // key on character & kMask, so scale the count into code units before
+  // comparing. Without the scale the table looks artificially selective and we
+  // emit a strictly worse check: a wider table plus, once we clear the mask
+  // below, the loss of the downstream masked-class fold.
+  const uint32_t char_mask = CharMask(compiler->one_byte());
+  const int alias_factor = (char_mask + 1) / RegExpMacroAssembler::kTableSize;
+  const int mask_accepts = 1 << base::bits::CountPopulation(~mask & char_mask);
+  if (count * alias_factor >= mask_accepts) {
+    TRACE("* No first-character table: mask at least as discriminating");
+    return {};
+  }
+
+  // A single-position skip table is a membership table: one byte per character,
+  // nonzero iff the character can start a match.
+  // TODO(jgruber): A node emitted up to kMaxCopiesCodeGenerated times repeats
+  // this walk and allocates a byte-identical table each time. Memoizing the
+  // table on the node would collapse both (cf. the boundary-test tables).
+  Handle<ByteArray> table = compiler->isolate()->factory()->NewByteArray(
+      RegExpMacroAssembler::kTableSize, AllocationType::kOld);
+  lookahead->GetSkipTable(0, 0, table);
+  TRACE("* Emit first-character table");
+  return table;
+}
+
+}  // namespace
 
 bool Node::EmitQuickCheck(Compiler* compiler, Trace* bounds_check_trace,
                           Trace* trace, bool preload_has_checked_bounds,
@@ -1942,6 +2021,42 @@ bool Node::EmitQuickCheck(Compiler* compiler, Trace* bounds_check_trace,
     assembler->LoadCurrentCharacter(cp_offset, bounds_check_trace->backtrack(),
                                     !preload_has_checked_bounds,
                                     details->characters(), bounds_check_offset);
+  }
+
+  // Approximate single-character check: prefer an exact membership table (see
+  // TryBuildFirstCharacterTable).
+  if (details->characters() == 1 &&
+      !details->positions(0)->determines_perfectly) {
+    const bool not_at_start = trace->at_start() == Trace::FALSE_VALUE;
+    Handle<ByteArray> table =
+        TryBuildFirstCharacterTable(this, mask, compiler, not_at_start);
+    if (!table.is_null()) {
+      // The table only proved that the character is in the set. It did not
+      // prove the mask equation (x & mask) == value, which we never emitted.
+      // Downstream code trusts a published mask/value and would skip a compare
+      // on that basis, so clear both (on the position and on the Rationalize()
+      // condensate) to signal that nothing is proven here; the body then
+      // re-checks in full (see mask_known in EmitClassRanges).
+      // The table also proves the low bits every member shares, which we drop
+      // here. Keeping them would let the body skip a compare (the "masked-class
+      // fold"), but that fold only helps for tightly-grouped character sets,
+      // and the table only fires for scattered ones -- so there is nothing to
+      // gain today. Revisit if the table ever starts firing for grouped sets
+      // too.
+      details->positions(0)->mask = 0;
+      details->positions(0)->value = 0;
+      details->set_mask(0);
+      details->set_value(0);
+      if (fall_through_on_failure) {
+        assembler->CheckBitInTable(table, on_possible_success);
+      } else {
+        Label matched;
+        assembler->CheckBitInTable(table, &matched);
+        assembler->GoTo(trace->backtrack());
+        assembler->Bind(&matched);
+      }
+      return true;
+    }
   }
 
   bool need_mask = true;

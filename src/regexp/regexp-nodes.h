@@ -403,9 +403,9 @@ class V8_EXPORT_PRIVATE Node : public ZoneObject {
 
   LimitResult LimitVersions(Compiler* compiler, Trace* trace);
 
-  void set_bm_info(bool not_at_start, BoyerMooreLookahead* bm) {
-    bm_info_[not_at_start ? 1 : 0] = bm;
-  }
+  // Caches |bm| as this node's own lookahead, unless |bm| is a transient probe
+  // that opted out of caching (see BoyerMooreLookahead::caches_node_info).
+  void set_bm_info(bool not_at_start, BoyerMooreLookahead* bm);
 
  private:
   static const int kFirstCharBudget = 10;
