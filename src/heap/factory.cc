@@ -2168,13 +2168,12 @@ DirectHandle<WasmTypeInfo> Factory::NewWasmTypeInfo(
 DirectHandle<WasmImportData> Factory::NewWasmImportData(
     DirectHandle<HeapObject> callable, wasm::Suspend suspend,
     MaybeDirectHandle<WasmTrustedInstanceData> importing_instance_data,
-    const wasm::CanonicalSig* sig, SharedFlag shared) {
+    const wasm::CanonicalSig* sig) {
   DirectHandle<Cell> wrapper_budget_cell =
       NewCell(Smi::FromInt(v8_flags.wasm_wrapper_tiering_budget));
   Tagged<Map> map = *wasm_import_data_map();
   auto result = TrustedCast<WasmImportData>(AllocateRawWithImmortalMap(
-      map->instance_size(),
-      shared ? AllocationType::kSharedTrusted : AllocationType::kTrusted, map));
+      map->instance_size(), AllocationType::kTrusted, map));
   DisallowGarbageCollection no_gc;
   result->set_native_context(*isolate()->native_context());
   result->set_callable(Cast<UnionOf<Undefined, JSReceiver>>(*callable));
@@ -2193,11 +2192,11 @@ DirectHandle<WasmImportData> Factory::NewWasmImportData(
 }
 
 DirectHandle<WasmImportData> Factory::NewWasmImportData(
-    DirectHandle<WasmImportData> import_data, SharedFlag shared) {
+    DirectHandle<WasmImportData> import_data) {
   return NewWasmImportData(
       handle(import_data->callable(), isolate()), import_data->suspend(),
       handle(import_data->importing_instance_data(), isolate()),
-      import_data->sig(), shared);
+      import_data->sig());
 }
 
 DirectHandle<WasmFastApiCallData> Factory::NewWasmFastApiCallData(
@@ -2213,12 +2212,10 @@ DirectHandle<WasmFastApiCallData> Factory::NewWasmFastApiCallData(
 
 DirectHandle<WasmInternalFunction> Factory::NewWasmInternalFunction(
     DirectHandle<TrustedObject> implicit_arg, int function_index,
-    SharedFlag shared, WasmCodePointer call_target,
-    const wasm::CanonicalSig* sig) {
+    WasmCodePointer call_target, const wasm::CanonicalSig* sig) {
   Tagged<WasmInternalFunction> internal =
       TrustedCast<WasmInternalFunction>(AllocateRawWithImmortalMap(
-          WasmInternalFunction::kSize,
-          shared ? AllocationType::kSharedTrusted : AllocationType::kTrusted,
+          WasmInternalFunction::kSize, AllocationType::kTrusted,
           *wasm_internal_function_map()));
 
   DisallowGarbageCollection no_gc;
@@ -2235,11 +2232,10 @@ DirectHandle<WasmInternalFunction> Factory::NewWasmInternalFunction(
 }
 
 DirectHandle<WasmFuncRef> Factory::NewWasmFuncRef(
-    DirectHandle<WasmInternalFunction> internal_function, DirectHandle<Map> rtt,
-    SharedFlag shared) {
+    DirectHandle<WasmInternalFunction> internal_function,
+    DirectHandle<Map> rtt) {
   Tagged<HeapObject> raw =
-      AllocateRaw(WasmFuncRef::kSize,
-                  shared ? AllocationType::kSharedOld : AllocationType::kOld);
+      AllocateRaw(WasmFuncRef::kSize, AllocationType::kOld);
   DisallowGarbageCollection no_gc;
   DCHECK_EQ(WASM_FUNC_REF_TYPE, rtt->instance_type());
   DCHECK_EQ(WasmFuncRef::kSize, rtt->instance_size());
@@ -2359,16 +2355,15 @@ DirectHandle<WasmCapiFunctionData> Factory::NewWasmCapiFunctionData(
     Address call_target, DirectHandle<Foreign> embedder_data,
     DirectHandle<Code> wrapper_code, DirectHandle<Map> rtt,
     const wasm::CanonicalSig* sig) {
-  DirectHandle<WasmImportData> import_data = NewWasmImportData(
-      undefined_value(), wasm::kNoSuspend,
-      DirectHandle<WasmTrustedInstanceData>(), sig, SharedFlag{false});
+  DirectHandle<WasmImportData> import_data =
+      NewWasmImportData(undefined_value(), wasm::kNoSuspend,
+                        DirectHandle<WasmTrustedInstanceData>(), sig);
   DirectHandle<WasmInternalFunction> internal = NewWasmInternalFunction(
-      import_data, -1, SharedFlag{false},
+      import_data, -1,
       wasm::GetProcessWideWasmCodePointerTable()
           ->GetOrCreateHandleForNativeFunction(call_target),
       sig);
-  DirectHandle<WasmFuncRef> func_ref =
-      NewWasmFuncRef(internal, rtt, SharedFlag{false});
+  DirectHandle<WasmFuncRef> func_ref = NewWasmFuncRef(internal, rtt);
   // We have no generic wrappers for C-API functions, so we don't need to
   // set any call origin on {import_data}.
   Tagged<Map> map = *wasm_capi_function_data_map();

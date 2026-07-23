@@ -862,11 +862,11 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
       wasm::CanonicalValueType type, wasm::CanonicalValueType element_type,
       DirectHandle<Map> opt_parent, int num_supertypes, SharedFlag shared);
   DirectHandle<WasmInternalFunction> NewWasmInternalFunction(
-      DirectHandle<TrustedObject> ref, int function_index, SharedFlag shared,
+      DirectHandle<TrustedObject> ref, int function_index,
       WasmCodePointer call_target, const wasm::CanonicalSig* sig);
   DirectHandle<WasmFuncRef> NewWasmFuncRef(
       DirectHandle<WasmInternalFunction> internal_function,
-      DirectHandle<Map> rtt, SharedFlag shared);
+      DirectHandle<Map> rtt);
   DirectHandle<WasmCapiFunctionData> NewWasmCapiFunctionData(
       Address call_target, DirectHandle<Foreign> embedder_data,
       DirectHandle<Code> wrapper_code, DirectHandle<Map> rtt,
@@ -880,9 +880,9 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
   DirectHandle<WasmImportData> NewWasmImportData(
       DirectHandle<HeapObject> callable, wasm::Suspend suspend,
       MaybeDirectHandle<WasmTrustedInstanceData> importing_instance_data,
-      const wasm::CanonicalSig* sig, SharedFlag shared);
+      const wasm::CanonicalSig* sig);
   DirectHandle<WasmImportData> NewWasmImportData(
-      DirectHandle<WasmImportData> ref, SharedFlag shared);
+      DirectHandle<WasmImportData> ref);
 
   DirectHandle<WasmFastApiCallData> NewWasmFastApiCallData(
       DirectHandle<HeapObject> signature, DirectHandle<Object> callback_data);

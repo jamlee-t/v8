@@ -17789,8 +17789,7 @@ UNINITIALIZED_TEST(GetHeapTotalAllocatedBytesSharedSpaces) {
                                                i::AllocationType::kSharedOld);
     USE(shared_alloc);
     i::Handle<i::TrustedFixedArray> shared_trusted_alloc =
-        i_isolate->factory()->NewTrustedFixedArray(
-            number_of_elements, i::AllocationType::kSharedTrusted);
+        i_isolate->factory()->NewTrustedFixedArray(number_of_elements);
     USE(shared_trusted_alloc);
     i::MaybeHandle<i::FixedArray> shared_lo_alloc =
         i_isolate->factory()->TryNewFixedArray(lo_number_of_elements,

@@ -618,7 +618,7 @@ void WasmTableObject::UpdateDispatchTable(
   if (v8_flags.wasm_generic_wrapper && IsWasmImportData(*implicit_arg)) {
     auto import_data = TrustedCast<WasmImportData>(implicit_arg);
     DirectHandle<WasmImportData> new_import_data =
-        isolate->factory()->NewWasmImportData(import_data, SharedFlag{false});
+        isolate->factory()->NewWasmImportData(import_data);
     new_import_data->set_call_origin(*dispatch_table);
     new_import_data->set_table_slot(entry_index);
     implicit_arg = new_import_data;
@@ -1265,8 +1265,7 @@ void ImportedFunctionEntry::SetWasmToWrapper(
     // Ignores wrapper_handle.
     DirectHandle<WasmImportData> import_data =
         isolate->factory()->NewWasmImportData(callable, suspend,
-                                              importing_instance_data_, sig,
-                                              SharedFlag{false});
+                                              importing_instance_data_, sig);
     {
       DisallowGarbageCollection no_gc;
       importing_instance_data_->dispatch_table_for_imports()->SetForWrapper(
@@ -1295,8 +1294,8 @@ void ImportedFunctionEntry::SetWasmToWrapper(
 #endif  // DEBUG
 
   DirectHandle<WasmImportData> import_data =
-      isolate->factory()->NewWasmImportData(
-          callable, suspend, importing_instance_data_, sig, SharedFlag{false});
+      isolate->factory()->NewWasmImportData(callable, suspend,
+                                            importing_instance_data_, sig);
 
   if (!wrapper_handle->has_code()) {
     import_data->SetIndexInTableAsCallOrigin(
@@ -1442,8 +1441,7 @@ DirectHandle<WasmTrustedInstanceData> WasmTrustedInstanceData::New(
 
   DirectHandle<TrustedPodArray<wasm::WireBytesRef>> data_segments =
       TrustedPodArray<wasm::WireBytesRef>::New(
-          isolate, module->num_declared_data_segments,
-          AllocationType::kTrusted);
+          isolate, module->num_declared_data_segments);
 
 #if V8_ENABLE_DRUMBRAKE
   DirectHandle<FixedInt32Array> imported_function_indices =
@@ -1455,8 +1453,7 @@ DirectHandle<WasmTrustedInstanceData> WasmTrustedInstanceData::New(
   DirectHandle<FixedArray> memory_objects =
       isolate->factory()->NewFixedArray(num_memories, AllocationType::kYoung);
   DirectHandle<TrustedFixedAddressArray> memory_bases_and_sizes =
-      TrustedFixedAddressArray::New(isolate, 2 * num_memories,
-                                    AllocationType::kTrusted);
+      TrustedFixedAddressArray::New(isolate, 2 * num_memories);
 
   // TODO(clemensb): Should we have singleton empty dispatch table in the
   // trusted space?
@@ -1709,8 +1706,6 @@ DirectHandle<WasmFuncRef> WasmTrustedInstanceData::GetOrCreateFuncRef(
     int function_index, wasm::PrecreateExternal precreate_external) {
   SBXCHECK_BOUNDS(function_index,
                   trusted_instance_data->module()->functions.size());
-  SharedFlag shared =
-      SharedFlag(HeapLayout::InAnySharedSpace(*trusted_instance_data));
   Tagged<WasmFuncRef> existing_func_ref;
   if (trusted_instance_data->try_get_func_ref(function_index,
                                               &existing_func_ref)) {
@@ -1752,10 +1747,10 @@ DirectHandle<WasmFuncRef> WasmTrustedInstanceData::GetOrCreateFuncRef(
   // same CPT entry.
   DirectHandle<WasmInternalFunction> internal_function =
       isolate->factory()->NewWasmInternalFunction(
-          implicit_arg, function_index, shared,
+          implicit_arg, function_index,
           trusted_instance_data->GetCallTarget(function_index), sig);
   DirectHandle<WasmFuncRef> func_ref =
-      isolate->factory()->NewWasmFuncRef(internal_function, rtt, shared);
+      isolate->factory()->NewWasmFuncRef(internal_function, rtt);
   trusted_instance_data->func_refs()->set(function_index, *func_ref);
 
   if (precreate_external == wasm::kPrecreateExternal) {

@@ -1136,8 +1136,7 @@ Maybe<bool> InstanceBuilder::Build_Phase1(
   int tags_count = static_cast<int>(module_->tags.size());
   if (tags_count > 0) {
     DirectHandle<TrustedFixedArray> tag_table =
-        isolate_->factory()->NewTrustedFixedArray(tags_count,
-                                                  AllocationType::kTrusted);
+        isolate_->factory()->NewTrustedFixedArray(tags_count);
     trusted_data_->set_tags_table(*tag_table);
     tags_wrappers_.resize(tags_count);
   }

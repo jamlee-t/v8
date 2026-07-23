@@ -144,8 +144,7 @@ class FactoryBase {
       uint32_t length, AllocationType allocation = AllocationType::kTrusted);
 
   // Allocates a protected fixed array in trusted space, initialized with zeros.
-  Handle<ProtectedFixedArray> NewProtectedFixedArray(
-      uint32_t length, SharedFlag shared = SharedFlag{false});
+  Handle<ProtectedFixedArray> NewProtectedFixedArray(uint32_t length);
 
   // Allocates a fixed array-like object with given map and initialized with
   // undefined values.
@@ -210,8 +209,7 @@ class FactoryBase {
       int length, const uint8_t* raw_bytecodes, int frame_size,
       uint16_t parameter_count, uint16_t max_arguments,
       DirectHandle<TrustedFixedArray> constant_pool,
-      DirectHandle<TrustedByteArray> handler_table,
-      AllocationType allocation = AllocationType::kTrusted);
+      DirectHandle<TrustedByteArray> handler_table);
 
   DirectHandle<BytecodeWrapper> NewBytecodeWrapper(
       AllocationType allocation = AllocationType::kOld);

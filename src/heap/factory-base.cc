@@ -205,9 +205,9 @@ Handle<TrustedFixedArray> FactoryBase<Impl>::NewTrustedFixedArray(
 
 template <typename Impl>
 Handle<ProtectedFixedArray> FactoryBase<Impl>::NewProtectedFixedArray(
-    uint32_t length, SharedFlag shared) {
+    uint32_t length) {
   if (length == 0) return empty_protected_fixed_array();
-  return ProtectedFixedArray::New(isolate(), length, shared);
+  return ProtectedFixedArray::New(isolate(), length);
 }
 
 template <typename Impl>
@@ -349,9 +349,7 @@ Handle<BytecodeArray> FactoryBase<Impl>::NewBytecodeArray(
     int length, const uint8_t* raw_bytecodes, int frame_size,
     uint16_t parameter_count, uint16_t max_arguments,
     DirectHandle<TrustedFixedArray> constant_pool,
-    DirectHandle<TrustedByteArray> handler_table, AllocationType allocation) {
-  DCHECK(allocation == AllocationType::kTrusted ||
-         allocation == AllocationType::kSharedTrusted);
+    DirectHandle<TrustedByteArray> handler_table) {
   if (length < 0 || length > BytecodeArray::kMaxLength) {
     base::FatalNoSecurityImpact("Fatal JavaScript invalid size error %d",
                                 length);
@@ -360,7 +358,7 @@ Handle<BytecodeArray> FactoryBase<Impl>::NewBytecodeArray(
   DirectHandle<BytecodeWrapper> wrapper = NewBytecodeWrapper();
   int size = BytecodeArray::SizeFor(length);
   Tagged<HeapObject> result = AllocateRawWithImmortalMap(
-      size, allocation, read_only_roots().bytecode_array_map());
+      size, AllocationType::kTrusted, read_only_roots().bytecode_array_map());
   DisallowGarbageCollection no_gc;
   Tagged<BytecodeArray> instance = TrustedCast<BytecodeArray>(result);
   // BytecodeArrays are initially unpublished and are only published to the

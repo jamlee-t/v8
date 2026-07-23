@@ -378,9 +378,7 @@ V8_OBJECT class ProtectedFixedArray
   // Smi::zero().
   template <class IsolateT>
   static inline Handle<ProtectedFixedArray> New(IsolateT* isolate,
-                                                uint32_t capacity,
-                                                SharedFlag shared = SharedFlag{
-                                                    false});
+                                                uint32_t capacity);
 
   DECL_PRINTER(ProtectedFixedArray)
   DECL_VERIFIER(ProtectedFixedArray)
