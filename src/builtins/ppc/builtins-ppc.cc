@@ -5201,8 +5201,7 @@ void Generate_DeoptimizationEntry(MacroAssembler* masm,
     // Must use ip: all {restored_regs} are live
     Register scratch = ip;
     __ pop(scratch);  // get continuation, leave pc on stack
-    __ pop(r0);
-    __ mtlr(r0);
+    __ PopLR(r0);
     Label end;
     __ CmpU64(scratch, Operand::Zero());
     __ beq(&end);

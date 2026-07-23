@@ -976,13 +976,11 @@ void MacroAssembler::RecordWrite(Register object, Register slot_address,
 
   // Record the actual write.
   if (lr_status == kLRHasNotBeenSaved) {
-    mflr(r0);
-    push(r0);
+    PushLR();
   }
   CallRecordWriteStubSaveRegisters(object, slot_address, fp_mode);
   if (lr_status == kLRHasNotBeenSaved) {
-    pop(r0);
-    mtlr(r0);
+    PopLR();
   }
 
   if (v8_flags.slow_debug_code) mov(slot_address, Operand(kZapValue));
@@ -995,6 +993,24 @@ void MacroAssembler::RecordWrite(Register object, Register slot_address,
     mov(slot_address, Operand(base::bit_cast<intptr_t>(kZapValue + 12)));
     mov(value, Operand(base::bit_cast<intptr_t>(kZapValue + 16)));
   }
+}
+
+void MacroAssembler::PushLR(Register scratch) {
+  UseScratchRegisterScope temps(this);
+  if (scratch == no_reg) {
+    scratch = temps.Acquire();
+  }
+  mflr(scratch);
+  push(scratch);
+}
+
+void MacroAssembler::PopLR(Register scratch) {
+  UseScratchRegisterScope temps(this);
+  if (scratch == no_reg) {
+    scratch = temps.Acquire();
+  }
+  pop(scratch);
+  mtlr(scratch);
 }
 
 void MacroAssembler::PushCommonFrame(Register marker_reg) {
@@ -1724,8 +1740,7 @@ void MacroAssembler::TruncateDoubleToI(Isolate* isolate, Zone* zone,
   TryInlineTruncateDoubleToI(result, double_input, &done, double_scratch);
 
   // If we fell through then inline version didn't succeed - call stub instead.
-  mflr(r0);
-  push(r0);
+  PushLR();
   // Put input on stack.
   stfdu(double_input, MemOperand(sp, -kDoubleSize));
 
@@ -1742,8 +1757,7 @@ void MacroAssembler::TruncateDoubleToI(Isolate* isolate, Zone* zone,
 
   LoadU64(result, MemOperand(sp));
   addi(sp, sp, Operand(kDoubleSize));
-  pop(r0);
-  mtlr(r0);
+  PopLR();
 
   bind(&done);
 }

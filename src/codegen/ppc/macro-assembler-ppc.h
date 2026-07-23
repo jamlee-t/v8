@@ -103,6 +103,11 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
 
   void AllocateStackSpace(Register bytes) { sub(sp, sp, bytes); }
 
+  // TODO(johnyan): Remove scratch parameter once all callers use
+  // UseScratchRegisterScope consistently.
+  void PushLR(Register scratch = no_reg);
+  void PopLR(Register scratch = no_reg);
+
   // Push a fixed frame, consisting of lr, fp, constant pool.
   void PushCommonFrame(Register marker_reg = no_reg);
 

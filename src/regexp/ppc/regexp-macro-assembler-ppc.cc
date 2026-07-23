@@ -751,8 +751,7 @@ DirectHandle<HeapObject> RegExpMacroAssemblerPPC::GetCode(
     // callee-save registers (these end up above the fp) and all register
     // arguments (these end up below the fp).
     RegList registers_to_retain = kRegExpCalleeSaved;
-    __ mflr(r0);
-    __ push(r0);
+    __ PushLR();
     __ MultiPush(registers_to_retain);
     __ mr(frame_pointer(), sp);
 
@@ -1006,8 +1005,7 @@ DirectHandle<HeapObject> RegExpMacroAssemblerPPC::GetCode(
     __ mr(sp, frame_pointer());
     // Restore registers r25..r31 and return (restoring lr to pc).
     __ MultiPop(registers_to_retain);
-    __ pop(r0);
-    __ mtlr(r0);
+    __ PopLR();
     __ blr();
 
     // Backtrack code (branch target for conditional backtracks).
