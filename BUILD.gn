@@ -559,18 +559,6 @@ if (v8_enable_object_print == "") {
 if (v8_always_enable_maglev_graph_labeller == "") {
   v8_always_enable_maglev_graph_labeller = v8_enable_debugging_features
 }
-if (v8_enable_generated_code_validator == "") {
-  v8_enable_generated_code_validator =
-      v8_enable_verification_features &&
-      (v8_current_cpu == "x64" || v8_current_cpu == "arm64")
-}
-assert(!v8_enable_generated_code_validator || v8_current_cpu == "x64" ||
-           v8_current_cpu == "arm64",
-       "Generated code validator is only supported on x64 and arm64")
-if (v8_enable_disassembler == "") {
-  v8_enable_disassembler =
-      v8_enable_debugging_features || v8_enable_generated_code_validator
-}
 if (v8_enable_trace_maps == "") {
   v8_enable_trace_maps = v8_enable_debugging_features
 }
@@ -741,8 +729,21 @@ if (v8_enable_sandbox == "") {
                       v8_enable_external_code_space && target_os != "fuchsia"
 }
 
+if (v8_enable_generated_code_validator == "") {
+  v8_enable_generated_code_validator =
+      v8_enable_verification_features && v8_enable_sandbox &&
+      (v8_current_cpu == "x64" || v8_current_cpu == "arm64")
+}
+assert(!v8_enable_generated_code_validator || v8_current_cpu == "x64" ||
+           v8_current_cpu == "arm64",
+       "Generated code validator is only supported on x64 and arm64")
 assert(!v8_enable_generated_code_validator || v8_enable_sandbox,
        "Generated code validator is only supported on sandbox builds")
+
+if (v8_enable_disassembler == "") {
+  v8_enable_disassembler =
+      v8_enable_debugging_features || v8_enable_generated_code_validator
+}
 
 if (v8_enable_static_roots == "") {
   # Static roots are only valid for builds with pointer compression and a
