@@ -1975,6 +1975,12 @@ void MaglevGraphBuilder::MarkPossibleSideEffect(NodeT* node) {
       if (node->template Cast<StoreMap>()->is_transitioning()) {
         loop_effects_->unstable_aspects_cleared = true;
       }
+    } else if constexpr (std::is_same_v<NodeT, TransitionElementsKind> ||
+                         std::is_same_v<NodeT,
+                                        TransitionElementsKindOrCheckMap>) {
+      // Elements-kind transitions only invalidate unstable map facts and
+      // cached elements of objects that may hold a source map.
+      loop_effects_->elements_kind_transitioned = true;
     } else if constexpr (!IsSimpleFieldStore(Node::opcode_of<NodeT>) &&
                          !IsTypedArrayStore(Node::opcode_of<NodeT>)) {
       loop_effects_->unstable_aspects_cleared = true;

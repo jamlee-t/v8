@@ -289,7 +289,8 @@ void KnownNodeAspects::MergeForLoop(const KnownNodeAspects& backedge,
                                     Zone* zone,
                                     const LoopEffects* loop_effects) {
   if (side_effects_require_invalidation_ &&
-      (loop_effects == nullptr || loop_effects->unstable_aspects_cleared)) {
+      (loop_effects == nullptr || loop_effects->unstable_aspects_cleared ||
+       loop_effects->elements_kind_transitioned)) {
     ZoneMap<ValueNode*, NodeInfo> cleared(zone);
     for (auto& entry : node_infos_) {
       cleared.emplace(entry.first,
@@ -355,16 +356,22 @@ void KnownNodeAspects::MergeForLoop(const KnownNodeAspects& backedge,
                                });
         return !lhs.empty();
       };
+  auto entry_invariant = [&](PropertyKey key, ValueNode* obj) {
+    if (!keep_invariant_loads) return false;
+    if (loop_effects->keys_cleared.contains(key)) return false;
+    if (loop_effects->objects_written.contains(obj)) return false;
+    if (loop_effects->elements_kind_transitioned &&
+        key == PropertyKey::Elements() && !TryGetInfoWithFreshMaps(obj)) {
+      return false;
+    }
+    return true;
+  };
   auto merge_loaded_properties =
       [&](PropertyKey key, ZoneMap<ValueNode*, ValueNode*>& lhs,
           const ZoneMap<ValueNode*, ValueNode*>& rhs) {
-        const bool key_invariant =
-            keep_invariant_loads && !loop_effects->keys_cleared.contains(key);
         DestructivelyIntersect(
             lhs, rhs, [&](ValueNode* obj, ValueNode* l, ValueNode* r) {
-              return l == r || (key_invariant &&
-                                !loop_effects->objects_written.contains(obj) &&
-                                same_load(l, r));
+              return l == r || (entry_invariant(key, obj) && same_load(l, r));
             });
         return !lhs.empty();
       };
@@ -562,11 +569,8 @@ void KnownNodeAspects::ClearUnstableNodeAspectsForElementsTransition(
   if (it == loaded_properties_.end()) return;
   bool dropped_any =
       std::erase_if(it->second, [&](const auto& entry) {
-        const NodeInfo* info = TryGetInfoFor(entry.first);
-        if (!info || !info->possible_maps_are_known() ||
-            info->maps_are_stale()) {
-          return true;
-        }
+        const NodeInfo* info = TryGetInfoWithFreshMaps(entry.first);
+        if (!info) return true;
         const auto& maps = info->possible_maps();
         return std::any_of(maps.begin(), maps.end(), MaybeAliases);
       }) > 0;
@@ -575,6 +579,15 @@ void KnownNodeAspects::ClearUnstableNodeAspectsForElementsTransition(
     std::cout << kRed << "[KNA] ElementsTransition: Drop aliased [Elements]"
               << kReset << std::endl;
   }
+}
+
+const NodeInfo* KnownNodeAspects::TryGetInfoWithFreshMaps(
+    ValueNode* object) const {
+  const NodeInfo* info = TryGetInfoFor(object);
+  if (!info || !info->possible_maps_are_known() || info->maps_are_stale()) {
+    return nullptr;
+  }
+  return info;
 }
 
 void KnownNodeAspects::ClearUnstableNodeAspects(bool is_tracing_enabled) {
@@ -619,7 +632,8 @@ KnownNodeAspects::KnownNodeAspects(const KnownNodeAspects& other,
     }
 #endif
   } else if (optimistic_initial_state &&
-             !loop_effects->unstable_aspects_cleared) {
+             !loop_effects->unstable_aspects_cleared &&
+             !loop_effects->elements_kind_transitioned) {
     node_infos_ = other.node_infos_;
     side_effects_require_invalidation_ =
         other.side_effects_require_invalidation_;
@@ -633,7 +647,8 @@ KnownNodeAspects::KnownNodeAspects(const KnownNodeAspects& other,
     // IMPORTANT: Whatever we clone here needs to be checked for consistency
     // in when we try to terminate the loop in `IsCompatibleWithLoopHeader`.
     if (loop_effects->objects_written.empty() &&
-        loop_effects->keys_cleared.empty()) {
+        loop_effects->keys_cleared.empty() &&
+        !loop_effects->elements_kind_transitioned) {
       loaded_properties_ = other.loaded_properties_;
     } else {
       auto cleared_key = loop_effects->keys_cleared.begin();
@@ -644,14 +659,22 @@ KnownNodeAspects::KnownNodeAspects(const KnownNodeAspects& other,
         if (NextInIgnoreList(cleared_key, cleared_keys_end, loaded_key.first)) {
           continue;
         }
+        const bool check_elements_transition =
+            loop_effects->elements_kind_transitioned &&
+            loaded_key.first == PropertyKey::Elements();
         auto& props_for_key =
             loaded_properties_.try_emplace(loaded_key.first, zone)
                 .first->second;
         for (auto loaded_obj : loaded_key.second) {
-          if (!NextInIgnoreList(cleared_obj, cleared_objs_end,
-                                loaded_obj.first)) {
-            props_for_key.emplace(loaded_obj);
+          if (NextInIgnoreList(cleared_obj, cleared_objs_end,
+                               loaded_obj.first)) {
+            continue;
           }
+          if (check_elements_transition &&
+              !TryGetInfoWithFreshMaps(loaded_obj.first)) {
+            continue;
+          }
+          props_for_key.emplace(loaded_obj);
         }
       }
     }

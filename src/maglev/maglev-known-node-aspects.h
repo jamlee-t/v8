@@ -402,6 +402,12 @@ class KnownNodeAspects {
       bool is_tracing_enabled);
   void ClearUnstableNodeAspects(bool is_tracing_enabled);
 
+  // Returns the node info for `object` if its possible maps are known and not
+  // stale, otherwise nullptr. Cached [Elements] facts survive an elements-kind
+  // transition only for such objects: stale or unknown maps mean the object
+  // may alias a transition source, whose elements store can be reallocated.
+  const NodeInfo* TryGetInfoWithFreshMaps(ValueNode* object) const;
+
   void OnSideEffect() {
     // A side effect could change existing objects' maps. For stable maps we
     // know this hasn't happened (because we added a dependency on the maps

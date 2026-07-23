@@ -683,10 +683,14 @@ struct LoopEffects {
   ZoneSet<PropertyKey> keys_cleared;
   ZoneSet<InlinedAllocation*> allocations;
   bool unstable_aspects_cleared = false;
+  bool elements_kind_transitioned = false;
   bool may_have_aliasing_contexts = false;
   void Merge(const LoopEffects* other) {
     if (!unstable_aspects_cleared) {
       unstable_aspects_cleared = other->unstable_aspects_cleared;
+    }
+    if (!elements_kind_transitioned) {
+      elements_kind_transitioned = other->elements_kind_transitioned;
     }
     if (!may_have_aliasing_contexts) {
       may_have_aliasing_contexts = other->may_have_aliasing_contexts;

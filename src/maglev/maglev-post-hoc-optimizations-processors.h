@@ -347,7 +347,8 @@ class LoopOptimizationProcessor {
     if (IsLoopPhi(object)) {
       return ProcessResult::kSkipBlock;
     }
-    if (!loop_effects->unstable_aspects_cleared && CanHoist(maps)) {
+    if (!loop_effects->unstable_aspects_cleared &&
+        !loop_effects->elements_kind_transitioned && CanHoist(maps)) {
       if (auto j = current_block->predecessor_at(0)
                        ->control_node()
                        ->TryCast<CheckpointedJump>()) {
