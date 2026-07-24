@@ -1117,6 +1117,8 @@ class MaglevReducer {
 #endif  // V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA
 
 #define MAGLEV_REDUCER_BUILTIN(V)              \
+  V(ArrayIndexOf)                              \
+  V(ArrayIncludes)                             \
   V(ArrayIsArray)                              \
   V(ArrayPrototypeAt)                          \
   V(ArrayPrototypeEntries)                     \
@@ -1196,6 +1198,13 @@ class MaglevReducer {
   ReduceResult BuildLoadElements(
       ValueNode* object, std::optional<ElementsKind> kind = std::nullopt);
 
+  ReduceResult BuildLoadJSArrayLength(ValueNode* js_array,
+                                      NodeType length_type = NodeType::kSmi);
+
+  template <typename ReducerCb>
+  MaybeReduceResult TryWithArrayIterationArgs(CallArguments& args,
+                                              ReducerCb Reducer);
+
   ReduceResult BuildAssumeMapForElements(ValueNode* elements,
                                          ElementsKind kind);
 
@@ -1204,6 +1213,8 @@ class MaglevReducer {
   ReduceResult BuildCheckInstanceType(ValueNode* object, NodeType target_type,
                                       InstanceType first, InstanceType last);
   ReduceResult GetInt32ElementIndex(ValueNode* index_object);
+  MaybeReduceResult TryReuseKnownPropertyLoad(ValueNode* lookup_start_object,
+                                              compiler::NameRef name);
   void RecordKnownProperty(ValueNode* lookup_start_object, PropertyKey key,
                            ValueNode* value, bool is_const,
                            compiler::AccessMode access_mode);

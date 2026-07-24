@@ -33,6 +33,10 @@
     TraceLogger(tracer()) << __VA_ARGS__; \
   }
 
+#define FAIL(...)                                                         \
+  TRACE("Failed " << __func__ << ":" << __LINE__ << ": " << __VA_ARGS__); \
+  return {};
+
 namespace v8 {
 namespace internal {
 namespace maglev {
@@ -860,6 +864,157 @@ inline bool CanInlineArrayIteratingBuiltin(compiler::JSHeapBroker* broker,
     }
   }
   return true;
+}
+
+template <typename BaseT>
+ReduceResult MaglevReducer<BaseT>::BuildLoadJSArrayLength(
+    ValueNode* js_array, NodeType length_type) {
+  // TODO(leszeks): JSArray.length is known to be non-constant, don't bother
+  // searching the constant values.
+  MaybeReduceResult known_length =
+      TryReuseKnownPropertyLoad(js_array, broker()->length_string());
+  if (known_length.IsDone()) {
+    DCHECK(known_length.IsDoneWithValue());
+    return known_length.value();
+  }
+
+  ValueNode* length;
+  GET_VALUE_OR_ABORT(
+      length, BuildLoadTaggedField(
+                  js_array, offsetof(JSArray, length_), length_type, false,
+                  broker()->length_string(), IsArrayLength::kYes));
+  RecordKnownProperty(js_array, broker()->length_string(), length, false,
+                      compiler::AccessMode::kLoad);
+  return length;
+}
+
+template <typename BaseT>
+template <typename ReducerCb>
+MaybeReduceResult MaglevReducer<BaseT>::TryWithArrayIterationArgs(
+    CallArguments& args, ReducerCb Reducer) {
+  if (!CanSpeculateCall()) return {};
+
+  ValueNode* receiver = args.receiver();
+  if (!receiver) return {};
+
+  MapInference<MaglevReducer<BaseT>> inference(this, receiver);
+  auto possible_maps = inference.TryGetPossibleMaps();
+  if (!possible_maps) {
+    FAIL(" to reduce Array.p.indexOf/includes - receiver map is unknown");
+  }
+
+  ElementsKind elements_kind;
+  if (!CanInlineArrayIteratingBuiltin(broker(), *possible_maps,
+                                      &elements_kind)) {
+    FAIL(
+        " to reduce Array.p.indexOf/includes - doesn't support fast array "
+        "iteration or incompatible maps");
+  }
+
+  if (IsHoleyElementsKind(elements_kind) &&
+      !broker()->dependencies()->DependOnNoElementsProtector()) {
+    FAIL(
+        " to reduce Array.p.indexOf/includes - invalidated no elements "
+        "protector");
+  }
+
+  RETURN_IF_ABORT(inference.InsertMapChecks(zone()));
+
+  ValueNode* search_element =
+      args.count() > 0 ? args[0] : GetRootConstant(RootIndex::kUndefinedValue);
+
+  ValueNode* length;
+  GET_VALUE_OR_ABORT(length, BuildLoadJSArrayLength(receiver));
+
+  ValueNode* elements;
+  GET_VALUE_OR_ABORT(elements, BuildLoadElements(receiver, elements_kind));
+
+  ValueNode* from_index = GetInt32Constant(0);
+  if (args.count() > 1) {
+    GET_VALUE_OR_ABORT(from_index, GetInt32(args[1]));
+    GET_VALUE_OR_ABORT(
+        from_index,
+        Select(
+            [&](BranchBuilder& builder) {
+              return BuildBranchIfInt32Compare(builder, Operation::kLessThan,
+                                               from_index, GetInt32Constant(0));
+            },
+            [&]() -> ReduceResult {
+              ValueNode* adjusted;
+              GET_VALUE_OR_ABORT(adjusted,
+                                 AddNewNode<Int32Add>({length, from_index}));
+              return BuildInt32Max(adjusted, GetInt32Constant(0));
+            },
+            [&]() -> ReduceResult {
+              return BuildInt32Min(from_index, length);
+            }));
+  }
+
+  return Reducer(elements_kind, elements, search_element, length, from_index);
+}
+
+template <typename BaseT>
+MaybeReduceResult MaglevReducer<BaseT>::TryReduceArrayIncludes(
+    compiler::JSFunctionRef target, CallArguments& args) {
+  return TryWithArrayIterationArgs(
+      args,
+      [&](ElementsKind elements_kind, ValueNode* elements,
+          ValueNode* search_element, ValueNode* length, ValueNode* from_index) {
+        ValueNode* context = GetConstant(broker()->target_native_context());
+        switch (elements_kind) {
+          case PACKED_SMI_ELEMENTS:
+          case HOLEY_SMI_ELEMENTS:
+            return BuildCallBuiltinWithTaggedInputs<Builtin::kArrayIncludesSmi>(
+                context, {elements, search_element, length, from_index});
+          case PACKED_ELEMENTS:
+          case HOLEY_ELEMENTS:
+            return BuildCallBuiltinWithTaggedInputs<
+                Builtin::kArrayIncludesSmiOrObject>(
+                context, {elements, search_element, length, from_index});
+          case PACKED_DOUBLE_ELEMENTS:
+            return BuildCallBuiltinWithTaggedInputs<
+                Builtin::kArrayIncludesPackedDoubles>(
+                context, {elements, search_element, length, from_index});
+          case HOLEY_DOUBLE_ELEMENTS:
+            return BuildCallBuiltinWithTaggedInputs<
+                Builtin::kArrayIncludesHoleyDoubles>(
+                context, {elements, search_element, length, from_index});
+          default:
+            UNREACHABLE();
+        }
+      });
+}
+
+template <typename BaseT>
+MaybeReduceResult MaglevReducer<BaseT>::TryReduceArrayIndexOf(
+    compiler::JSFunctionRef target, CallArguments& args) {
+  return TryWithArrayIterationArgs(
+      args,
+      [&](ElementsKind elements_kind, ValueNode* elements,
+          ValueNode* search_element, ValueNode* length, ValueNode* from_index) {
+        ValueNode* context = GetConstant(broker()->target_native_context());
+        switch (elements_kind) {
+          case PACKED_SMI_ELEMENTS:
+          case HOLEY_SMI_ELEMENTS:
+            return BuildCallBuiltinWithTaggedInputs<Builtin::kArrayIndexOfSmi>(
+                context, {elements, search_element, length, from_index});
+          case PACKED_ELEMENTS:
+          case HOLEY_ELEMENTS:
+            return BuildCallBuiltinWithTaggedInputs<
+                Builtin::kArrayIndexOfSmiOrObject>(
+                context, {elements, search_element, length, from_index});
+          case PACKED_DOUBLE_ELEMENTS:
+            return BuildCallBuiltinWithTaggedInputs<
+                Builtin::kArrayIndexOfPackedDoubles>(
+                context, {elements, search_element, length, from_index});
+          case HOLEY_DOUBLE_ELEMENTS:
+            return BuildCallBuiltinWithTaggedInputs<
+                Builtin::kArrayIndexOfHoleyDoubles>(
+                context, {elements, search_element, length, from_index});
+          default:
+            UNREACHABLE();
+        }
+      });
 }
 
 template <typename BaseT>
@@ -4659,6 +4814,24 @@ ReduceResult MaglevReducer<BaseT>::GetInt32ElementIndex(ValueNode* object) {
 }
 
 template <typename BaseT>
+MaybeReduceResult MaglevReducer<BaseT>::TryReuseKnownPropertyLoad(
+    ValueNode* lookup_start_object, compiler::NameRef name) {
+  if (ValueNode* property = known_node_aspects().TryFindLoadedProperty(
+          lookup_start_object, name)) {
+    TRACE("  * Reusing non-constant loaded property "
+          << PrintNodeLabel(property) << ": " << PrintNode(property));
+    return property;
+  }
+  if (ValueNode* property = known_node_aspects().TryFindLoadedConstantProperty(
+          lookup_start_object, name)) {
+    TRACE("  * Reusing constant loaded property "
+          << PrintNodeLabel(property) << ": " << PrintNode(property));
+    return property;
+  }
+  return {};
+}
+
+template <typename BaseT>
 void MaglevReducer<BaseT>::RecordKnownProperty(
     ValueNode* lookup_start_object, PropertyKey key, ValueNode* value,
     bool is_const, compiler::AccessMode access_mode) {
@@ -6147,5 +6320,6 @@ inline bool IsSmallFunction(int bytecode_length,
 }  // namespace v8
 
 #undef TRACE
+#undef FAIL
 
 #endif  // V8_MAGLEV_MAGLEV_REDUCER_INL_H_

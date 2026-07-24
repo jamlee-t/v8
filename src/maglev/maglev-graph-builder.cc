@@ -89,6 +89,8 @@
 #include "src/utils/utils.h"
 #include "src/zone/zone.h"
 
+namespace v8::internal::maglev {
+
 #define TRACE(...)                        \
   if (V8_UNLIKELY(is_tracing())) {        \
     TraceLogger(tracer()) << __VA_ARGS__; \
@@ -97,8 +99,6 @@
 #define FAIL(...)                                                         \
   TRACE("Failed " << __func__ << ":" << __LINE__ << ": " << __VA_ARGS__); \
   return {};
-
-namespace v8::internal::maglev {
 
 namespace {
 
@@ -4502,27 +4502,6 @@ ValueNode* MaglevGraphBuilder::BuildLoadFixedArrayLength(
   return length;
 }
 
-ReduceResult MaglevGraphBuilder::BuildLoadJSArrayLength(ValueNode* js_array,
-                                                        NodeType length_type) {
-  // TODO(leszeks): JSArray.length is known to be non-constant, don't bother
-  // searching the constant values.
-  MaybeReduceResult known_length =
-      TryReuseKnownPropertyLoad(js_array, broker()->length_string());
-  if (known_length.IsDone()) {
-    DCHECK(known_length.IsDoneWithValue());
-    return known_length.value();
-  }
-
-  ValueNode* length;
-  GET_VALUE_OR_ABORT(
-      length, BuildLoadTaggedField(
-                  js_array, offsetof(JSArray, length_), length_type, false,
-                  broker()->length_string(), IsArrayLength::kYes));
-  reducer_.RecordKnownProperty(js_array, broker()->length_string(), length,
-                               false, compiler::AccessMode::kLoad);
-  return length;
-}
-
 ReduceResult MaglevGraphBuilder::BuildLoadJSDataViewByteLength(
     ValueNode* js_data_view) {
   return reducer_.BuildLoadJSDataViewByteLength(js_data_view);
@@ -6524,23 +6503,6 @@ void MaglevGraphBuilder::AdvanceThroughContinuationForPolymorphicPropertyLoad(
     iterator_.Advance();
     UpdateSourceAndBytecodePosition(iterator_.current_offset());
   }
-}
-
-MaybeReduceResult MaglevGraphBuilder::TryReuseKnownPropertyLoad(
-    ValueNode* lookup_start_object, compiler::NameRef name) {
-  if (ValueNode* property = known_node_aspects().TryFindLoadedProperty(
-          lookup_start_object, name)) {
-    TRACE("  * Reusing non-constant loaded property "
-          << PrintNodeLabel(property) << ": " << PrintNode(property));
-    return property;
-  }
-  if (ValueNode* property = known_node_aspects().TryFindLoadedConstantProperty(
-          lookup_start_object, name)) {
-    TRACE("  * Reusing constant loaded property "
-          << PrintNodeLabel(property) << ": " << PrintNode(property));
-    return property;
-  }
-  return {};
 }
 
 ReduceResult MaglevGraphBuilder::BuildLoadStringLength(ValueNode* string) {
@@ -17550,6 +17512,7 @@ ReduceResult MaglevGraphBuilder::BuildGetCharCodeAt(ValueNode* string,
 }
 
 #undef TRACE
+#undef FAIL
 #undef TRACE_CANNOT_INLINE
 
 }  // namespace v8::internal::maglev

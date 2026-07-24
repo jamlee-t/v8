@@ -1316,7 +1316,9 @@ class MaglevGraphBuilder {
 
   ValueNode* BuildLoadFixedArrayLength(ValueNode* fixed_array);
   ReduceResult BuildLoadJSArrayLength(ValueNode* js_array,
-                                      NodeType length_type = NodeType::kSmi);
+                                      NodeType length_type = NodeType::kSmi) {
+    return reducer_.BuildLoadJSArrayLength(js_array, length_type);
+  }
   ReduceResult BuildLoadJSDataViewByteLength(ValueNode* js_data_view);
   ReduceResult BuildLoadJSDataViewDataPointer(ValueNode* js_data_view);
   ReduceResult BuildLoadElements(
@@ -1458,7 +1460,9 @@ class MaglevGraphBuilder {
   // side effects, record its value, and allow that value to be reused on
   // subsequent loads.
   MaybeReduceResult TryReuseKnownPropertyLoad(ValueNode* lookup_start_object,
-                                              compiler::NameRef name);
+                                              compiler::NameRef name) {
+    return reducer_.TryReuseKnownPropertyLoad(lookup_start_object, name);
+  }
   ReduceResult BuildLoadStringLength(ValueNode* string);
 
   // Converts the input node to a representation that's valid to store into an
