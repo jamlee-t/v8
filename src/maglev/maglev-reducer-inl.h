@@ -890,8 +890,8 @@ ReduceResult MaglevReducer<BaseT>::BuildLoadJSArrayLength(
 
 template <typename BaseT>
 template <typename ReducerCb>
-MaybeReduceResult MaglevReducer<BaseT>::TryWithArrayIterationArgs(
-    CallArguments& args, ReducerCb Reducer) {
+MaybeReduceResult MaglevReducer<BaseT>::TryWithFastArrayElements(
+    const char* builtin_name, CallArguments& args, ReducerCb Reducer) {
   if (!CanSpeculateCall()) return {};
 
   ValueNode* receiver = args.receiver();
@@ -900,28 +900,26 @@ MaybeReduceResult MaglevReducer<BaseT>::TryWithArrayIterationArgs(
   MapInference<MaglevReducer<BaseT>> inference(this, receiver);
   auto possible_maps = inference.TryGetPossibleMaps();
   if (!possible_maps) {
-    FAIL(" to reduce Array.p.indexOf/includes - receiver map is unknown");
+    FAIL("to reduce " << builtin_name << " - receiver map is unknown");
   }
 
   ElementsKind elements_kind;
+  // TODO(42204525): Support polymorphism. I.e., DOUBLE_ELEMENTS and ELEMENTS
+  // together.
   if (!CanInlineArrayIteratingBuiltin(broker(), *possible_maps,
                                       &elements_kind)) {
-    FAIL(
-        " to reduce Array.p.indexOf/includes - doesn't support fast array "
-        "iteration or incompatible maps");
+    FAIL("to reduce " << builtin_name
+                      << " - doesn't support fast array iteration or "
+                         "incompatible maps");
   }
 
   if (IsHoleyElementsKind(elements_kind) &&
       !broker()->dependencies()->DependOnNoElementsProtector()) {
-    FAIL(
-        " to reduce Array.p.indexOf/includes - invalidated no elements "
-        "protector");
+    FAIL("to reduce " << builtin_name
+                      << " - invalidated no elements protector");
   }
 
   RETURN_IF_ABORT(inference.InsertMapChecks(zone()));
-
-  ValueNode* search_element =
-      args.count() > 0 ? args[0] : GetRootConstant(RootIndex::kUndefinedValue);
 
   ValueNode* length;
   GET_VALUE_OR_ABORT(length, BuildLoadJSArrayLength(receiver));
@@ -929,35 +927,53 @@ MaybeReduceResult MaglevReducer<BaseT>::TryWithArrayIterationArgs(
   ValueNode* elements;
   GET_VALUE_OR_ABORT(elements, BuildLoadElements(receiver, elements_kind));
 
-  ValueNode* from_index = GetInt32Constant(0);
-  if (args.count() > 1) {
-    GET_VALUE_OR_ABORT(from_index, GetInt32(args[1]));
-    GET_VALUE_OR_ABORT(
-        from_index,
-        Select(
-            [&](BranchBuilder& builder) {
-              return BuildBranchIfInt32Compare(builder, Operation::kLessThan,
-                                               from_index, GetInt32Constant(0));
-            },
-            [&]() -> ReduceResult {
-              ValueNode* adjusted;
-              GET_VALUE_OR_ABORT(adjusted,
-                                 AddNewNode<Int32Add>({length, from_index}));
-              return BuildInt32Max(adjusted, GetInt32Constant(0));
-            },
-            [&]() -> ReduceResult {
-              return BuildInt32Min(from_index, length);
-            }));
-  }
+  ReduceResult res = Reducer(elements_kind, elements, length);
+  return res;
+}
 
-  return Reducer(elements_kind, elements, search_element, length, from_index);
+template <typename BaseT>
+template <typename ReducerCb>
+MaybeReduceResult MaglevReducer<BaseT>::TryWithArrayIterationArgs(
+    const char* builtin_name, CallArguments& args, ReducerCb Reducer) {
+  return TryWithFastArrayElements(
+      builtin_name, args,
+      [&](ElementsKind elements_kind, ValueNode* elements, ValueNode* length) {
+        ValueNode* search_element =
+            args.count() > 0 ? args[0]
+                             : GetRootConstant(RootIndex::kUndefinedValue);
+
+        ValueNode* from_index = GetInt32Constant(0);
+        if (args.count() > 1) {
+          GET_VALUE_OR_ABORT(from_index, GetInt32(args[1]));
+          GET_VALUE_OR_ABORT(
+              from_index,
+              Select(
+                  [&](BranchBuilder& builder) {
+                    return BuildBranchIfInt32Compare(
+                        builder, Operation::kLessThan, from_index,
+                        GetInt32Constant(0));
+                  },
+                  [&]() -> ReduceResult {
+                    ValueNode* adjusted;
+                    GET_VALUE_OR_ABORT(
+                        adjusted, AddNewNode<Int32Add>({length, from_index}));
+                    return BuildInt32Max(adjusted, GetInt32Constant(0));
+                  },
+                  [&]() -> ReduceResult {
+                    return BuildInt32Min(from_index, length);
+                  }));
+        }
+
+        return Reducer(elements_kind, elements, search_element, length,
+                       from_index);
+      });
 }
 
 template <typename BaseT>
 MaybeReduceResult MaglevReducer<BaseT>::TryReduceArrayIncludes(
     compiler::JSFunctionRef target, CallArguments& args) {
   return TryWithArrayIterationArgs(
-      args,
+      "Array.prototype.includes", args,
       [&](ElementsKind elements_kind, ValueNode* elements,
           ValueNode* search_element, ValueNode* length, ValueNode* from_index) {
         ValueNode* context = GetConstant(broker()->target_native_context());
@@ -989,7 +1005,7 @@ template <typename BaseT>
 MaybeReduceResult MaglevReducer<BaseT>::TryReduceArrayIndexOf(
     compiler::JSFunctionRef target, CallArguments& args) {
   return TryWithArrayIterationArgs(
-      args,
+      "Array.prototype.indexOf", args,
       [&](ElementsKind elements_kind, ValueNode* elements,
           ValueNode* search_element, ValueNode* length, ValueNode* from_index) {
         ValueNode* context = GetConstant(broker()->target_native_context());
@@ -1110,114 +1126,87 @@ ReduceResult MaglevReducer<BaseT>::BuildAssumeMapForElements(
 template <typename BaseT>
 MaybeReduceResult MaglevReducer<BaseT>::TryReduceArrayPrototypeAt(
     compiler::JSFunctionRef target, CallArguments& args) {
-  if (!CanSpeculateCall()) return {};
+  return TryWithFastArrayElements(
+      "Array.prototype.at", args,
+      [&](ElementsKind elements_kind, ValueNode* elements, ValueNode* length) {
+        ValueNode* index = nullptr;
+        if (args.count() == 0) {
+          // Index is the undefined object. ToIntegerOrInfinity(undefined) = 0.
+          index = GetInt32Constant(0);
+        } else {
+          GET_VALUE_OR_ABORT(
+              index, Select(
+                         [&](auto& branch) -> BranchResult {
+                           return BuildBranchIfInt32Compare(
+                               branch, Operation::kLessThan, args[0],
+                               GetInt32Constant(0));
+                         },
+                         [&]() -> ReduceResult {
+                           return AddNewNode<Int32Add>({args[0], length});
+                         },
+                         [&]() -> ReduceResult { return args[0]; }));
+        }
 
-  if (!broker()->dependencies()->DependOnNoElementsProtector()) {
-    TRACE(TraceColor::kRed << "! Failed to reduce Array.prototype.at - "
-                              "NoElementsProtector invalidated");
-    return {};
-  }
-
-  ValueNode* receiver = GetValueOrUndefined(args.receiver());
-  MapInference<MaglevReducer<BaseT>> inference(this, receiver);
-  auto possible_maps = inference.TryGetPossibleMaps();
-  ElementsKind elements_kind = NO_ELEMENTS;
-  // TODO(42204525): Support polymorphism. I.e., DOUBLE_ELEMENTS and ELEMENTS
-  // together.
-  if (!possible_maps || !CanInlineArrayIteratingBuiltin(
-                            broker(), *possible_maps, &elements_kind)) {
-    return {};
-  }
-  RETURN_IF_ABORT(inference.InsertMapChecks(zone()));
-
-  ValueNode* length;
-  if (ValueNode* loaded_property = known_node_aspects().TryFindLoadedProperty(
-          receiver, broker()->length_string())) {
-    length = loaded_property;
-  } else {
-    GET_VALUE_OR_ABORT(
-        length, BuildLoadTaggedField(receiver, offsetof(JSArray, length_),
-                                     NodeType::kUnknown, false,
-                                     broker()->length_string()));
-    RecordKnownProperty(receiver, broker()->length_string(), length, false,
-                        compiler::AccessMode::kLoad);
-  }
-
-  ValueNode* index = nullptr;
-  if (args.count() == 0) {
-    // Index is the undefined object. ToIntegerOrInfinity(undefined) = 0.
-    index = GetInt32Constant(0);
-  } else {
-    GET_VALUE_OR_ABORT(index,
-                       Select(
-                           [&](auto& branch) -> BranchResult {
-                             return BuildBranchIfInt32Compare(
-                                 branch, Operation::kLessThan, args[0],
-                                 GetInt32Constant(0));
-                           },
-                           [&]() -> ReduceResult {
-                             return AddNewNode<Int32Add>({args[0], length});
-                           },
-                           [&]() -> ReduceResult { return args[0]; }));
-  }
-
-  ValueNode* elements;
-  GET_VALUE_OR_ABORT(elements, BuildLoadElements(receiver, elements_kind));
-
-  return Select(
-      [&](auto& branch) -> BranchResult {
-        return BuildBranchIfInt32Compare(branch, Operation::kGreaterThanOrEqual,
-                                         index, GetInt32Constant(0));
-      },
-      [&]() {
         return Select(
             [&](auto& branch) -> BranchResult {
-              return BuildBranchIfInt32Compare(branch, Operation::kLessThan,
-                                               index, length);
+              return BuildBranchIfInt32Compare(branch,
+                                               Operation::kGreaterThanOrEqual,
+                                               index, GetInt32Constant(0));
             },
-            [&]() -> ReduceResult {
-              ValueNode* element;
-              if (elements_kind == HOLEY_DOUBLE_ELEMENTS) {
-                GET_VALUE_OR_ABORT(element,
-                                   AddNewNode<LoadHoleyFixedDoubleArrayElement>(
+            [&]() {
+              return Select(
+                  [&](auto& branch) -> BranchResult {
+                    return BuildBranchIfInt32Compare(
+                        branch, Operation::kLessThan, index, length);
+                  },
+                  [&]() -> ReduceResult {
+                    ValueNode* element;
+                    if (elements_kind == HOLEY_DOUBLE_ELEMENTS) {
+                      GET_VALUE_OR_ABORT(
+                          element, AddNewNode<LoadHoleyFixedDoubleArrayElement>(
                                        {elements, index}));
-              } else if (elements_kind == PACKED_DOUBLE_ELEMENTS) {
-                GET_VALUE_OR_ABORT(
-                    element, BuildLoadFixedDoubleArrayElement(elements, index));
-              } else {
-                LoadType type = elements_kind == PACKED_SMI_ELEMENTS
-                                    ? LoadType::kSmi
-                                    : LoadType::kUnknown;
-                if (auto constant = TryGetInt32Constant(index)) {
-                  std::optional<ValueNode*> maybe_element;
-                  GET_OPTVALUE_OR_ABORT(
-                      maybe_element, TryBuildLoadFixedArrayElementConstantIndex(
-                                         elements, constant.value(), type));
-                  if (maybe_element) {
-                    element = *maybe_element;
-                  } else {
-                    GET_VALUE_OR_ABORT(element,
-                                       AddNewNode<LoadFixedArrayElement>(
-                                           {elements, index}, type));
-                  }
-                } else {
-                  GET_VALUE_OR_ABORT(element, AddNewNode<LoadFixedArrayElement>(
-                                                  {elements, index}, type));
-                }
-              }
-              if (IsHoleyElementsKind(elements_kind)) {
-                GET_VALUE_OR_ABORT(
-                    element, AddNewNode<ConvertHoleToUndefined>({element}));
-              }
+                    } else if (elements_kind == PACKED_DOUBLE_ELEMENTS) {
+                      GET_VALUE_OR_ABORT(
+                          element,
+                          BuildLoadFixedDoubleArrayElement(elements, index));
+                    } else {
+                      LoadType type = elements_kind == PACKED_SMI_ELEMENTS
+                                          ? LoadType::kSmi
+                                          : LoadType::kUnknown;
+                      if (auto constant = TryGetInt32Constant(index)) {
+                        std::optional<ValueNode*> maybe_element;
+                        GET_OPTVALUE_OR_ABORT(
+                            maybe_element,
+                            TryBuildLoadFixedArrayElementConstantIndex(
+                                elements, constant.value(), type));
+                        if (maybe_element) {
+                          element = *maybe_element;
+                        } else {
+                          GET_VALUE_OR_ABORT(element,
+                                             AddNewNode<LoadFixedArrayElement>(
+                                                 {elements, index}, type));
+                        }
+                      } else {
+                        GET_VALUE_OR_ABORT(element,
+                                           AddNewNode<LoadFixedArrayElement>(
+                                               {elements, index}, type));
+                      }
+                    }
+                    if (IsHoleyElementsKind(elements_kind)) {
+                      GET_VALUE_OR_ABORT(
+                          element,
+                          AddNewNode<ConvertHoleToUndefined>({element}));
+                    }
 
-              return element;
+                    return element;
+                  },
+                  [&]() -> ReduceResult {
+                    return GetRootConstant(RootIndex::kUndefinedValue);
+                  });
             },
             [&]() -> ReduceResult {
               return GetRootConstant(RootIndex::kUndefinedValue);
             });
-      },
-      [&]() -> ReduceResult {
-        return GetRootConstant(RootIndex::kUndefinedValue);
       });
 }
 

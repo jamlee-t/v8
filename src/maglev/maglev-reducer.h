@@ -1202,7 +1202,13 @@ class MaglevReducer {
                                       NodeType length_type = NodeType::kSmi);
 
   template <typename ReducerCb>
-  MaybeReduceResult TryWithArrayIterationArgs(CallArguments& args,
+  MaybeReduceResult TryWithFastArrayElements(const char* builtin_name,
+                                             CallArguments& args,
+                                             ReducerCb Reducer);
+
+  template <typename ReducerCb>
+  MaybeReduceResult TryWithArrayIterationArgs(const char* builtin_name,
+                                              CallArguments& args,
                                               ReducerCb Reducer);
 
   ReduceResult BuildAssumeMapForElements(ValueNode* elements,
