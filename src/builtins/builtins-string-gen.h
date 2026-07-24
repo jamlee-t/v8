@@ -196,6 +196,7 @@ class StringBuiltinsAssembler : public CodeStubAssembler {
  private:
   template <typename T>
   TNode<String> AllocAndCopyStringCharacters(TNode<T> from,
+                                             TNode<String> tagged_source,
                                              TNode<BoolT> from_is_one_byte,
                                              TNode<IntPtrT> from_index,
                                              TNode<IntPtrT> character_count,
