@@ -1799,6 +1799,12 @@ void MaglevPhiRepresentationSelector::PreparePhiTaggings(
     // Only merge blocks should require Phis.
     DCHECK(new_block->is_merge_block());
 
+    // Resumable loops are entered through their backedge, so the header
+    // doesn't dominate it and the self-reference set below wouldn't be valid.
+    if (new_block->state()->is_resumable_loop()) {
+      return static_cast<Phi*>(nullptr);
+    }
+
     // We create a Phi to merge all of the existing taggings.
     int predecessor_count = new_block->predecessor_count();
     Phi* phi = Node::New<Phi>(zone(), predecessor_count, new_block->state(),
