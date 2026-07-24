@@ -5322,6 +5322,10 @@ ReduceResult MaglevReducer<BaseT>::GetSmiValue(
 
   NodeInfo* node_info = GetOrCreateInfoFor(value);
 
+  if (!NodeTypeCanBe(GetType(value), NodeType::kSmi)) {
+    return EmitUnconditionalDeopt(DeoptimizeReason::kNotASmi);
+  }
+
   ValueRepresentation representation =
       value->properties().value_representation();
   if (representation == ValueRepresentation::kTagged) {
