@@ -3651,7 +3651,7 @@ void LiftoffAssembler::emit_f64x2_relaxed_max(LiftoffRegister dst,
 void LiftoffAssembler::emit_f64x2_convert_low_i32x4_s(LiftoffRegister dst,
                                                       LiftoffRegister src) {
   xor_v(kSimd128RegZero, kSimd128RegZero, kSimd128RegZero);
-  ilvr_w(kSimd128ScratchReg, kSimd128ScratchReg, src.fp().toW());
+  ilvr_w(kSimd128ScratchReg, kSimd128RegZero, src.fp().toW());
   slli_d(kSimd128ScratchReg, kSimd128ScratchReg, 32);
   srai_d(kSimd128ScratchReg, kSimd128ScratchReg, 32);
   ffint_s_d(dst.fp().toW(), kSimd128ScratchReg);
@@ -3660,7 +3660,7 @@ void LiftoffAssembler::emit_f64x2_convert_low_i32x4_s(LiftoffRegister dst,
 void LiftoffAssembler::emit_f64x2_convert_low_i32x4_u(LiftoffRegister dst,
                                                       LiftoffRegister src) {
   xor_v(kSimd128RegZero, kSimd128RegZero, kSimd128RegZero);
-  ilvr_w(kSimd128ScratchReg, kSimd128ScratchReg, src.fp().toW());
+  ilvr_w(kSimd128ScratchReg, kSimd128RegZero, src.fp().toW());
   ffint_u_d(dst.fp().toW(), kSimd128ScratchReg);
 }
 
