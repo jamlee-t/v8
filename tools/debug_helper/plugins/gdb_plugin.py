@@ -34,8 +34,8 @@ def _ptr_size():
     return None
 
 
-class _GdbHintsResolver:
-  """GDB Adapter for resolve_heap_hints."""
+class _GdbResolver:
+  """GDB adapter for resolving symbols, pointers, offsets, etc."""
 
   def __init__(self, ptr_size):
     self._ptr_size = ptr_size
@@ -47,23 +47,37 @@ class _GdbHintsResolver:
       return None
     if len(data) != self._ptr_size:
       return None
-    return int.from_bytes(data, "little", signed=False)
+    return int.from_bytes(data, "little")
 
-  def global_symbol_address(self, name):
+  def symbol_address(self, name):
+    """Resolve the address of the variable `name` for the selected thread.
+
+    For a TLS variable this is the address of the selected thread's copy.
+    """
     try:
+      addr = None
       sym = gdb.lookup_global_symbol(name)
-      if sym is None:
-        return None
-      value = sym.value()
-      addr = value.address
+      if sym is not None:
+        try:
+          addr = sym.value().address
+        except Exception:
+          # If we cannot locate the TLS symbol, fall back to evaluation.
+          pass
       if addr is None:
-        # Try `&name` via parse_and_eval, which resolves TLS for the selected thread.
+        # `&name` via parse_and_eval resolves TLS for the selected thread and,
+        # unlike lookup_global_symbol, also sees minimal symbols from release
+        # builds.
         addr = gdb.parse_and_eval(f"&'{name}'")
       if addr is None:
         return None
       return int(addr)
     except Exception:
+      if _VERBOSE:
+        traceback.print_exc()
       return None
+
+  # gdb resolves TLS natively.
+  debug_symbol_address = symbol_address
 
   def field_offset(self, type_name, field_name):
     """Return the byte offset of `field_name` inside `type_name`."""
@@ -179,6 +193,10 @@ class V8Command(gdb.Command):
       * --type T: treat the object as if it has type T (e.g. `v8::internal::JSArray`).
       * --depth N: limit recursive inspection depth to N (default: 1).
       * --array-length N: for arrays, inspect up to N elements (default: 16).
+
+    - isolate -- Print the current Isolate address of the selected thread.
+
+      v8 isolate
   """
 
   def __init__(self):
@@ -196,7 +214,7 @@ class V8Command(gdb.Command):
         argv,
         read_memory=_read_memory_callback,
         eval_address=_evaluate_address_in_gdb,
-        hints_resolver=_GdbHintsResolver(bridge.ptr_size),
+        resolver=_GdbResolver(bridge.ptr_size),
         verbose=_VERBOSE,
     )
     if not ok:
